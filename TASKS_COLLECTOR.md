@@ -248,7 +248,7 @@
 - POST `/api/reports` (multipart/form-data) — דומה ל-ManualReportModal
 - אימות: דיווח נוצר עם תמונה.
 
-**משימה 32: היסטוריית מעטפות** — 🔄 בביצוע
+**משימה 32: היסטוריית מעטפות** — ✅ בוצע
 - בתחתית CollectionPage: 5 המעטפות האחרונות של הקופה
 - GET `/api/envelopes?card_id=X&limit=5`
 - אימות: רשימה מציגה את המעטפות.

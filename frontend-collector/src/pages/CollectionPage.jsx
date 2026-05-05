@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { cards as cardsApi } from '../api/endpoints'
+import { cards as cardsApi, envelopes as envelopesApi } from '../api/endpoints'
 import { computeCardLabels } from '../utils/cardLabel'
 
 function formatDate(s) {
@@ -8,6 +8,16 @@ function formatDate(s) {
   const d = new Date(s)
   if (Number.isNaN(d.getTime())) return '—'
   return d.toLocaleDateString('he-IL', { year: 'numeric', month: '2-digit', day: '2-digit' })
+}
+
+function formatDateTime(s) {
+  if (!s) return ''
+  const d = new Date(s)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleString('he-IL', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  })
 }
 
 function formatAddress(c) {
@@ -31,6 +41,9 @@ export default function CollectionPage() {
   const [lookupError, setLookupError] = useState(null)
 
   const [toast, setToast] = useState(null)
+
+  const [history, setHistory] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(false)
 
   useEffect(() => {
     const t = location.state?.toast
@@ -56,6 +69,29 @@ export default function CollectionPage() {
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [cardId])
+
+  useEffect(() => {
+    if (!cardId) {
+      setHistory([])
+      return
+    }
+    let cancelled = false
+    setHistoryLoading(true)
+    envelopesApi.getAll({ card_id: Number(cardId), limit: 5 })
+      .then((rows) => {
+        if (cancelled) return
+        setHistory(Array.isArray(rows) ? rows : [])
+      })
+      .catch(() => { if (!cancelled) setHistory([]) })
+      .finally(() => { if (!cancelled) setHistoryLoading(false) })
+    return () => { cancelled = true }
+  }, [cardId, location.key])
+
+  const cardLabel = useMemo(() => {
+    if (!card) return ''
+    const labels = computeCardLabels([card])
+    return labels.get(card.id) || String(card.iron_number ?? '')
+  }, [card])
 
   async function handleLookup(e) {
     e?.preventDefault?.()
@@ -115,12 +151,6 @@ export default function CollectionPage() {
     )
   }
 
-  const cardLabel = useMemo(() => {
-    if (!card) return ''
-    const labels = computeCardLabels([card])
-    return labels.get(card.id) || String(card.iron_number ?? '')
-  }, [card])
-
   if (loading) return <div className="loading">טוען...</div>
   if (error) return <div className="alert red">{error}</div>
   if (!card) return <div className="empty">לא נמצאה כרטסת</div>
@@ -172,6 +202,22 @@ export default function CollectionPage() {
             📝 צור דיווח
           </button>
         </div>
+      </div>
+
+      <div className="envelopes-history">
+        <h3>5 מעטפות אחרונות</h3>
+        {historyLoading ? (
+          <div className="loading" style={{ padding: 16 }}>טוען...</div>
+        ) : history.length === 0 ? (
+          <div className="empty" style={{ padding: 16 }}>אין מעטפות עדיין</div>
+        ) : (
+          history.map((env) => (
+            <div key={env.id} className="envelope-row">
+              <span className="num">#{env.envelope_number}</span>
+              <span className="meta">{formatDateTime(env.created_at)}</span>
+            </div>
+          ))
+        )}
       </div>
 
       {toast && <div className="toast success">{toast}</div>}
