@@ -1,6 +1,21 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { cards as cardsApi } from '../api/endpoints'
+import { computeCardLabels } from '../utils/cardLabel'
+
+function formatDate(s) {
+  if (!s) return '—'
+  const d = new Date(s)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleDateString('he-IL', { year: 'numeric', month: '2-digit', day: '2-digit' })
+}
+
+function formatAddress(c) {
+  if (!c) return '—'
+  const parts = [c.city, c.neighborhood, c.street, c.building]
+    .filter((s) => typeof s === 'string' && s.trim())
+  return parts.length ? parts.join(', ') : '—'
+}
 
 export default function CollectionPage() {
   const { cardId } = useParams()
@@ -88,15 +103,46 @@ export default function CollectionPage() {
     )
   }
 
+  const cardLabel = useMemo(() => {
+    if (!card) return ''
+    const labels = computeCardLabels([card])
+    return labels.get(card.id) || String(card.iron_number ?? '')
+  }, [card])
+
   if (loading) return <div className="loading">טוען...</div>
   if (error) return <div className="alert red">{error}</div>
   if (!card) return <div className="empty">לא נמצאה כרטסת</div>
 
+  const title = card.custom_name || `קופה ${cardLabel}`
+
   return (
     <div>
       <div className="collection-card">
-        <h2>קופה #{card.iron_number}</h2>
-        <div className="sub">{card.custom_name || ''}</div>
+        <h2>{title}</h2>
+        <div className="sub">#{cardLabel}</div>
+
+        <div className="collection-info">
+          <div className="kv">
+            <span className="k">מספר קופה</span>
+            <span className="v">{card.iron_number ?? '—'}</span>
+          </div>
+          <div className="kv">
+            <span className="k">שם</span>
+            <span className="v">{card.custom_name || '—'}</span>
+          </div>
+          <div className="kv">
+            <span className="k">כתובת</span>
+            <span className="v">{formatAddress(card)}</span>
+          </div>
+          <div className="kv">
+            <span className="k">הערות מיקום</span>
+            <span className="v">{card.location_notes || '—'}</span>
+          </div>
+          <div className="kv">
+            <span className="k">תאריך גביה אחרון</span>
+            <span className="v">{formatDate(card.last_collection_at)}</span>
+          </div>
+        </div>
       </div>
     </div>
   )
