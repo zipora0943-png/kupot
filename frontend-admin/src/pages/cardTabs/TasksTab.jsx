@@ -1,0 +1,164 @@
+import React, { useEffect, useState } from 'react'
+import { tasks as tasksApi } from '../../api/endpoints'
+import TaskModal from '../../components/TaskModal'
+import TaskExecDetailsModal from '../../components/TaskExecDetailsModal'
+import CancelTaskModal from '../../components/CancelTaskModal'
+import { useAuth } from '../../context/AuthContext'
+
+function formatDate(iso) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('he-IL')
+}
+
+const STATUS = {
+  open:        { label: 'פתוח',    cls: 'yellow' },
+  in_progress: { label: 'בביצוע',  cls: 'blue'   },
+  done:        { label: 'הושלם',   cls: 'green'  },
+  cancelled:   { label: 'בוטל',    cls: 'gray'   },
+}
+
+export default function TasksTab({ cardId, boxId }) {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+
+  const [list, setList]     = useState([])
+  const [loading, setLoading] = useState(true)
+  const [errMsg, setErrMsg]   = useState(null)
+  const [reloadKey, setReloadKey] = useState(0)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [editTask,   setEditTask]   = useState(null)
+  const [detailsTask, setDetailsTask] = useState(null)
+  const [cancelTask, setCancelTask] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    if (!boxId) { setLoading(false); return }
+    setLoading(true); setErrMsg(null)
+    tasksApi.getByCard(cardId, boxId)
+      .then(d => { if (!cancelled) setList(Array.isArray(d) ? d : []) })
+      .catch(err => { if (!cancelled) setErrMsg(err.message || 'שגיאה בטעינת משימות') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [cardId, boxId, reloadKey])
+
+  function openTask(t) {
+    const isFinal = t.status === 'done' || t.status === 'cancelled'
+    if (isFinal) setDetailsTask(t)
+    else setEditTask(t)
+  }
+
+  function handleTaskSaved(saved) {
+    if (!saved) return
+    setList(prev => prev.map(t => t.id === saved.id ? { ...t, ...saved } : t))
+  }
+
+  return (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+        <button
+          className="btn primary sm"
+          type="button"
+          onClick={() => setCreateOpen(true)}
+          disabled={!boxId}
+        >➕ צור משימה</button>
+      </div>
+
+      {loading ? (
+        <div className="loading"><div className="spinner" /><span>טוען משימות...</span></div>
+      ) : errMsg ? (
+        <div className="alert red">{errMsg}</div>
+      ) : list.length === 0 ? (
+        <div className="empty">אין משימות לכרטסת זו</div>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>תאריך</th>
+                <th>סוג</th>
+                <th>סטטוס</th>
+                <th>משויך</th>
+                <th>נוצר ע"י</th>
+                <th>הערות</th>
+                {isAdmin && <th>פעולות</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {list.map(t => {
+                const st = STATUS[t.status] || { label: t.status, cls: 'gray' }
+                const isFinal = t.status === 'done' || t.status === 'cancelled'
+                return (
+                  <tr
+                    key={t.id}
+                    className="clickable"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openTask(t)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        openTask(t)
+                      }
+                    }}
+                  >
+                    <td>{formatDate(t.created_at)}</td>
+                    <td>{t.icon ? `${t.icon} ` : ''}{t.type_name || '—'}</td>
+                    <td>
+                      <span
+                        className={'pill ' + st.cls}
+                        title={t.status === 'cancelled' && t.cancellation_reason ? `סיבת ביטול: ${t.cancellation_reason}` : undefined}
+                      >{st.label}</span>
+                    </td>
+                    <td>{t.assigned_name || <span style={{ color: 'var(--text3)' }}>לא משויך</span>}</td>
+                    <td>{t.created_by_name || '—'}</td>
+                    <td style={{ maxWidth: 300 }}>{t.notes || '—'}</td>
+                    {isAdmin && (
+                      <td className="actions" style={{ flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
+                        {!isFinal && (
+                          <button
+                            className="btn sm danger"
+                            onClick={(e) => { e.stopPropagation(); setCancelTask(t) }}
+                            title="העבר את המשימה לסטטוס בוטל"
+                          >🚫 בטל</button>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <TaskModal
+        open={createOpen}
+        defaults={{ box_id: boxId, lockBox: true }}
+        onClose={() => setCreateOpen(false)}
+        onSaved={() => setReloadKey(k => k + 1)}
+      />
+
+      <TaskModal
+        open={!!editTask}
+        task={editTask}
+        onClose={() => setEditTask(null)}
+        onSaved={handleTaskSaved}
+      />
+
+      <TaskExecDetailsModal
+        open={!!detailsTask}
+        task={detailsTask}
+        onClose={() => setDetailsTask(null)}
+      />
+
+      {cancelTask && (
+        <CancelTaskModal
+          task={cancelTask}
+          onClose={() => setCancelTask(null)}
+          onCancelled={() => setReloadKey(k => k + 1)}
+        />
+      )}
+    </>
+  )
+}

@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Kupot — Design Tokens & Components Showcase</title>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* =================================================================
+   INSTRUCTIONS FOR THE DESIGNER (Gemini, etc.)
+   -----------------------------------------------------------------
+   This file is a snapshot of the current Kupot Admin design system.
+   Your job: redesign the visual style — colors, typography, spacing,
+   shadows, radii, button/input/modal/table/sidebar/pill styles.
+
+   HARD CONSTRAINTS (must not break):
+   1. Keep dir="rtl" on <html> and Hebrew text intact.
+   2. Keep the same CSS class names (.btn, .pill.green, .modal-box,
+      .sidebar, .nav-btn, .panel, .stat-card, .info-card, .field,
+      .topbar, .tab-btn, .alert, etc.). Do NOT rename them.
+   3. Keep the same CSS variable names in :root (--bg, --surface,
+      --accent, --green, --radius, etc.). Change their VALUES only.
+   4. Keep the structural HTML the same (do not move/remove sections,
+      do not change tag names). Only re-skin via CSS.
+   5. Keep Hebrew-friendly font (Heebo or another that supports
+      Hebrew well).
+   6. Output: return the full file with updated <style> block. Or
+      just the updated <style> block.
+
+   You MAY change:
+   - Color palette, gradients, surface tones, light/dark mode
+   - Typography (font family, weights, sizes within reason)
+   - Border radii, shadows, hover/active effects, transitions
+   - Spacing/padding/gaps
+   - Visual treatment of buttons, pills, tables, modals, sidebar,
+     stat cards, info cards, alerts, login
+
+   You should NOT add:
+   - JavaScript / frameworks / external libraries beyond fonts
+   - New HTML structure or new components — only restyle existing.
+   ================================================================= */
+
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface2: #22263a;
+  --surface3: #2a2f45;
+  --border: #2e3350;
+  --border2: #3a4060;
+  --accent: #4f6ef7;
+  --accent-soft: rgba(79, 110, 247, 0.12);
+  --green: #22c55e;
+  --green-soft: rgba(34, 197, 94, 0.12);
+  --yellow: #f59e0b;
+  --yellow-soft: rgba(245, 158, 11, 0.12);
+  --red: #ef4444;
+  --red-soft: rgba(239, 68, 68, 0.12);
+  --purple: #a855f7;
+  --purple-soft: rgba(168, 85, 247, 0.12);
+  --text: #e8eaf0;
+  --text2: #9ba3c0;
+  --text3: #5c6480;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; }
+
+body {
+  font-family: 'Heebo', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  direction: rtl;
+}
+
+a { color: inherit; text-decoration: none; }
+
+/* ===== TOP BAR ===== */
+.topbar {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 12px; padding: 10px 20px;
+  box-shadow: var(--shadow); height: 54px;
+}
+.topbar .logo { font-weight: 800; font-size: 15px; color: var(--text); margin-left: auto; }
+.topbar .user-info { font-size: 13px; color: var(--text2); display: flex; align-items: center; gap: 10px; }
+.topbar .user-info .name { font-weight: 600; color: var(--text); }
+.topbar .logout-btn {
+  padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border2);
+  background: transparent; color: var(--text2); cursor: pointer;
+  font-family: 'Heebo', sans-serif; font-size: 13px; font-weight: 500; transition: all .2s;
+}
+.topbar .logout-btn:hover { background: var(--surface2); color: var(--text); border-color: var(--accent); }
+
+/* ===== LAYOUT ===== */
+.app-layout { display: flex; min-height: calc(100vh - 54px); }
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+  width: 224px; background: var(--surface); border-left: 1px solid var(--border);
+  overflow-y: auto;
+  display: flex; flex-direction: column; padding: 14px 10px; flex-shrink: 0;
+}
+.sidebar-section { margin-bottom: 8px; }
+.sidebar-label {
+  font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase;
+  letter-spacing: .08em; padding: 10px 10px 4px;
+}
+.nav-btn {
+  width: 100%; text-align: right; padding: 10px 12px; border-radius: var(--radius-sm);
+  border: none; background: transparent; color: var(--text2); cursor: pointer;
+  font-family: 'Heebo', sans-serif; font-size: 14px; font-weight: 500;
+  display: flex; align-items: center; gap: 8px; transition: all .15s;
+}
+.nav-btn .icon { font-size: 16px; flex-shrink: 0; }
+.nav-btn:hover { background: var(--surface2); color: var(--text); }
+.nav-btn.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.nav-btn .badge {
+  margin-right: auto; background: var(--red); color: #fff; font-size: 11px; font-weight: 700;
+  padding: 1px 7px; border-radius: 999px; min-width: 20px; text-align: center;
+}
+
+/* ===== MAIN ===== */
+.main { flex: 1; overflow-y: auto; }
+.screen { padding: 24px; }
+
+/* ===== HEADER ===== */
+.page-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
+}
+.page-title { font-size: 24px; font-weight: 800; }
+.page-subtitle { font-size: 13px; color: var(--text2); margin-top: 2px; }
+.breadcrumb { font-size: 13px; color: var(--accent); cursor: pointer; margin-bottom: 4px; }
+.breadcrumb:hover { text-decoration: underline; }
+
+/* ===== PANEL ===== */
+.panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 18px; margin-bottom: 16px;
+}
+.panel-title {
+  font-size: 12px; font-weight: 700; color: var(--text3); text-transform: uppercase;
+  letter-spacing: .05em; margin-bottom: 14px;
+}
+
+/* ===== STATS ===== */
+.stats-row { display: grid; gap: 12px; margin-bottom: 16px; }
+.stats-2 { grid-template-columns: repeat(2, 1fr); }
+.stats-3 { grid-template-columns: repeat(3, 1fr); }
+.stats-4 { grid-template-columns: repeat(4, 1fr); }
+.stat-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; text-align: center;
+}
+.stat-card .val { font-size: 26px; font-weight: 800; }
+.stat-card .lbl { font-size: 12px; color: var(--text2); margin-top: 4px; }
+
+/* ===== FORM ===== */
+.filters-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; align-items: flex-end; }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-size: 12px; color: var(--text2); font-weight: 500; }
+.field input, .field select, .field textarea {
+  padding: 9px 12px; background: var(--surface2); border: 1px solid var(--border2);
+  border-radius: var(--radius-sm); color: var(--text); font-family: 'Heebo', sans-serif;
+  font-size: 14px; outline: none; transition: border-color .15s;
+}
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); }
+.field select option { background: var(--surface2); }
+.field.grow { flex: 1; min-width: 160px; }
+.field textarea { min-height: 80px; resize: vertical; }
+
+/* ===== BUTTONS ===== */
+.btn {
+  padding: 9px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border2);
+  background: var(--surface2); color: var(--text); cursor: pointer;
+  font-family: 'Heebo', sans-serif; font-size: 14px; font-weight: 500;
+  transition: all .15s; white-space: nowrap;
+}
+.btn:hover { background: var(--surface3); border-color: var(--accent); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn.primary:hover { background: #3d5ce8; }
+.btn.success { background: var(--green); color: #fff; border-color: var(--green); }
+.btn.warn { background: var(--yellow-soft); color: var(--yellow); border-color: var(--yellow); }
+.btn.danger { background: var(--red-soft); color: var(--red); border-color: var(--red); }
+.btn.sm { padding: 5px 10px; font-size: 12px; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* ===== TABLE ===== */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th {
+  background: var(--surface2); color: var(--text2); font-weight: 600; font-size: 12px;
+  padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap;
+}
+td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: rgba(79, 110, 247, .06); }
+tr:not(.clickable):hover td { background: var(--surface2); }
+tr:last-child td { border-bottom: none; }
+
+/* ===== PILLS ===== */
+.pill {
+  display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+.pill.green { background: var(--green-soft); color: var(--green); }
+.pill.red { background: var(--red-soft); color: var(--red); }
+.pill.yellow { background: var(--yellow-soft); color: var(--yellow); }
+.pill.blue { background: var(--accent-soft); color: var(--accent); }
+.pill.gray { background: var(--surface3); color: var(--text2); }
+.pill.purple { background: var(--purple-soft); color: var(--purple); }
+
+/* ===== TABS ===== */
+.tabs {
+  display: flex; gap: 4px; border-bottom: 1px solid var(--border);
+  margin-bottom: 16px; flex-wrap: wrap;
+}
+.tab-btn {
+  padding: 9px 16px; border: none; background: transparent; color: var(--text2);
+  cursor: pointer; font-family: 'Heebo', sans-serif; font-size: 14px; font-weight: 500;
+  border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all .15s; white-space: nowrap;
+}
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ===== INFO GRID ===== */
+.info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.info-card {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 12px;
+}
+.info-card .k {
+  font-size: 11px; color: var(--text3); font-weight: 600;
+  text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px;
+}
+.info-card .v { font-size: 15px; font-weight: 600; color: var(--text); }
+
+/* ===== MODAL (rendered inline for showcase, not as overlay) ===== */
+.modal-backdrop {
+  background: rgba(0, 0, 0, .6);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.modal-box {
+  width: min(580px, 100%); background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 22px; box-shadow: var(--shadow);
+}
+.modal-box.wide { width: min(700px, 100%); }
+.modal-header {
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;
+}
+.modal-header h3 { font-size: 18px; font-weight: 700; }
+.modal-close {
+  background: transparent; border: none; color: var(--text2);
+  font-size: 22px; cursor: pointer; padding: 4px 8px; line-height: 1;
+}
+.modal-close:hover { color: var(--text); }
+.modal-row { display: flex; gap: 12px; margin-bottom: 12px; }
+.modal-row .field { flex: 1; }
+.modal-footer {
+  display: flex; justify-content: space-between; align-items: center; margin-top: 18px;
+}
+
+/* ===== ALERT ===== */
+.alert {
+  padding: 12px 16px; border-radius: var(--radius-sm); margin-bottom: 12px;
+  display: flex; align-items: center; gap: 10px; font-size: 14px;
+}
+.alert.warn { background: var(--yellow-soft); border: 1px solid var(--yellow); color: var(--yellow); }
+.alert.info { background: var(--accent-soft); border: 1px solid var(--accent); color: var(--accent); }
+.alert.red { background: var(--red-soft); border: 1px solid var(--red); color: var(--red); }
+
+/* ===== LOGIN PAGE (rendered as a card preview, not full-page) ===== */
+.login-card {
+  width: min(420px, 100%); background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 32px; box-shadow: var(--shadow);
+}
+.login-logo {
+  font-size: 22px; font-weight: 800; text-align: center; margin-bottom: 6px;
+}
+.login-subtitle {
+  font-size: 13px; color: var(--text2); text-align: center; margin-bottom: 28px;
+}
+.login-form { display: flex; flex-direction: column; gap: 14px; }
+.login-form .field input { padding: 11px 14px; font-size: 15px; }
+.login-form .btn { padding: 11px; font-size: 15px; margin-top: 8px; }
+
+/* ===== LOADING + EMPTY ===== */
+.loading {
+  display: flex; align-items: center; justify-content: center;
+  padding: 40px; color: var(--text2); font-size: 14px;
+}
+.spinner {
+  width: 24px; height: 24px; border: 3px solid var(--border2);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin 0.8s linear infinite; margin-left: 10px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty {
+  text-align: center; padding: 40px 20px; color: var(--text3); font-size: 14px;
+}
+
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 3px; }
+
+/* ===== SHOWCASE-ONLY HELPERS (do not restyle these — for layout of this file only) ===== */
+.showcase-section { margin-bottom: 40px; }
+.showcase-section > h2 {
+  font-size: 13px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .12em; color: var(--text3); margin-bottom: 12px;
+  padding-bottom: 8px; border-bottom: 1px dashed var(--border);
+}
+.swatch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+.swatch { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; }
+.swatch .chip { height: 56px; border-radius: var(--radius-sm); margin-bottom: 8px; border: 1px solid var(--border); }
+.swatch .name { font-size: 12px; font-weight: 600; }
+.swatch .val { font-size: 11px; color: var(--text2); margin-top: 2px; font-family: ui-monospace, monospace; }
+.type-row { display: flex; align-items: baseline; gap: 16px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.type-row:last-child { border-bottom: none; }
+.type-row .lbl { width: 130px; font-size: 11px; color: var(--text3); font-family: ui-monospace, monospace; }
+</style>
+</head>
+<body>
+
+<!-- ========================= TOP BAR (live example) ========================= -->
+<header class="topbar">
+  <button class="logout-btn">התנתק</button>
+  <div class="user-info">
+    <span class="name">משה כהן</span>
+    <span>•</span>
+    <span>אדמין</span>
+  </div>
+  <div class="logo" style="margin-right:auto; margin-left:0;">קופות ⚡ ניהול</div>
+</header>
+
+<div class="app-layout">
+  <!-- ========================= SIDEBAR (live example) ========================= -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">תפעול</div>
+      <button class="nav-btn active"><span class="icon">📦</span><span>קופות</span></button>
+      <button class="nav-btn"><span class="icon">🗂️</span><span>כרטסות</span></button>
+      <button class="nav-btn"><span class="icon">✉️</span><span>מעטפות</span><span class="badge">12</span></button>
+      <button class="nav-btn"><span class="icon">🛠️</span><span>משימות</span></button>
+      <button class="nav-btn"><span class="icon">🚨</span><span>דיווחים</span><span class="badge">3</span></button>
+      <button class="nav-btn"><span class="icon">⏰</span><span>התראות</span></button>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">ניהול</div>
+      <button class="nav-btn"><span class="icon">👥</span><span>משתמשים</span></button>
+      <button class="nav-btn"><span class="icon">💰</span><span>חדר מזומן</span></button>
+      <button class="nav-btn"><span class="icon">📊</span><span>דוחות</span></button>
+      <button class="nav-btn"><span class="icon">⚙️</span><span>הגדרות</span></button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="screen">
+
+      <!-- ========================= HEADER + BREADCRUMB ========================= -->
+      <div class="page-header">
+        <div>
+          <div class="breadcrumb">‹ חזרה לרשימת קופות</div>
+          <div class="page-title">לוח בקרה — ניהול קופות</div>
+          <div class="page-subtitle">סקירה כוללת של מצב המערכת</div>
+        </div>
+        <div class="actions">
+          <button class="btn">ייצוא</button>
+          <button class="btn primary">קופה חדשה</button>
+        </div>
+      </div>
+
+      <!-- ========================= COLOR TOKENS ========================= -->
+      <section class="showcase-section">
+        <h2>צבעים (CSS variables)</h2>
+        <div class="swatch-grid">
+          <div class="swatch"><div class="chip" style="background:var(--bg)"></div><div class="name">--bg</div><div class="val">#0f1117</div></div>
+          <div class="swatch"><div class="chip" style="background:var(--surface)"></div><div class="name">--surface</div><div class="val">#1a1d27</div></div>
+          <div class="swatch"><div class="chip" style="background:var(--surface2)"></div><div class="name">--surface2</div><div class="val">#22263a</div></div>
+          <div class="swatch"><div class="chip" style="background:var(--surface3)"></div><div class="name">--surface3</div><div class="val">#2a2f45</div></div>
+          <div class="swatch"><div class="chip" style="background:var(--border)"></div><div class="name">--border</div><div class="val">#2e3350</div></div>
+          <div class="swatch"><div class="chip" style="background:var(--border2)"></div><div class="name">--border2</div><div class="val">#3a4060</div></div>
+          <div class="swatch"><div class="chip" style="background:var(--accent)"></div><div class="name">--accent</div><div class="val">#4f6ef7</div></div>
+          <div class="swatch"><div class="chip" style="background:var(--green)"></div><div class="name">--green</div><div class="val">#22c55e</div></div>
+          <div class="swatch"><div class="chip" style="background:var(--yellow)"></div><div class="name">--yellow</div><div class="val">#f59e0b</div></div>
+          <div class="swatch"><div class="chip" style="background:var(--red)"></div><div class="name">--red</div><div class="val">#ef4444</div></div>
+          <div class="swatch"><div class="chip" style="background:var(--purple)"></div><div class="name">--purple</div><div class="val">#a855f7</div></div>
+          <div class="swatch"><div class="chip" style="background:var(--text); border-color:var(--text2)"></div><div class="name">--text</div><div class="val">#e8eaf0</div></div>
+          <div class="swatch"><div class="chip" style="background:var(--text2)"></div><div class="name">--text2</div><div class="val">#9ba3c0</div></div>
+          <div class="swatch"><div class="chip" style="background:var(--text3)"></div><div class="name">--text3</div><div class="val">#5c6480</div></div>
+        </div>
+      </section>
+
+      <!-- ========================= TYPOGRAPHY ========================= -->
+      <section class="showcase-section">
+        <h2>טיפוגרפיה (Heebo)</h2>
+        <div class="panel">
+          <div class="type-row"><div class="lbl">page-title 24/800</div><div style="font-size:24px;font-weight:800">לוח בקרה — קופות צדקה</div></div>
+          <div class="type-row"><div class="lbl">modal h3 18/700</div><div style="font-size:18px;font-weight:700">עריכת קופה #12345</div></div>
+          <div class="type-row"><div class="lbl">stat val 26/800</div><div style="font-size:26px;font-weight:800">1,247</div></div>
+          <div class="type-row"><div class="lbl">login logo 22/800</div><div style="font-size:22px;font-weight:800">קופות ⚡ ניהול</div></div>
+          <div class="type-row"><div class="lbl">body 14/500</div><div style="font-size:14px;font-weight:500">טקסט גוף רגיל — ABC abc 0123 שלום עולם</div></div>
+          <div class="type-row"><div class="lbl">label 12/500</div><div style="font-size:12px;font-weight:500;color:var(--text2)">תווית שדה</div></div>
+          <div class="type-row"><div class="lbl">section-label 10/700 caps</div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3)">תפעול</div></div>
+        </div>
+      </section>
+
+      <!-- ========================= STATS ========================= -->
+      <section class="showcase-section">
+        <h2>כרטיסיות סיכום</h2>
+        <div class="stats-row stats-4">
+          <div class="stat-card"><div class="val">1,247</div><div class="lbl">סך קופות פעילות</div></div>
+          <div class="stat-card"><div class="val">82</div><div class="lbl">חדשות החודש</div></div>
+          <div class="stat-card"><div class="val">14</div><div class="lbl">ממתינות לטיפול</div></div>
+          <div class="stat-card"><div class="val">₪412,800</div><div class="lbl">סכום נאסף</div></div>
+        </div>
+      </section>
+
+      <!-- ========================= ALERTS ========================= -->
+      <section class="showcase-section">
+        <h2>התראות</h2>
+        <div class="alert info"><span>ℹ️</span><span>גרסה חדשה זמינה. רענן את הדף כדי לטעון אותה.</span></div>
+        <div class="alert warn"><span>⚠️</span><span>קופה #4421 לא נאספה כבר 35 ימים — מעבר לסף ההתראה.</span></div>
+        <div class="alert red"><span>⛔</span><span>שגיאה בהתחברות לבסיס הנתונים. נסה שוב בעוד מספר רגעים.</span></div>
+      </section>
+
+      <!-- ========================= BUTTONS ========================= -->
+      <section class="showcase-section">
+        <h2>כפתורים</h2>
+        <div class="panel">
+          <div class="actions" style="margin-bottom:12px">
+            <button class="btn">רגיל</button>
+            <button class="btn primary">ראשי</button>
+            <button class="btn success">הצלחה</button>
+            <button class="btn warn">אזהרה</button>
+            <button class="btn danger">מחיקה</button>
+            <button class="btn" disabled>חסום</button>
+          </div>
+          <div class="actions">
+            <button class="btn sm">קטן</button>
+            <button class="btn sm primary">קטן ראשי</button>
+            <button class="btn sm danger">קטן מחיקה</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================= PILLS ========================= -->
+      <section class="showcase-section">
+        <h2>תוויות מצב (Pills)</h2>
+        <div class="panel">
+          <div class="actions">
+            <span class="pill green">פעיל</span>
+            <span class="pill red">לא פעיל</span>
+            <span class="pill yellow">ממתין</span>
+            <span class="pill blue">בטיפול</span>
+            <span class="pill gray">לא הוקצה</span>
+            <span class="pill purple">מועבר</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================= FORM ========================= -->
+      <section class="showcase-section">
+        <h2>שדות טופס</h2>
+        <div class="panel">
+          <div class="filters-row">
+            <div class="field grow">
+              <label>חיפוש לפי מספר ברזל</label>
+              <input type="text" placeholder="הקלד מספר…" value="12345">
+            </div>
+            <div class="field">
+              <label>עיר</label>
+              <select>
+                <option>הכל</option>
+                <option>בני ברק</option>
+                <option>ירושלים</option>
+                <option>אלעד</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>סטטוס</label>
+              <select>
+                <option>פעילות</option>
+                <option>לא פעילות</option>
+                <option>טרם הותקנו</option>
+              </select>
+            </div>
+            <div class="actions">
+              <button class="btn">איפוס</button>
+              <button class="btn primary">סנן</button>
+            </div>
+          </div>
+          <div class="modal-row" style="margin-top:8px">
+            <div class="field grow">
+              <label>הערות</label>
+              <textarea placeholder="כתוב כאן…">קופה ממוקמת בכניסה הראשית, מאחורי הדלפק.</textarea>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================= TABS ========================= -->
+      <section class="showcase-section">
+        <h2>טאבים</h2>
+        <div class="tabs">
+          <button class="tab-btn active">פרטי כרטסת</button>
+          <button class="tab-btn">היסטוריית מעטפות</button>
+          <button class="tab-btn">משימות</button>
+          <button class="tab-btn">דיווחים</button>
+          <button class="tab-btn">לוג אירועים</button>
+        </div>
+      </section>
+
+      <!-- ========================= INFO GRID ========================= -->
+      <section class="showcase-section">
+        <h2>מידע מבני (Info grid)</h2>
+        <div class="panel">
+          <div class="panel-title">פרטי כרטסת פעילה</div>
+          <div class="info-grid">
+            <div class="info-card"><div class="k">עיר</div><div class="v">בני ברק</div></div>
+            <div class="info-card"><div class="k">שכונה</div><div class="v">רמת אלחנן</div></div>
+            <div class="info-card"><div class="k">רחוב</div><div class="v">חזון איש 14</div></div>
+            <div class="info-card"><div class="k">מס׳ כרטסת</div><div class="v">#KART-0042</div></div>
+            <div class="info-card"><div class="k">נפתחה ב</div><div class="v">12/03/2026</div></div>
+            <div class="info-card"><div class="k">גובה</div><div class="v">דוד לוי</div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================= TABLE ========================= -->
+      <section class="showcase-section">
+        <h2>טבלה</h2>
+        <div class="panel" style="padding:0; overflow:hidden">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>מס׳ ברזל</th>
+                  <th>עיר</th>
+                  <th>כתובת</th>
+                  <th>גובה</th>
+                  <th>סטטוס</th>
+                  <th>נאסף לאחרונה</th>
+                  <th>סכום אחרון</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="clickable">
+                  <td><strong>12345</strong></td>
+                  <td>בני ברק</td>
+                  <td>חזון איש 14</td>
+                  <td>דוד לוי</td>
+                  <td><span class="pill green">פעיל</span></td>
+                  <td>22/04/2026</td>
+                  <td>₪1,420</td>
+                  <td><div class="actions"><button class="btn sm">ערוך</button><button class="btn sm danger">מחק</button></div></td>
+                </tr>
+                <tr class="clickable">
+                  <td><strong>12346</strong></td>
+                  <td>ירושלים</td>
+                  <td>בן יהודה 8</td>
+                  <td>שרה מזרחי</td>
+                  <td><span class="pill yellow">ממתין</span></td>
+                  <td>02/04/2026</td>
+                  <td>₪780</td>
+                  <td><div class="actions"><button class="btn sm">ערוך</button><button class="btn sm danger">מחק</button></div></td>
+                </tr>
+                <tr class="clickable">
+                  <td><strong>12347</strong></td>
+                  <td>אלעד</td>
+                  <td>הרב לנדאו 22</td>
+                  <td>—</td>
+                  <td><span class="pill gray">לא הוקצה</span></td>
+                  <td>—</td>
+                  <td>—</td>
+                  <td><div class="actions"><button class="btn sm">ערוך</button><button class="btn sm danger">מחק</button></div></td>
+                </tr>
+                <tr class="clickable">
+                  <td><strong>12348</strong></td>
+                  <td>בני ברק</td>
+                  <td>רבי עקיבא 100</td>
+                  <td>אברהם יעקב</td>
+                  <td><span class="pill red">לא פעיל</span></td>
+                  <td>15/01/2026</td>
+                  <td>₪0</td>
+                  <td><div class="actions"><button class="btn sm">ערוך</button><button class="btn sm danger">מחק</button></div></td>
+                </tr>
+                <tr class="clickable">
+                  <td><strong>12349</strong></td>
+                  <td>ירושלים</td>
+                  <td>מאה שערים 5</td>
+                  <td>יוסף כהן</td>
+                  <td><span class="pill blue">בטיפול</span></td>
+                  <td>30/04/2026</td>
+                  <td>₪2,150</td>
+                  <td><div class="actions"><button class="btn sm">ערוך</button><button class="btn sm danger">מחק</button></div></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================= MODAL ========================= -->
+      <section class="showcase-section">
+        <h2>חלון מודלי (Modal)</h2>
+        <div class="modal-backdrop" style="position:relative; min-height:auto">
+          <div class="modal-box">
+            <div class="modal-header">
+              <h3>עריכת קופה #12345</h3>
+              <button class="modal-close">×</button>
+            </div>
+            <div class="modal-row">
+              <div class="field">
+                <label>מספר ברזל</label>
+                <input type="text" value="12345">
+              </div>
+              <div class="field">
+                <label>סטטוס</label>
+                <select>
+                  <option>פעיל</option>
+                  <option>לא פעיל</option>
+                  <option>טרם הותקן</option>
+                </select>
+              </div>
+            </div>
+            <div class="modal-row">
+              <div class="field">
+                <label>עיר</label>
+                <input type="text" value="בני ברק">
+              </div>
+              <div class="field">
+                <label>רחוב</label>
+                <input type="text" value="חזון איש 14">
+              </div>
+            </div>
+            <div class="modal-row">
+              <div class="field" style="flex:1">
+                <label>הערות</label>
+                <textarea>קופה ממוקמת בכניסה הראשית.</textarea>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn danger">מחק קופה</button>
+              <div class="actions">
+                <button class="btn">ביטול</button>
+                <button class="btn primary">שמור</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================= LOGIN CARD ========================= -->
+      <section class="showcase-section">
+        <h2>כרטיס התחברות</h2>
+        <div style="display:flex; justify-content:center; padding:20px 0">
+          <div class="login-card">
+            <div class="login-logo">קופות ⚡ ניהול</div>
+            <div class="login-subtitle">התחבר כדי להמשיך</div>
+            <form class="login-form" onsubmit="return false">
+              <div class="field">
+                <label>שם משתמש</label>
+                <input type="text" value="admin@kupot.local">
+              </div>
+              <div class="field">
+                <label>סיסמה</label>
+                <input type="password" value="••••••••">
+              </div>
+              <button class="btn primary">התחבר</button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================= LOADING + EMPTY ========================= -->
+      <section class="showcase-section">
+        <h2>מצבי ריק וטעינה</h2>
+        <div class="panel">
+          <div class="loading"><span class="spinner"></span><span>טוען נתונים…</span></div>
+        </div>
+        <div class="panel">
+          <div class="empty">לא נמצאו תוצאות התואמות לסינון</div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+</body>
+</html>

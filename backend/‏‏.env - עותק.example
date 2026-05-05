@@ -1,0 +1,33 @@
+# ── App
+NODE_ENV=development
+PORT=3000
+
+# ── Database
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=kupot_db
+DB_USER=postgres
+DB_PASSWORD=your_password
+DB_POOL_MAX=10
+# DB_SSL=true   # enable for managed DBs (Heroku/Render/AWS)
+
+# ── Auth
+JWT_SECRET=change_me_to_a_long_random_string
+JWT_EXPIRES_IN=7d
+
+# ── HTTP
+# Comma-separated origins, or '*' to allow any (demo only)
+CORS_ORIGIN=*
+MAX_JSON_BODY=1mb
+
+# ── Uploads
+UPLOAD_DIR=./uploads
+MAX_IMAGE_BYTES=5242880
+
+# ── Tests
+# Set to 'true' to run integration tests that require a real PostgreSQL DB.
+# RUN_DB_TESTS=true
+
+# ── Seeding
+# Default password for users created by scripts/seedUsers.js
+DEMO_PASSWORD=password123

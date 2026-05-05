@@ -1,0 +1,1822 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>פרויקט קופות – ווירפריים v3</title>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0f1117; --surface:#1a1d27; --surface2:#22263a; --surface3:#2a2f45;
+  --border:#2e3350; --border2:#3a4060;
+  --accent:#4f6ef7; --accent-soft:rgba(79,110,247,0.12);
+  --green:#22c55e; --green-soft:rgba(34,197,94,0.12);
+  --yellow:#f59e0b; --yellow-soft:rgba(245,158,11,0.12);
+  --red:#ef4444; --red-soft:rgba(239,68,68,0.12);
+  --purple:#a855f7; --purple-soft:rgba(168,85,247,0.12);
+  --text:#e8eaf0; --text2:#9ba3c0; --text3:#5c6480;
+  --radius:12px; --radius-sm:8px; --shadow:0 4px 24px rgba(0,0,0,0.4);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+/* MODE BAR */
+.mode-bar{
+  position:fixed;top:0;left:0;right:0;z-index:1000;
+  background:var(--surface);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:8px;padding:10px 20px;
+  box-shadow:var(--shadow);
+}
+.mode-bar .logo{font-weight:800;font-size:15px;color:var(--text);margin-left:auto;letter-spacing:0.01em;}
+.mode-btn{
+  padding:7px 18px;border-radius:999px;border:1px solid var(--border2);
+  background:transparent;color:var(--text2);cursor:pointer;font-family:'Heebo',sans-serif;
+  font-size:14px;font-weight:500;transition:all .2s;
+}
+.mode-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.mode-btn:hover:not(.active){background:var(--surface2);color:var(--text);}
+
+/* LAYOUT */
+.interface{display:none;padding-top:54px;}
+.interface.active{display:flex;}
+
+/* SIDEBAR */
+.sidebar{
+  width:224px;background:var(--surface);border-left:1px solid var(--border);
+  height:calc(100vh - 54px);position:sticky;top:54px;overflow-y:auto;
+  display:flex;flex-direction:column;padding:14px 10px;flex-shrink:0;
+}
+.sidebar-label{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;
+  letter-spacing:.08em;padding:10px 10px 4px;}
+.nav-btn{
+  width:100%;text-align:right;padding:10px 12px;border-radius:var(--radius-sm);
+  border:none;background:transparent;color:var(--text2);cursor:pointer;
+  font-family:'Heebo',sans-serif;font-size:14px;font-weight:500;
+  display:flex;align-items:center;gap:8px;transition:all .15s;
+}
+.nav-btn .icon{font-size:16px;flex-shrink:0;}
+.nav-btn:hover{background:var(--surface2);color:var(--text);}
+.nav-btn.active{background:var(--accent-soft);color:var(--accent);font-weight:600;}
+.nav-btn .badge{
+  margin-right:auto;background:var(--red);color:#fff;font-size:11px;font-weight:700;
+  padding:1px 7px;border-radius:999px;min-width:20px;text-align:center;
+}
+
+/* MAIN */
+.main{flex:1;overflow-y:auto;height:calc(100vh - 54px);}
+.screen{display:none;padding:24px;}
+.screen.active{display:block;}
+
+/* HEADER */
+.page-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;}
+.page-title{font-size:24px;font-weight:800;}
+.page-subtitle{font-size:13px;color:var(--text2);margin-top:2px;}
+.breadcrumb{font-size:13px;color:var(--accent);cursor:pointer;margin-bottom:4px;}
+.breadcrumb:hover{text-decoration:underline;}
+
+/* PANEL */
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:16px;}
+.panel-title{font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px;}
+
+/* STATS */
+.stats-row{display:grid;gap:12px;margin-bottom:16px;}
+.stats-4{grid-template-columns:repeat(4,1fr);}
+.stats-3{grid-template-columns:repeat(3,1fr);}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;text-align:center;}
+.stat-card .val{font-size:26px;font-weight:800;}
+.stat-card .lbl{font-size:12px;color:var(--text2);margin-top:4px;}
+
+/* FORM */
+.filters-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:flex-end;}
+.field{display:flex;flex-direction:column;gap:5px;}
+.field label{font-size:12px;color:var(--text2);font-weight:500;}
+.field input,.field select,.field textarea{
+  padding:9px 12px;background:var(--surface2);border:1px solid var(--border2);
+  border-radius:var(--radius-sm);color:var(--text);font-family:'Heebo',sans-serif;
+  font-size:14px;outline:none;transition:border-color .15s;
+}
+.field input:focus,.field select:focus{border-color:var(--accent);}
+.field select option{background:var(--surface2);}
+.field.grow{flex:1;min-width:160px;}
+.field textarea{min-height:80px;resize:vertical;}
+
+/* BUTTONS */
+.btn{
+  padding:9px 16px;border-radius:var(--radius-sm);border:1px solid var(--border2);
+  background:var(--surface2);color:var(--text);cursor:pointer;font-family:'Heebo',sans-serif;
+  font-size:14px;font-weight:500;transition:all .15s;white-space:nowrap;
+}
+.btn:hover{background:var(--surface3);border-color:var(--accent);}
+.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+.btn.primary:hover{background:#3d5ce8;}
+.btn.success{background:var(--green);color:#fff;border-color:var(--green);}
+.btn.warn{background:var(--yellow-soft);color:var(--yellow);border-color:var(--yellow);}
+.btn.danger{background:var(--red-soft);color:var(--red);border-color:var(--red);}
+.btn.sm{padding:5px 10px;font-size:12px;}
+.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+
+/* TABLE */
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:14px;}
+th{background:var(--surface2);color:var(--text2);font-weight:600;font-size:12px;
+  padding:10px 12px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;}
+td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+tr.clickable{cursor:pointer;}
+tr.clickable:hover td{background:rgba(79,110,247,.06);}
+tr:not(.clickable):hover td{background:var(--surface2);}
+tr:last-child td{border-bottom:none;}
+
+/* PILLS */
+.pill{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap;}
+.pill.green{background:var(--green-soft);color:var(--green);}
+.pill.red{background:var(--red-soft);color:var(--red);}
+.pill.yellow{background:var(--yellow-soft);color:var(--yellow);}
+.pill.blue{background:var(--accent-soft);color:var(--accent);}
+.pill.gray{background:var(--surface3);color:var(--text2);}
+.pill.purple{background:var(--purple-soft);color:var(--purple);}
+
+/* TABS */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:16px;flex-wrap:wrap;}
+.tab-btn{
+  padding:9px 16px;border:none;background:transparent;color:var(--text2);
+  cursor:pointer;font-family:'Heebo',sans-serif;font-size:14px;font-weight:500;
+  border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s;white-space:nowrap;
+}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
+.tab-pane{display:none;}
+.tab-pane.active{display:block;}
+
+/* INFO GRID */
+.info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+.info-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;}
+.info-card.editable{cursor:pointer;}
+.info-card.editable:hover{border-color:var(--accent);}
+.info-card .k{font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;}
+.info-card .v{font-size:15px;font-weight:600;color:var(--text);}
+
+/* MODAL */
+.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);align-items:center;justify-content:center;padding:20px;z-index:2000;}
+.modal.active{display:flex;}
+.modal-box{width:min(580px,100%);background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px;box-shadow:var(--shadow);max-height:90vh;overflow-y:auto;}
+.modal-box.wide{width:min(700px,100%);}
+.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;}
+.modal-header h3{font-size:18px;font-weight:700;}
+.modal-row{display:flex;gap:12px;margin-bottom:12px;}
+.modal-row .field{flex:1;}
+.modal-footer{display:flex;justify-content:space-between;align-items:center;margin-top:18px;}
+
+/* ALERT */
+.alert{padding:12px 16px;border-radius:var(--radius-sm);margin-bottom:12px;display:flex;align-items:center;gap:10px;font-size:14px;}
+.alert.warn{background:var(--yellow-soft);border:1px solid var(--yellow);color:var(--yellow);}
+.alert.info{background:var(--accent-soft);border:1px solid var(--accent);color:var(--accent);}
+.alert.red{background:var(--red-soft);border:1px solid var(--red);color:var(--red);}
+
+/* LOGIC BADGE */
+.logic-tag{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;}
+.logic-tag.open{background:var(--green-soft);color:var(--green);border:1px solid var(--green);}
+.logic-tag.close{background:var(--red-soft);color:var(--red);border:1px solid var(--red);}
+.logic-tag.transfer{background:var(--purple-soft);color:var(--purple);border:1px solid var(--purple);}
+.logic-tag.none{background:var(--surface3);color:var(--text3);border:1px solid var(--border2);}
+
+/* COMPARE */
+.compare-cols{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;align-items:flex-start;}
+.compare-col{min-width:200px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;flex-shrink:0;}
+.compare-col .col-header{font-size:12px;font-weight:700;color:var(--accent);margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;}
+.compare-col .col-val{font-size:22px;font-weight:800;margin-bottom:2px;}
+.compare-col .col-lbl{font-size:12px;color:var(--text2);margin-bottom:10px;}
+.add-compare-col{min-width:160px;background:var(--surface2);border:2px dashed var(--border2);border-radius:var(--radius);padding:14px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;color:var(--text3);font-size:14px;transition:all .15s;}
+.add-compare-col:hover{border-color:var(--accent);color:var(--accent);}
+
+/* TAGS */
+.tag-list{display:flex;gap:6px;flex-wrap:wrap;}
+.tag{padding:3px 10px;background:var(--surface2);border:1px solid var(--border2);border-radius:999px;font-size:12px;color:var(--text2);display:flex;align-items:center;gap:4px;}
+.tag .rm{cursor:pointer;color:var(--text3);font-size:14px;}
+
+/* SETTINGS LIST */
+.settings-item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);}
+.settings-item:last-child{border-bottom:none;}
+.settings-item .si-name{font-weight:600;font-size:14px;}
+.settings-item .si-logic{display:flex;gap:6px;}
+
+/* ===== MOBILE ===== */
+#interface-mobile{display:none;flex-direction:column;}
+#interface-mobile.active{display:flex;}
+.mobile-wrap{display:flex;justify-content:center;align-items:flex-start;padding:20px;min-height:calc(100vh - 54px);background:var(--bg);}
+.mobile-device{width:390px;background:#0a0c12;border-radius:36px;overflow:hidden;box-shadow:0 0 0 8px #1a1d27,0 0 0 10px #2a2f45,var(--shadow);min-height:720px;display:flex;flex-direction:column;}
+.mobile-statusbar{background:#0a0c12;padding:12px 24px 6px;display:flex;justify-content:space-between;font-size:12px;color:var(--text2);}
+.mobile-header{background:var(--surface);padding:12px 18px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);min-height:50px;}
+.mobile-header h2{font-size:18px;font-weight:700;}
+.mobile-content{flex:1;overflow-y:auto;padding:14px;background:var(--bg);}
+.mobile-screen{display:none;}
+.mobile-screen.active{display:block;}
+.mobile-nav{background:var(--surface);border-top:1px solid var(--border);padding:8px 4px;display:flex;justify-content:space-around;}
+.mobile-nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 4px;border:none;background:transparent;color:var(--text3);cursor:pointer;font-family:'Heebo',sans-serif;font-size:10px;border-radius:8px;transition:all .15s;}
+.mobile-nav-btn.active{color:var(--accent);}
+.mobile-nav-btn .micon{font-size:20px;}
+.m-section{margin-bottom:14px;}
+.m-title{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;}
+.m-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;cursor:pointer;transition:all .15s;}
+.m-card:hover{border-color:var(--accent);}
+.m-card-row{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:4px;}
+.m-card .name{font-size:15px;font-weight:700;}
+.m-card .meta{font-size:12px;color:var(--text2);}
+.m-card .days-warn{font-size:12px;font-weight:700;color:var(--red);}
+.m-alert-card{background:var(--red-soft);border:1px solid var(--red);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px;}
+.m-task-card{background:var(--yellow-soft);border:1px solid var(--yellow);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;}
+.m-field{margin-bottom:12px;}
+.m-field label{font-size:12px;color:var(--text2);display:block;margin-bottom:5px;}
+.m-field input,.m-field select{width:100%;padding:11px 13px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);font-family:'Heebo',sans-serif;font-size:15px;}
+.m-btn{width:100%;padding:14px;border-radius:var(--radius);border:none;background:var(--accent);color:#fff;font-family:'Heebo',sans-serif;font-size:16px;font-weight:700;cursor:pointer;margin-bottom:10px;transition:all .15s;}
+.m-btn:hover{background:#3d5ce8;}
+.m-btn.outline{background:transparent;border:1px solid var(--border2);color:var(--text2);}
+.m-back{display:flex;align-items:center;gap:6px;color:var(--accent);font-size:14px;cursor:pointer;}
+.m-info-row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);font-size:14px;}
+.m-info-row .mk{color:var(--text2);}
+.m-info-row .mv{font-weight:600;}
+.m-scan-area{background:var(--surface2);border:2px dashed var(--border2);border-radius:var(--radius);padding:24px;text-align:center;margin-bottom:12px;cursor:pointer;}
+.m-scan-area .scan-icon{font-size:36px;margin-bottom:8px;}
+.m-scan-area .scan-text{font-size:14px;color:var(--text2);}
+.report-types{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
+.report-type-btn{padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--surface2);color:var(--text2);cursor:pointer;font-family:'Heebo',sans-serif;font-size:13px;text-align:center;transition:all .15s;}
+.report-type-btn.selected{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);}
+
+/* CASHROOM */
+#interface-cashroom{padding:24px;flex-direction:column;}
+
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:3px;}
+</style>
+</head>
+<body>
+
+<!-- MODE BAR -->
+<div class="mode-bar">
+  <div class="logo">📦 פרויקט קופות</div>
+  <button class="mode-btn active" onclick="setMode('admin')">🖥️ ממשק מנהל</button>
+  <button class="mode-btn" onclick="setMode('mobile')">📱 ממשק גובה</button>
+  <button class="mode-btn" onclick="setMode('cashroom')">💰 חדר כסף</button>
+</div>
+
+<!-- ============================================================
+     ADMIN INTERFACE
+============================================================ -->
+<div class="interface active" id="interface-admin">
+  <aside class="sidebar">
+    <div>
+      <div class="sidebar-label">ניהול קופות</div>
+      <button class="nav-btn active" data-screen="s-cards" onclick="goTo(this,'s-cards')"><span class="icon">📋</span> כרטסות</button>
+      <button class="nav-btn" data-screen="s-boxes" onclick="goTo(this,'s-boxes')"><span class="icon">📦</span> קופות</button>
+      <button class="nav-btn" data-screen="s-envelopes" onclick="goTo(this,'s-envelopes')"><span class="icon">✉️</span> כל המעטפות</button>
+    </div>
+    <div>
+      <div class="sidebar-label">תפעול</div>
+      <button class="nav-btn" data-screen="s-tasks" onclick="goTo(this,'s-tasks')"><span class="icon">✅</span> משימות <span class="badge">4</span></button>
+      <button class="nav-btn" data-screen="s-reports" onclick="goTo(this,'s-reports')"><span class="icon">⚠️</span> דיווחים <span class="badge">3</span></button>
+      <button class="nav-btn" data-screen="s-alerts" onclick="goTo(this,'s-alerts')"><span class="icon">🔔</span> התראות <span class="badge">7</span></button>
+    </div>
+    <div>
+      <div class="sidebar-label">ניתוח</div>
+      <button class="nav-btn" data-screen="s-docot" onclick="goTo(this,'s-docot')"><span class="icon">📊</span> דוחות</button>
+      <button class="nav-btn" data-screen="s-cashroom-admin" onclick="goTo(this,'s-cashroom-admin')"><span class="icon">💰</span> חדר כסף</button>
+    </div>
+    <div>
+      <div class="sidebar-label">הגדרות</div>
+      <button class="nav-btn" data-screen="s-users" onclick="goTo(this,'s-users')"><span class="icon">👥</span> משתמשים</button>
+      <button class="nav-btn" data-screen="s-settings" onclick="goTo(this,'s-settings')"><span class="icon">⚙️</span> הגדרות</button>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- ==================== CARDS ==================== -->
+    <div class="screen active" id="s-cards">
+      <div class="page-header">
+        <div>
+          <div class="page-title">כרטסות</div>
+          <div class="page-subtitle">לחץ על שורה או כפתור פתיחה כדי להיכנס לכרטסת</div>
+        </div>
+        <button class="btn primary" onclick="openModal('task-modal')">+ משימה חדשה</button>
+      </div>
+
+      <div class="stats-row stats-4">
+        <div class="stat-card"><div class="val">248</div><div class="lbl">כרטסות פעילות</div></div>
+        <div class="stat-card"><div class="val" style="color:var(--red)">7</div><div class="lbl">לא רוקנו 30+ יום</div></div>
+        <div class="stat-card"><div class="val" style="color:var(--yellow)">3</div><div class="lbl">דיווחים פתוחים</div></div>
+        <div class="stat-card"><div class="val" style="color:var(--green)">₪84,200</div><div class="lbl">גביה החודש</div></div>
+      </div>
+
+      <div class="panel">
+        <div class="filters-row">
+          <div class="field grow"><label>חיפוש</label><input placeholder="מספר קופה / כרטסת / עיר / רחוב / גובה"></div>
+          <div class="field"><label>סטטוס</label><select><option>כל הסטטוסים</option><option>פעילה</option><option>לא פעילה</option></select></div>
+          <div class="field"><label>סוג קופה</label><select><option>כל הסוגים</option><option>גדולה</option><option>רגילה</option><option>קטנה</option></select></div>
+          <div class="field"><label>עיר</label><select><option>כל הערים</option><option>בני ברק</option><option>ירושלים</option><option>אשדוד</option></select></div>
+          <div class="field"><label>גובה</label><select><option>כל הגובים</option><option>יוסי כהן</option><option>דוד לוי</option><option>משה ברנד</option></select></div>
+          <button class="btn sm">↺ איפוס</button>
+        </div>
+        <div class="actions" style="margin-bottom:12px;">
+          <button class="btn sm" style="background:var(--accent-soft);color:var(--accent);border-color:var(--accent)">פעילות</button>
+          <button class="btn sm">כל הכרטסות</button>
+          <button class="btn sm" style="margin-right:auto;">📥 יצוא לאקסל</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <tr><th>קופה</th><th>שם / כרטסת</th><th>סוג</th><th>עיר</th><th>שכונה</th><th>רחוב</th><th>בנין</th><th>גובה</th><th>סטטוס</th><th>גביה אחרונה</th><th>ימים</th><th></th></tr>
+            <tr class="clickable" onclick="goToCardDetail()">
+              <td><strong>123</strong></td><td>123A</td><td>גדולה</td><td>בני ברק</td><td>רמת אלחנן</td><td>רבי עקיבא</td><td>10</td><td>יוסי כהן</td>
+              <td><span class="pill green">פעילה</span></td><td>01/01/2026</td><td>22</td>
+              <td><button class="btn sm primary" onclick="event.stopPropagation();goToCardDetail()">פתיחה</button></td>
+            </tr>
+            <tr class="clickable" onclick="goToCardDetail()">
+              <td><strong>456</strong></td><td>456C</td><td>רגילה</td><td>ירושלים</td><td>גאולה</td><td>מלכי ישראל</td><td>4</td><td>דוד לוי</td>
+              <td><span class="pill green">פעילה</span> <span class="pill yellow" style="font-size:11px;">⚠️ אירוע פתוח</span></td><td>28/12/2025</td><td><strong style="color:var(--red)">26</strong></td>
+              <td><button class="btn sm primary" onclick="event.stopPropagation();goToCardDetail()">פתיחה</button></td>
+            </tr>
+            <tr class="clickable" onclick="goToCardDetail()">
+              <td><strong>789</strong></td>
+              <td><span style="font-weight:700;color:var(--text);">שובע שמחות</span> <span style="font-size:11px;color:var(--text3);">789B</span></td>
+              <td>קטנה</td><td>בני ברק</td><td>הרא"ה</td><td>ז'בוטינסקי</td><td>22</td><td>יוסי כהן</td>
+              <td><span class="pill green">פעילה</span></td><td>15/01/2026</td><td>8</td>
+              <td><button class="btn sm primary" onclick="event.stopPropagation();goToCardDetail()">פתיחה</button></td>
+            </tr>
+            <tr class="clickable" onclick="goToCardDetail()">
+              <td><strong>321</strong></td><td>321A</td><td>גדולה</td><td>אשדוד</td><td>יד המאה</td><td>הרצל</td><td>7</td><td>משה ברנד</td>
+              <td><span class="pill gray">לא פעילה</span></td><td>10/11/2025</td><td>—</td>
+              <td><button class="btn sm" onclick="event.stopPropagation();goToCardDetail()">פתיחה</button></td>
+            </tr>
+          </table>
+        </div>
+        <div style="font-size:12px;color:var(--text3);margin-top:10px;">💡 לחיצה על שורה פותחת את הכרטסת הפנימית</div>
+      </div>
+    </div>
+
+    <!-- ==================== CARD DETAIL ==================== -->
+    <div class="screen" id="s-card-detail">
+      <div class="page-header">
+        <div>
+          <div class="breadcrumb" onclick="goTo(document.querySelector('[data-screen=s-cards]'),'s-cards')">← חזרה לכרטסות</div>
+          <div class="page-title">כרטסת #123A &nbsp;|&nbsp; קופה 123</div>
+          <div class="page-subtitle">בני ברק | רמת אלחנן | רבי עקיבא 10 | גובה: יוסי כהן</div>
+        </div>
+        <div class="actions">
+          <span class="pill green" style="padding:6px 14px;font-size:13px;">כרטסת פעילה</span>
+          <button class="btn danger" onclick="closeCardManual()">❌ סגור כרטסה</button>
+          <button class="btn" onclick="openModal('report-modal')">⚠️ דיווח</button>
+          <button class="btn primary" onclick="openModal('task-modal')">+ משימה</button>
+        </div>
+      </div>
+
+      <!-- EDIT TOGGLE -->
+      <div id="card-view">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+          <button class="btn sm" onclick="toggleEdit(true)">✏️ עריכת פרטים</button>
+        </div>
+        <div class="info-grid" style="margin-bottom:16px;">
+          <div class="info-card"><div class="k">מספר קופה</div><div class="v">123</div></div>
+          <div class="info-card"><div class="k">קוד כרטסת</div><div class="v">123A</div></div>
+          <div class="info-card"><div class="k">שם מותאם</div><div class="v" style="color:var(--text3);font-style:italic;">לא הוגדר</div></div>
+          <div class="info-card"><div class="k">דרוש קבלה</div><div class="v" style="color:var(--text3);">לא</div></div>
+          <div class="info-card"><div class="k">סוג קופה</div><div class="v">גדולה</div></div>
+          <div class="info-card"><div class="k">עיר</div><div class="v">בני ברק</div></div>
+          <div class="info-card"><div class="k">שכונה</div><div class="v">רמת אלחנן</div></div>
+          <div class="info-card"><div class="k">רחוב + בנין</div><div class="v">רבי עקיבא 10</div></div>
+          <div class="info-card"><div class="k">הערות מיקום</div><div class="v">ליד הכניסה, צד ימין</div></div>
+          <div class="info-card"><div class="k">גובה משויך</div><div class="v">יוסי כהן</div></div>
+          <div class="info-card"><div class="k">גביה אחרונה</div><div class="v">01/01/2026</div></div>
+          <div class="info-card">
+            <div class="k">טווח התראה</div>
+            <div class="v">גלובלי (30 יום)</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px;">ברירת מחדל</div>
+          </div>
+          <div class="info-card"><div class="k">תאריך התקנה</div><div class="v" style="font-size:13px;">01/03/2025 (מאירוע)</div></div>
+          <div class="info-card"><div class="k">מתקין</div><div class="v" style="font-size:13px;">דוד לוי (מאירוע)</div></div>
+          <div class="info-card" style="cursor:pointer;border-color:var(--accent);" onclick="openModal('history-modal')">
+            <div class="k">כרטסות קודמות</div><div class="v" style="color:var(--accent);">123 ← 123A 🔗</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="card-edit" style="display:none;">
+        <div class="panel" style="margin-bottom:16px;border-color:var(--accent);">
+          <div class="panel-title" style="color:var(--accent);">✏️ מצב עריכה</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+            <div class="field"><label>עיר</label><input value="בני ברק"></div>
+            <div class="field"><label>שכונה</label><input value="רמת אלחנן"></div>
+            <div class="field"><label>רחוב</label><input value="רבי עקיבא"></div>
+            <div class="field"><label>מספר בנין</label><input value="10"></div>
+            <div class="field"><label>גובה משויך</label><select><option>יוסי כהן</option><option>דוד לוי</option><option>משה ברנד</option></select></div>
+            <div class="field"><label>סוג קופה</label><select><option>גדולה</option><option>רגילה</option><option>קטנה</option></select></div>
+          </div>
+          <div class="field" style="margin-bottom:12px;"><label>הערות מיקום</label><input value="ליד הכניסה, צד ימין"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+            <div class="field">
+              <label>שם מותאם אישי לכרטסת <span style="color:var(--text3);font-weight:400;">(אופציונלי)</span></label>
+              <input placeholder='למשל: "שובע שמחות"'>
+              <div style="font-size:11px;color:var(--text3);margin-top:4px;">אם הוגדר — יוצג לגובה במקום מספר הקופה</div>
+              <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer;font-size:14px;">
+                <input type="checkbox" id="receipt-checkbox" onchange="toggleReceiptDetails(this)">
+                דרוש קבלה
+              </label>
+              <div id="receipt-details" style="display:none;margin-top:8px;">
+                <textarea placeholder="פרטי הקבלה — למשל: יש לקבל חתימה מהמנהל, להגיש עד סוף החודש..." style="width:100%;min-height:70px;padding:9px 12px;background:var(--surface2);border:1px solid var(--accent);border-radius:var(--radius-sm);color:var(--text);font-family:'Heebo',sans-serif;font-size:13px;resize:vertical;outline:none;"></textarea>
+              </div>
+            </div>
+            <div class="field">
+              <label>טווח התראה אישי <span style="color:var(--text3);font-weight:400;">(אופציונלי — גובר על הגלובלי)</span></label>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <input type="number" placeholder="ימים" style="width:90px;">
+                <span style="font-size:13px;color:var(--text2);">ימים <span style="color:var(--text3);">(גלובלי: 30)</span></span>
+              </div>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn success" onclick="toggleEdit(false)">✅ שמירה</button>
+            <button class="btn" onclick="toggleEdit(false)">ביטול</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TABS -->
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab(this,'cd-envelopes')">✉️ מעטפות (12)</button>
+        <button class="tab-btn" onclick="switchTab(this,'cd-events')">📅 אירועים (8)</button>
+        <button class="tab-btn" onclick="switchTab(this,'cd-tasks')">✅ משימות (1)</button>
+        <button class="tab-btn" onclick="switchTab(this,'cd-reports')">⚠️ דיווחים (1)</button>
+      </div>
+
+      <div class="tab-pane active" id="cd-envelopes">
+        <div class="actions" style="margin-bottom:12px;">
+          <div style="font-size:13px;color:var(--text2);">סה"כ: <strong style="color:var(--text)">₪4,820</strong> | 12 מעטפות</div>
+          <button class="btn sm primary" style="margin-right:auto;" onclick="openModal('envelope-modal')">+ מעטפה ידנית</button>
+          <button class="btn sm">📥 אקסל</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <tr><th>תאריך גביה</th><th>מס' מעטפה</th><th>סכום</th><th>גובה</th><th>סטטוס</th><th>הערות</th><th>פעולה</th></tr>
+            <tr><td>01/01/2026</td><td>8001</td><td>₪450</td><td>יוסי כהן</td><td><span class="pill green">הוזן</span></td><td>—</td><td><button class="btn sm" onclick="openModal('envelope-modal')">עריכה</button></td></tr>
+            <tr><td>05/12/2025</td><td>7845</td><td>₪380</td><td>יוסי כהן</td><td><span class="pill green">הוזן</span></td><td>—</td><td><button class="btn sm" onclick="openModal('envelope-modal')">עריכה</button></td></tr>
+            <tr><td>10/11/2025</td><td>7612</td><td>—</td><td>יוסי כהן</td><td><span class="pill yellow">ממתין</span></td><td>—</td><td><button class="btn sm warn" onclick="openModal('envelope-modal')">הזנה</button></td></tr>
+            <tr><td>02/10/2025</td><td>7401</td><td>₪410</td><td>יוסי כהן</td><td><span class="pill green">הוזן</span></td><td>מעטפה קרועה</td><td><button class="btn sm" onclick="openModal('envelope-modal')">עריכה</button></td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-pane" id="cd-events">
+        <div class="actions" style="margin-bottom:12px;">
+          <button class="btn sm" style="margin-right:auto;">📥 יצוא לאקסל</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <tr><th>תאריך</th><th>סוג</th><th>תיאור</th><th>משתמש</th><th>קישור</th></tr>
+            <tr><td>01/01/2026</td><td><span class="pill blue">גביה</span></td><td>מעטפה 8001 | ₪450</td><td>יוסי כהן</td><td><button class="btn sm" onclick="openModal('envelope-modal')">מעטפה</button></td></tr>
+            <tr><td>28/11/2025</td><td><span class="pill yellow">דיווח</span></td><td>מנעול קשה לפתיחה</td><td>יוסי כהן</td><td><button class="btn sm warn" onclick="openModal('report-modal')">דיווח</button></td></tr>
+            <tr><td>15/09/2025</td><td><span class="pill blue">גביה</span></td><td>מעטפה 7401 | ₪410</td><td>יוסי כהן</td><td>—</td></tr>
+            <tr><td>01/03/2025</td><td><span class="pill green">התקנה</span></td><td>התקנה ראשונית | רבי עקיבא 10, בני ברק</td><td>דוד לוי</td><td>—</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-pane" id="cd-tasks">
+        <div class="table-wrap">
+          <table>
+            <tr><th>סוג</th><th>סטטוס</th><th>משויך</th><th>מקור</th><th>פעולות</th></tr>
+            <tr>
+              <td>🔧 החלפת מנעול</td>
+              <td><span class="pill yellow">פתוח</span></td>
+              <td>דוד לוי</td>
+              <td><span style="color:var(--text2);font-size:13px;">דיווח #47</span></td>
+              <td class="actions">
+                <button class="btn sm" onclick="openModal('task-modal')">פרטים</button>
+                <button class="btn sm success" onclick="openModal('task-exec-modal')">אישור ביצוע</button>
+              </td>
+            </tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-pane" id="cd-reports">
+        <div class="table-wrap">
+          <table>
+            <tr><th>תאריך</th><th>סוג</th><th>תיאור</th><th>סטטוס</th><th>פעולה</th></tr>
+            <tr>
+              <td>28/11/2025</td><td>מנעול</td><td>מנעול קשה לפתיחה</td>
+              <td><span class="pill yellow">פתוח</span></td>
+              <td><button class="btn sm warn" onclick="openModal('report-modal')">טיפול / המרה</button></td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== BOXES ==================== -->
+    <div class="screen" id="s-boxes">
+      <div class="page-header">
+        <div class="page-title">קופות</div>
+        <button class="btn primary" onclick="openModal('addbox-modal')">+ קופה חדשה</button>
+      </div>
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab(this,'boxes-uninstalled')">לא מותקנות (12)</button>
+        <button class="tab-btn" onclick="switchTab(this,'boxes-installed')">מותקנות (248)</button>
+        <button class="tab-btn" onclick="switchTab(this,'boxes-inactive')">כרטסת לא פעילה (34)</button>
+      </div>
+      <div class="tab-pane active" id="boxes-uninstalled">
+        <div class="panel">
+          <div class="panel-title">קופות הממתינות להתקנה</div>
+          <div class="table-wrap">
+            <table>
+              <tr><th>מספר קופה</th><th>סוג</th><th>הערות</th><th>פעולה</th></tr>
+              <tr><td>555</td><td>גדולה</td><td>—</td><td><button class="btn sm primary" onclick="openModal('task-modal')">צור משימת התקנה</button></td></tr>
+              <tr><td>556</td><td>רגילה</td><td>חדשה מהמחסן</td><td><button class="btn sm primary" onclick="openModal('task-modal')">צור משימת התקנה</button></td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="tab-pane" id="boxes-installed">
+        <div class="alert info">📋 לרשימת הכרטסות המותקנות — עבור למסך כרטסות</div>
+      </div>
+      <div class="tab-pane" id="boxes-inactive">
+        <div class="panel">
+          <div class="alert warn" style="margin-bottom:14px;">⚠️ אלו קופות שכרטסתן נסגרה (הסרה) — הקופה עצמה עדיין קיימת ויכולה להיות מותקנת מחדש</div>
+          <div class="table-wrap">
+            <table>
+              <tr><th>מספר קופה</th><th>סוג</th><th>כרטסת אחרונה</th><th>תאריך סגירת כרטסת</th><th>פעולה</th></tr>
+              <tr><td>321</td><td>גדולה</td><td>321A</td><td>10/11/2025</td><td><button class="btn sm primary" onclick="openModal('task-modal')">צור משימת התקנה</button></td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== ALL ENVELOPES ==================== -->
+    <div class="screen" id="s-envelopes">
+      <div class="page-header">
+        <div>
+          <div class="page-title">כל המעטפות</div>
+          <div class="page-subtitle">רשימה מלאה — כל הגובים, כל הקופות</div>
+        </div>
+        <button class="btn sm">📥 יצוא לאקסל</button>
+      </div>
+      <div class="stats-row stats-3">
+        <div class="stat-card"><div class="val">₪84,200</div><div class="lbl">סה"כ הוזן החודש</div></div>
+        <div class="stat-card"><div class="val" style="color:var(--yellow)">3</div><div class="lbl">ממתינות להזנה</div></div>
+        <div class="stat-card"><div class="val">312</div><div class="lbl">מעטפות החודש</div></div>
+      </div>
+      <div class="panel">
+        <div class="filters-row">
+          <div class="field grow"><label>חיפוש</label><input placeholder="מס' מעטפה / קופה / כרטסת"></div>
+          <div class="field"><label>סטטוס</label><select><option>הכל</option><option>הוזן</option><option>ממתין</option></select></div>
+          <div class="field"><label>גובה</label><select><option>כל הגובים</option><option>יוסי כהן</option><option>דוד לוי</option><option>משה ברנד</option></select></div>
+          <div class="field"><label>עיר</label><select><option>כל הערים</option><option>בני ברק</option><option>ירושלים</option></select></div>
+          <div class="field"><label>מתאריך</label><input type="date"></div>
+          <div class="field"><label>עד תאריך</label><input type="date"></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <tr><th>תאריך גביה</th><th>מס' מעטפה</th><th>קופה</th><th>כרטסת</th><th>עיר</th><th>גובה</th><th>סכום</th><th>סטטוס</th><th>פעולה</th></tr>
+            <tr>
+              <td>23/01/2026</td><td>8045</td><td>123</td><td>123A</td><td>בני ברק</td><td>יוסי כהן</td>
+              <td><span style="color:var(--text3)">ממתין</span></td><td><span class="pill yellow">ממתין</span></td>
+              <td class="actions"><button class="btn sm primary" onclick="openModal('cashroom-modal')">הזנת סכום</button><button class="btn sm" onclick="goToCardDetail()">כרטסת</button></td>
+            </tr>
+            <tr>
+              <td>01/01/2026</td><td>8001</td><td>123</td><td>123A</td><td>בני ברק</td><td>יוסי כהן</td>
+              <td>₪450</td><td><span class="pill green">הוזן</span></td>
+              <td class="actions"><button class="btn sm" onclick="openModal('envelope-modal')">עריכה</button><button class="btn sm" onclick="goToCardDetail()">כרטסת</button></td>
+            </tr>
+            <tr>
+              <td>28/12/2025</td><td>7990</td><td>456</td><td>456C</td><td>ירושלים</td><td>דוד לוי</td>
+              <td>₪380</td><td><span class="pill green">הוזן</span></td>
+              <td class="actions"><button class="btn sm" onclick="openModal('envelope-modal')">עריכה</button><button class="btn sm" onclick="goToCardDetail()">כרטסת</button></td>
+            </tr>
+            <tr>
+              <td>22/01/2026</td><td>8044</td><td>789</td><td>789B</td><td>בני ברק</td><td>יוסי כהן</td>
+              <td><span style="color:var(--text3)">ממתין</span></td><td><span class="pill yellow">ממתין</span></td>
+              <td class="actions"><button class="btn sm primary" onclick="openModal('cashroom-modal')">הזנת סכום</button><button class="btn sm" onclick="goToCardDetail()">כרטסת</button></td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== TASKS ==================== -->
+    <div class="screen" id="s-tasks">
+      <div class="page-header">
+        <div class="page-title">משימות</div>
+        <div class="actions">
+          <button class="btn sm">📥 יצוא לאקסל</button>
+          <button class="btn primary" onclick="openModal('task-modal')">+ משימה חדשה</button>
+        </div>
+      </div>
+      <div class="filters-row">
+        <div class="field"><label>סטטוס</label><select><option>הכל</option><option>פתוח</option><option>בטיפול</option><option>הושלם</option></select></div>
+        <div class="field"><label>סוג</label><select><option>הכל</option><option>התקנה</option><option>הסרה</option><option>העברת מיקום</option><option>החלפת מנעול</option><option>תיקון</option><option>צביעה</option></select></div>
+        <div class="field"><label>משויך</label><select><option>הכל</option><option>דוד לוי</option><option>יוסי כהן</option><option>משה ברנד</option></select></div>
+      </div>
+      <div class="panel">
+        <div class="table-wrap">
+          <table>
+            <tr><th>סוג</th><th>קופה</th><th>כרטסת</th><th>סטטוס</th><th>משויך</th><th>מקור</th><th>פעולות</th></tr>
+            <tr>
+              <td>🔧 החלפת מנעול</td><td>123</td><td>123A</td><td><span class="pill yellow">פתוח</span></td><td>דוד לוי</td><td>דיווח #47</td>
+              <td class="actions"><button class="btn sm" onclick="openModal('task-modal')">פרטים</button><button class="btn sm success" onclick="openModal('task-exec-modal')">אישור ביצוע</button></td>
+            </tr>
+            <tr>
+              <td>📦 התקנה</td><td>555</td><td>—</td><td><span class="pill blue">בטיפול</span></td><td>יוסי כהן</td><td>ידני</td>
+              <td class="actions"><button class="btn sm" onclick="openModal('task-modal')">פרטים</button><button class="btn sm success" onclick="openModal('task-exec-modal')">אישור ביצוע</button></td>
+            </tr>
+            <tr>
+              <td>🔄 העברת מיקום</td><td>789</td><td>789B</td><td><span class="pill yellow">פתוח</span></td><td>דוד לוי</td><td>ידני</td>
+              <td class="actions"><button class="btn sm" onclick="openModal('task-modal')">פרטים</button><button class="btn sm success" onclick="openModal('task-exec-modal')">אישור ביצוע</button></td>
+            </tr>
+            <tr>
+              <td>🗑️ הסרה</td><td>456</td><td>456C</td><td><span class="pill green">הושלם</span></td><td>משה ברנד</td><td>ידני</td>
+              <td class="actions"><button class="btn sm" onclick="openModal('task-exec-modal')">פרטי ביצוע</button></td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== REPORTS ==================== -->
+    <div class="screen" id="s-reports">
+      <div class="page-header">
+        <div class="page-title">דיווחים</div>
+        <button class="btn sm">📥 יצוא לאקסל</button>
+      </div>
+      <div class="panel">
+        <div class="filters-row">
+          <div class="field"><label>סטטוס</label><select><option>הכל</option><option>פתוח</option><option>בטיפול</option><option>סגור</option></select></div>
+          <div class="field"><label>סוג</label><select><option>הכל</option><option>מנעול</option><option>כתובת</option><option>שיפוץ</option><option>ריק</option></select></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <tr><th>תאריך</th><th>קופה</th><th>כרטסת</th><th>סוג</th><th>תיאור</th><th>גובה</th><th>סטטוס</th><th>פעולה</th></tr>
+            <tr>
+              <td>28/11/2025</td><td>123</td><td>123A</td><td>מנעול</td><td>מנעול קשה לפתיחה</td><td>יוסי כהן</td>
+              <td><span class="pill yellow">פתוח</span></td>
+              <td><button class="btn sm warn" onclick="openModal('report-modal')">טיפול / המרה</button></td>
+            </tr>
+            <tr>
+              <td>15/01/2026</td><td>456</td><td>456C</td><td>כתובת</td><td>כתובת לא מדויקת</td><td>דוד לוי</td>
+              <td><span class="pill blue">בטיפול</span></td>
+              <td><button class="btn sm" onclick="openModal('report-modal')">פתיחה</button></td>
+            </tr>
+            <tr>
+              <td>20/01/2026</td><td>789</td><td>789B</td><td>שיפוץ</td><td>צבע מתקלף</td><td>יוסי כהן</td>
+              <td><span class="pill yellow">פתוח</span></td>
+              <td><button class="btn sm warn" onclick="openModal('report-modal')">טיפול / המרה</button></td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== ALERTS ==================== -->
+    <div class="screen" id="s-alerts">
+      <div class="page-header">
+        <div class="page-title">התראות</div>
+        <button class="btn" onclick="openModal('alert-settings-modal')">⚙️ הגדרות</button>
+      </div>
+      <div class="alert warn">⚙️ הגדרה גלובלית: התראה על אי-גביה מעל <strong>30 ימים</strong></div>
+      <div class="panel">
+        <div class="panel-title">קופות ללא גביה מעל הסף המוגדר</div>
+        <div class="table-wrap">
+          <table>
+            <tr><th>קופה / שם</th><th>כרטסת</th><th>עיר</th><th>גובה</th><th>גביה אחרונה</th><th>ימים</th><th>סף התראה</th><th>פעולה</th></tr>
+            <tr><td>456</td><td>456C</td><td>ירושלים</td><td>דוד לוי</td><td>28/12/2025</td><td><strong style="color:var(--red)">26</strong></td><td><span style="color:var(--text3);font-size:12px;">גלובלי (30)</span></td><td><button class="btn sm" onclick="goToCardDetail()">כרטסת</button></td></tr>
+            <tr><td>102</td><td>102B</td><td>בני ברק</td><td>יוסי כהן</td><td>10/12/2025</td><td><strong style="color:var(--red)">43</strong></td><td><span style="color:var(--text3);font-size:12px;">גלובלי (30)</span></td><td><button class="btn sm" onclick="goToCardDetail()">כרטסת</button></td></tr>
+            <tr><td>שובע שמחות <span style="color:var(--text3);font-size:11px;">205</span></td><td>205A</td><td>אשדוד</td><td>משה ברנד</td><td>05/12/2025</td><td><strong style="color:var(--red)">48</strong></td><td><span style="color:var(--accent);font-size:12px;font-weight:600;">אישי (14)</span></td><td><button class="btn sm" onclick="goToCardDetail()">כרטסת</button></td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">דיווחים פתוחים</div>
+        <div class="table-wrap">
+          <table>
+            <tr><th>קופה</th><th>סוג</th><th>תיאור</th><th>ימים פתוח</th><th>פעולה</th></tr>
+            <tr><td>123</td><td>מנעול</td><td>מנעול קשה לפתיחה</td><td>14</td><td><button class="btn sm warn" onclick="openModal('report-modal')">טיפול</button></td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== DOCOT ==================== -->
+    <div class="screen" id="s-docot">
+      <div class="page-header">
+        <div class="page-title">דוחות</div>
+        <button class="btn sm">📥 יצוא לאקסל</button>
+      </div>
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab(this,'rep-summary')">סיכום כללי</button>
+        <button class="tab-btn" onclick="switchTab(this,'rep-perbox')">פר קופה</button>
+        <button class="tab-btn" onclick="switchTab(this,'rep-compare')">השוואה</button>
+      </div>
+
+      <div class="tab-pane active" id="rep-summary">
+        <div class="filters-row">
+          <div class="field"><label>סוג תקופה</label>
+            <select onchange="showPeriodFields(this)">
+              <option value="month">חודשי</option>
+              <option value="year">שנתי</option>
+              <option value="range">טווח חופשי</option>
+            </select>
+          </div>
+          <div class="field" id="f-month"><label>חודש</label><input type="month" value="2026-01"></div>
+          <div class="field" id="f-year" style="display:none;"><label>שנה</label><select><option>2026</option><option>2025</option><option>2024</option></select></div>
+          <div class="field" id="f-from" style="display:none;"><label>מתאריך</label><input type="date"></div>
+          <div class="field" id="f-to" style="display:none;"><label>עד תאריך</label><input type="date"></div>
+          <div class="field"><label>עיר</label><select><option>כל הערים</option><option>בני ברק</option><option>ירושלים</option><option>אשדוד</option></select></div>
+          <div class="field"><label>שכונה</label><select><option>כל השכונות</option><option>רמת אלחנן</option><option>גאולה</option></select></div>
+          <div class="field"><label>גובה</label><select><option>כל הגובים</option><option>יוסי כהן</option><option>דוד לוי</option></select></div>
+        </div>
+        <div class="filters-row" style="margin-top:-6px;">
+          <div class="field">
+            <label>שם מותאם</label>
+            <select>
+              <option>כולל הכל</option>
+              <option>רק עם שם מותאם</option>
+              <option>רק ללא שם מותאם</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>דרוש קבלה</label>
+            <select id="rep-receipt-filter" onchange="toggleReceiptCol(this)">
+              <option value="all">כולל הכל</option>
+              <option value="only">רק דרוש קבלה</option>
+              <option value="none">רק ללא קבלה</option>
+            </select>
+          </div>
+          <button class="btn primary">הפק דוח</button>
+        </div>
+
+        <div class="stats-row stats-4">
+          <div class="stat-card"><div class="val">₪84,200</div><div class="lbl">סה"כ גביה</div></div>
+          <div class="stat-card"><div class="val">248</div><div class="lbl">קופות פעילות</div></div>
+          <div class="stat-card"><div class="val">₪339</div><div class="lbl">ממוצע לקופה</div></div>
+          <div class="stat-card"><div class="val">312</div><div class="lbl">מעטפות</div></div>
+        </div>
+        <div class="panel">
+          <div class="table-wrap">
+            <table id="rep-summary-table">
+              <tr>
+                <th>קופה</th><th>שם / כרטסת</th><th>עיר</th><th>שכונה</th><th>גובה</th>
+                <th class="receipt-col" style="display:none;">דרוש קבלה</th>
+                <th class="receipt-col" style="display:none;">פרטי קבלה</th>
+                <th class="receipt-col" style="display:none;">הערות מיקום</th>
+                <th>סה"כ</th><th>מעטפות</th><th>ממוצע</th>
+              </tr>
+              <tr>
+                <td>123</td><td>123A</td><td>בני ברק</td><td>רמת אלחנן</td><td>יוסי כהן</td>
+                <td class="receipt-col" style="display:none;"><span class="pill red">כן</span></td>
+                <td class="receipt-col" style="display:none;font-size:12px;">יש לקבל חתימה מהמנהל</td>
+                <td class="receipt-col" style="display:none;font-size:12px;">ליד הכניסה, צד ימין</td>
+                <td>₪450</td><td>1</td><td>₪450</td>
+              </tr>
+              <tr>
+                <td>456</td><td>456C</td><td>ירושלים</td><td>גאולה</td><td>דוד לוי</td>
+                <td class="receipt-col" style="display:none;"><span class="pill gray">לא</span></td>
+                <td class="receipt-col" style="display:none;">—</td>
+                <td class="receipt-col" style="display:none;font-size:12px;">כניסה אחורית</td>
+                <td>₪380</td><td>1</td><td>₪380</td>
+              </tr>
+              <tr>
+                <td>789</td>
+                <td><strong>שובע שמחות</strong> <span style="font-size:11px;color:var(--text3);">789B</span></td>
+                <td>בני ברק</td><td>הרא"ה</td><td>יוסי כהן</td>
+                <td class="receipt-col" style="display:none;"><span class="pill red">כן</span></td>
+                <td class="receipt-col" style="display:none;font-size:12px;">להגיש עד סוף החודש</td>
+                <td class="receipt-col" style="display:none;font-size:12px;">קומה שנייה, ימין</td>
+                <td>₪520</td><td>2</td><td>₪260</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-pane" id="rep-perbox">
+        <div class="filters-row">
+          <div class="field grow"><label>מספר קופה</label><input placeholder="הזן מספר קופה"></div>
+          <div class="field"><label>סוג תקופה</label><select><option>חודשי</option><option>שנתי</option><option>טווח חופשי</option></select></div>
+          <div class="field"><label>מתאריך</label><input type="date"></div>
+          <div class="field"><label>עד תאריך</label><input type="date"></div>
+          <button class="btn primary">הפק</button>
+        </div>
+        <div class="panel">
+          <div class="panel-title">קופה 123 | כרטסת 123A | בני ברק</div>
+          <div class="table-wrap">
+            <table>
+              <tr><th>תאריך</th><th>מעטפה</th><th>סכום</th><th>גובה</th></tr>
+              <tr><td>01/01/2026</td><td>8001</td><td>₪450</td><td>יוסי כהן</td></tr>
+              <tr><td>05/12/2025</td><td>7845</td><td>₪380</td><td>יוסי כהן</td></tr>
+              <tr><td>10/11/2025</td><td>7612</td><td>₪410</td><td>יוסי כהן</td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- COMPARE TAB — unlimited dynamic columns -->
+      <div class="tab-pane" id="rep-compare">
+        <div class="alert info" style="margin-bottom:16px;">💡 כל עמודה היא פילטר עצמאי — בחר תקופה + כל שילוב של פרמטרים. לחץ ＋ להוספת עמודה ללא הגבלה.</div>
+        <div class="compare-cols" id="compare-cols">
+
+          <div class="compare-col" id="cc-1">
+            <div class="col-header">
+              <span>עמודה 1</span>
+              <button onclick="removeCol('cc-1')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;">✕</button>
+            </div>
+            <div class="field" style="margin-bottom:6px;"><label>תקופה</label>
+              <select><option>חודשי</option><option>שנתי</option><option>טווח</option></select>
+            </div>
+            <div class="field" style="margin-bottom:6px;"><label>חודש / שנה</label><input type="month" value="2026-04" style="font-size:13px;"></div>
+            <div class="field" style="margin-bottom:6px;"><label>עיר</label><select><option>ירושלים</option><option>בני ברק</option><option>כל הערים</option></select></div>
+            <div class="field" style="margin-bottom:10px;"><label>שכונה</label><select><option>כל השכונות</option><option>גאולה</option></select></div>
+            <div class="col-val">₪42,100</div><div class="col-lbl">סה"כ גביה</div>
+            <div class="col-val" style="font-size:16px;">124</div><div class="col-lbl">מעטפות</div>
+            <div class="col-val" style="font-size:16px;">₪340</div><div class="col-lbl">ממוצע לקופה</div>
+          </div>
+
+          <div class="compare-col" id="cc-2">
+            <div class="col-header">
+              <span>עמודה 2</span>
+              <button onclick="removeCol('cc-2')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;">✕</button>
+            </div>
+            <div class="field" style="margin-bottom:6px;"><label>תקופה</label>
+              <select><option>חודשי</option><option>שנתי</option><option>טווח</option></select>
+            </div>
+            <div class="field" style="margin-bottom:6px;"><label>חודש / שנה</label><input type="month" value="2025-04" style="font-size:13px;"></div>
+            <div class="field" style="margin-bottom:6px;"><label>עיר</label><select><option>ירושלים</option><option>בני ברק</option><option>כל הערים</option></select></div>
+            <div class="field" style="margin-bottom:10px;"><label>שכונה</label><select><option>כל השכונות</option><option>גאולה</option></select></div>
+            <div class="col-val">₪38,500</div><div class="col-lbl">סה"כ גביה</div>
+            <div class="col-val" style="font-size:16px;">110</div><div class="col-lbl">מעטפות</div>
+            <div class="col-val" style="font-size:16px;">₪350</div><div class="col-lbl">ממוצע לקופה</div>
+          </div>
+
+          <div class="compare-col" id="cc-3">
+            <div class="col-header">
+              <span>עמודה 3</span>
+              <button onclick="removeCol('cc-3')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;">✕</button>
+            </div>
+            <div class="field" style="margin-bottom:6px;"><label>תקופה</label>
+              <select><option value="month">חודשי</option><option value="year">שנתי</option><option value="range">טווח</option></select>
+            </div>
+            <div class="field" style="margin-bottom:6px;"><label>חודש / שנה</label><input type="month" value="2024-05" style="font-size:13px;"></div>
+            <div class="field" style="margin-bottom:6px;"><label>עיר</label><select><option>בני ברק</option><option>ירושלים</option><option>כל הערים</option></select></div>
+            <div class="field" style="margin-bottom:6px;"><label>שכונה</label><select><option>כל השכונות</option><option>רמת אלחנן</option></select></div>
+            <div class="field" style="margin-bottom:10px;"><label>קופה ספציפית</label><input placeholder="מספר קופה (אופציונלי)" style="font-size:13px;"></div>
+            <div class="col-val">₪29,800</div><div class="col-lbl">סה"כ גביה</div>
+            <div class="col-val" style="font-size:16px;">98</div><div class="col-lbl">מעטפות</div>
+            <div class="col-val" style="font-size:16px;">₪304</div><div class="col-lbl">ממוצע לקופה</div>
+          </div>
+
+          <div class="add-compare-col" onclick="addCompareCol()">
+            <div style="font-size:28px;">＋</div>
+            <div>הוסף עמודה</div>
+            <div style="font-size:11px;text-align:center;color:var(--text3);">תקופה + עיר + שכונה + קופה</div>
+          </div>
+        </div>
+        <div style="margin-top:14px;">
+          <button class="btn sm">📥 יצוא לאקסל</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== CASHROOM ADMIN ==================== -->
+    <div class="screen" id="s-cashroom-admin">
+      <div class="page-header"><div class="page-title">חדר כסף</div></div>
+      <div class="alert warn">⏳ <strong>3 מעטפות</strong> ממתינות להזנת סכום</div>
+      <div class="panel">
+        <div class="filters-row">
+          <div class="field grow"><label>חיפוש</label><input placeholder="מספר מעטפה / קופה"></div>
+          <div class="field"><label>סטטוס</label><select><option>ממתין להזנה</option><option>הכל</option></select></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <tr><th>תאריך גביה</th><th>מס' מעטפה</th><th>קופה</th><th>כרטסת</th><th>גובה</th><th>סכום</th><th>פעולה</th></tr>
+            <tr><td>23/01/2026</td><td>8045</td><td>123</td><td>123A</td><td>יוסי כהן</td><td><span style="color:var(--text3)">ממתין</span></td><td><button class="btn sm primary" onclick="openModal('cashroom-modal')">הזנת סכום</button></td></tr>
+            <tr><td>22/01/2026</td><td>8044</td><td>789</td><td>789B</td><td>יוסי כהן</td><td><span style="color:var(--text3)">ממתין</span></td><td><button class="btn sm primary" onclick="openModal('cashroom-modal')">הזנת סכום</button></td></tr>
+            <tr><td>21/01/2026</td><td>8043</td><td>456</td><td>456C</td><td>דוד לוי</td><td><span style="color:var(--text3)">ממתין</span></td><td><button class="btn sm primary" onclick="openModal('cashroom-modal')">הזנת סכום</button></td></tr>
+            <tr><td>15/01/2026</td><td>7990</td><td>123</td><td>123A</td><td>יוסי כהן</td><td>₪450</td><td>—</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== USERS ==================== -->
+    <div class="screen" id="s-users">
+      <div class="page-header">
+        <div class="page-title">משתמשים</div>
+        <button class="btn primary" onclick="openModal('user-modal')">+ משתמש חדש</button>
+      </div>
+      <div class="panel">
+        <div class="table-wrap">
+          <table>
+            <tr><th>שם</th><th>תפקיד</th><th>שיוך אזורים</th><th>החרגות</th><th>פעולה</th></tr>
+            <tr>
+              <td>יוסי כהן</td><td><span class="pill blue">גובה</span></td>
+              <td><div class="tag-list"><span class="tag">בני ברק (עיר) <span class="rm">✕</span></span><span class="tag">קופה 789 <span class="rm">✕</span></span></div></td>
+              <td>—</td>
+              <td><button class="btn sm" onclick="openModal('user-modal')">עריכה</button></td>
+            </tr>
+            <tr>
+              <td>דוד לוי</td><td><span class="pill green">גובה + שטח</span></td>
+              <td><div class="tag-list"><span class="tag">ירושלים (עיר) <span class="rm">✕</span></span></div></td>
+              <td><div class="tag-list"><span class="tag">שכונת גאולה <span class="rm">✕</span></span></div></td>
+              <td><button class="btn sm" onclick="openModal('user-modal')">עריכה</button></td>
+            </tr>
+            <tr>
+              <td>משה ברנד</td><td><span class="pill blue">גובה</span></td>
+              <td><div class="tag-list"><span class="tag">אשדוד (עיר) <span class="rm">✕</span></span></div></td>
+              <td>—</td>
+              <td><button class="btn sm" onclick="openModal('user-modal')">עריכה</button></td>
+            </tr>
+            <tr>
+              <td>רחל כץ</td><td><span class="pill yellow">מזין</span></td>
+              <td>—</td><td>—</td>
+              <td><button class="btn sm" onclick="openModal('user-modal')">עריכה</button></td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SETTINGS ==================== -->
+    <div class="screen" id="s-settings">
+      <div class="page-header"><div class="page-title">הגדרות</div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+
+        <!-- TASK TYPES — with logic -->
+        <div class="panel">
+          <div class="panel-title">סוגי משימות</div>
+          <div class="settings-item">
+            <div>
+              <div class="si-name">📦 התקנה</div>
+              <div class="si-logic" style="margin-top:4px;">
+                <span class="logic-tag open">פתיחת כרטסת</span>
+                <span class="logic-tag none">אירוע התקנה</span>
+              </div>
+            </div>
+            <button class="btn sm" onclick="openModal('tasktype-modal')">עריכה</button>
+          </div>
+          <div class="settings-item">
+            <div>
+              <div class="si-name">🗑️ הסרה</div>
+              <div class="si-logic" style="margin-top:4px;">
+                <span class="logic-tag close">סגירת כרטסת</span>
+                <span class="logic-tag none">אירוע הסרה</span>
+              </div>
+            </div>
+            <button class="btn sm" onclick="openModal('tasktype-modal')">עריכה</button>
+          </div>
+          <div class="settings-item">
+            <div>
+              <div class="si-name">🔄 העברת מיקום</div>
+              <div class="si-logic" style="margin-top:4px;">
+                <span class="logic-tag close">סגירת כרטסת</span>
+                <span class="logic-tag open">פתיחת כרטסת</span>
+              </div>
+            </div>
+            <button class="btn sm" onclick="openModal('tasktype-modal')">עריכה</button>
+          </div>
+          <div class="settings-item">
+            <div>
+              <div class="si-name">🔧 החלפת מנעול</div>
+              <div class="si-logic" style="margin-top:4px;">
+                <span class="logic-tag none">ללא פעולת כרטסת</span>
+              </div>
+            </div>
+            <button class="btn sm" onclick="openModal('tasktype-modal')">עריכה</button>
+          </div>
+          <div class="settings-item">
+            <div>
+              <div class="si-name">🎨 צביעה</div>
+              <div class="si-logic" style="margin-top:4px;">
+                <span class="logic-tag none">ללא פעולת כרטסת</span>
+              </div>
+            </div>
+            <button class="btn sm" onclick="openModal('tasktype-modal')">עריכה</button>
+          </div>
+          <button class="btn sm" style="margin-top:12px;">+ הוספת סוג משימה</button>
+        </div>
+
+        <!-- REPORT TYPES -->
+        <div class="panel">
+          <div class="panel-title">סוגי דיווחים</div>
+          <div class="settings-item">
+            <div class="si-name">🔒 מנעול</div>
+            <button class="btn sm" onclick="openModal('reporttype-modal')">עריכה</button>
+          </div>
+          <div class="settings-item">
+            <div class="si-name">📍 כתובת</div>
+            <button class="btn sm" onclick="openModal('reporttype-modal')">עריכה</button>
+          </div>
+          <div class="settings-item">
+            <div class="si-name">🔨 שיפוץ</div>
+            <button class="btn sm" onclick="openModal('reporttype-modal')">עריכה</button>
+          </div>
+          <div class="settings-item">
+            <div class="si-name">📭 ריק</div>
+            <button class="btn sm" onclick="openModal('reporttype-modal')">עריכה</button>
+          </div>
+          <button class="btn sm" style="margin-top:12px;">+ הוספת סוג דיווח</button>
+        </div>
+
+        <!-- BOX TYPES -->
+        <div class="panel">
+          <div class="panel-title">סוגי קופות</div>
+          <div class="settings-item"><div class="si-name">גדולה</div><button class="btn sm">עריכה</button></div>
+          <div class="settings-item"><div class="si-name">רגילה</div><button class="btn sm">עריכה</button></div>
+          <div class="settings-item"><div class="si-name">קטנה</div><button class="btn sm">עריכה</button></div>
+          <button class="btn sm" style="margin-top:12px;">+ הוספה</button>
+        </div>
+
+        <!-- GLOBAL SETTINGS -->
+        <div class="panel">
+          <div class="panel-title">הגדרות כלליות</div>
+          <div class="field" style="margin-bottom:14px;">
+            <label>ימים ללא גביה להתראה (גלובלי)</label>
+            <input type="number" value="30" style="width:90px;">
+          </div>
+          <button class="btn primary sm">שמירה</button>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ============================================================
+     MOBILE INTERFACE
+============================================================ -->
+<div class="interface" id="interface-mobile">
+  <div class="mobile-wrap">
+    <div class="mobile-device">
+      <div class="mobile-statusbar"><span>9:41</span><span>📶 🔋</span></div>
+      <div class="mobile-header">
+        <div id="m-back-btn" style="display:none;" onclick="mobileBack()"><div class="m-back">← חזרה</div></div>
+        <h2 id="m-title">ראשי</h2>
+        <div style="font-size:20px;">👤</div>
+      </div>
+      <div class="mobile-content">
+
+        <div class="mobile-screen active" id="m-home">
+          <div class="m-section">
+            <div class="m-title">🔴 התראות</div>
+            <div class="m-alert-card" onclick="mobileNav('m-alerts','התראות')">
+              <span style="font-size:22px;">⚠️</span>
+              <div><div style="font-weight:700;font-size:14px;">קופה 456 — 26 ימים ללא גביה</div>
+              <div style="font-size:12px;color:var(--text2);">ירושלים | גאולה | מלכי ישראל 4</div></div>
+            </div>
+            <div class="m-alert-card" onclick="mobileNav('m-alerts','התראות')">
+              <span style="font-size:22px;">⚠️</span>
+              <div><div style="font-weight:700;font-size:14px;">קופה 102 — 43 ימים ללא גביה</div>
+              <div style="font-size:12px;color:var(--text2);">בני ברק | הרב כהן 6</div></div>
+            </div>
+          </div>
+          <div class="m-section">
+            <div class="m-title">✅ המשימות שלי</div>
+            <div class="m-task-card" onclick="mobileNav('m-task-detail','פירוט משימה')">
+              <div style="font-weight:700;font-size:14px;margin-bottom:4px;">🔧 החלפת מנעול — קופה 123</div>
+              <div style="font-size:12px;color:var(--text2);">בני ברק | רבי עקיבא 10</div>
+            </div>
+          </div>
+          <div class="m-section">
+            <div class="m-title">הקופות שלי</div>
+            <div class="m-card" onclick="mobileNav('m-collect','גביה — קופה 123')">
+              <div class="m-card-row"><div class="name">קופה 123</div><span class="pill green" style="font-size:11px;">פעילה</span></div>
+              <div class="meta">בני ברק | רמת אלחנן | רבי עקיבא 10</div>
+              <div class="meta" style="margin-top:4px;">גביה אחרונה: 01/01/2026</div>
+            </div>
+            <div class="m-card" onclick="mobileNav('m-collect','גביה — שובע שמחות')">
+              <div class="m-card-row"><div class="name">שובע שמחות</div><span class="pill green" style="font-size:11px;">פעילה</span></div>
+              <div class="meta" style="color:var(--text3);font-size:11px;">קופה 789 | כרטסת 789B</div>
+              <div class="meta">בני ברק | הרא"ה | ז'בוטינסקי 22</div>
+              <div class="m-card-row" style="margin-top:4px;"><div class="meta">גביה אחרונה: 15/01/2026</div><div class="days-warn">⚠️ 8 ימים</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mobile-screen" id="m-collect">
+          <div id="m-collect-banner" style="display:none;background:var(--green-soft);border:1px solid var(--green);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px;align-items:center;gap:8px;">
+            <span style="font-size:18px;">✅</span>
+            <span style="font-size:14px;font-weight:700;color:var(--green);">הגביה בוצעה בהצלחה!</span>
+          </div>
+          <div class="m-field" style="margin-bottom:10px;">
+            <label>מספר קופה</label>
+            <input type="number" placeholder="הזן מספר קופה" style="font-size:18px;padding:11px;text-align:center;">
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:14px;">
+            <div style="font-size:12px;color:var(--text2);">קופה</div>
+            <div style="font-size:18px;font-weight:800;margin:2px 0;">123</div>
+            <div style="font-size:13px;color:var(--text2);margin-bottom:6px;">כרטסת 123A | בני ברק | רבי עקיבא 10</div>
+            <div style="font-size:12px;background:var(--surface2);border-radius:6px;padding:6px 10px;color:var(--text2);">📍 <strong>הערת מיקום:</strong> ליד הכניסה, צד ימין</div>
+          </div>
+          <div class="m-title">מעטפה</div>
+          <div class="m-scan-area" onclick="alert('סורק ברקוד...')">
+            <div class="scan-icon">📷</div>
+            <div class="scan-text">סרוק ברקוד מעטפה</div>
+          </div>
+          <div style="text-align:center;color:var(--text3);font-size:13px;margin-bottom:10px;">— או הזן ידנית —</div>
+          <div class="m-field"><label>מספר מעטפה</label><input type="number" placeholder="XXXX"></div>
+          <div class="m-field"><label>הערה (אופציונלי)</label><input placeholder="למשל: מעטפה קרועה"></div>
+          <button class="m-btn" onclick="mobileSuccess()">✅ ביצוע גביה</button>
+          <button class="m-btn outline" onclick="mobileNav('m-report','דיווח על בעיה')">⚠️ דיווח על בעיה</button>
+          <button class="m-btn outline" onclick="mobileNav('m-print','הדפסת מדבקה')">🖨️ הדפסת מדבקה</button>
+        </div>
+
+        <div class="mobile-screen" id="m-report">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:14px;">
+            <div style="font-size:12px;color:var(--text2);">דיווח על קופה</div>
+            <div style="font-size:18px;font-weight:800;">123 — כרטסת 123A</div>
+          </div>
+          <div class="m-title">סוג הדיווח</div>
+          <div class="report-types">
+            <div class="report-type-btn selected" onclick="selectRType(this)">🔒 מנעול</div>
+            <div class="report-type-btn" onclick="selectRType(this)">📍 כתובת</div>
+            <div class="report-type-btn" onclick="selectRType(this)">🔨 שיפוץ</div>
+            <div class="report-type-btn" onclick="selectRType(this)">📭 ריק</div>
+          </div>
+          <div class="m-field"><label>פירוט</label><input placeholder="תאר את הבעיה"></div>
+          <div class="m-field">
+            <label>תמונה (אופציונלי)</label>
+            <div onclick="alert('פותח מצלמה...')" style="background:var(--surface2);border:2px dashed var(--border2);border-radius:var(--radius-sm);padding:16px;text-align:center;cursor:pointer;">
+              <div style="font-size:28px;margin-bottom:4px;">📷</div>
+              <div style="font-size:13px;color:var(--text2);">צלם / העלה תמונה</div>
+            </div>
+          </div>
+          <button class="m-btn" onclick="mobileReportSuccess()">שלח דיווח</button>
+        </div>
+
+        <div class="mobile-screen" id="m-alerts">
+          <div class="m-title">קופות ללא גביה מעל 30 ימים</div>
+          <div class="m-alert-card" onclick="mobileNav('m-collect','גביה')">
+            <div style="flex:1;"><div style="font-weight:700;font-size:14px;">קופה 456 — 26 ימים</div><div style="font-size:12px;color:var(--text2);">ירושלים | מלכי ישראל 4</div></div>
+            <button style="padding:6px 10px;border-radius:8px;background:var(--accent);color:#fff;border:none;font-size:12px;cursor:pointer;">גביה</button>
+          </div>
+          <div class="m-alert-card" onclick="mobileNav('m-collect','גביה')">
+            <div style="flex:1;"><div style="font-weight:700;font-size:14px;">קופה 102 — 43 ימים</div><div style="font-size:12px;color:var(--text2);">בני ברק | הרב כהן 6</div></div>
+            <button style="padding:6px 10px;border-radius:8px;background:var(--accent);color:#fff;border:none;font-size:12px;cursor:pointer;">גביה</button>
+          </div>
+        </div>
+
+        <div class="mobile-screen" id="m-task-detail">
+          <div style="background:var(--yellow-soft);border:1px solid var(--yellow);border-radius:var(--radius);padding:14px;margin-bottom:14px;">
+            <div style="font-size:12px;color:var(--yellow);font-weight:700;margin-bottom:4px;">משימה פתוחה</div>
+            <div style="font-size:18px;font-weight:800;margin-bottom:4px;">🔧 החלפת מנעול</div>
+            <div style="font-size:13px;color:var(--text2);">קופה 123 | כרטסת 123A</div>
+          </div>
+          <div class="m-info-row"><span class="mk">מיקום</span><span class="mv">בני ברק | רבי עקיבא 10</span></div>
+          <div class="m-info-row"><span class="mk">הערות</span><span class="mv">מנעול קשה לפתיחה</span></div>
+          <div style="height:14px;"></div>
+          <div class="m-field"><label>הערות ביצוע</label><input placeholder="מה בוצע בפועל"></div>
+          <div class="m-field">
+            <label>תמונה (אופציונלי)</label>
+            <div onclick="alert('פותח מצלמה...')" style="background:var(--surface2);border:2px dashed var(--border2);border-radius:var(--radius-sm);padding:16px;text-align:center;cursor:pointer;">
+              <div style="font-size:28px;margin-bottom:4px;">📷</div>
+              <div style="font-size:13px;color:var(--text2);">צלם / העלה תמונה</div>
+            </div>
+          </div>
+          <button class="m-btn" onclick="mobileSuccess()">✅ אישור ביצוע</button>
+        </div>
+
+        <div class="mobile-screen" id="m-print">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;text-align:center;margin-bottom:14px;">
+            <div style="font-size:13px;color:var(--text2);margin-bottom:8px;">מדבקה למעטפה — נוצרת אוטומטית</div>
+            <div style="font-size:11px;color:var(--green);margin-bottom:8px;">✅ מספר מעטפה שויך אוטומטית</div>
+            <div style="font-size:22px;font-weight:800;letter-spacing:2px;margin-bottom:4px;" id="print-env-num">8046</div>
+            <div style="font-size:13px;color:var(--text2);">קופה 123 | <span id="print-date"></span></div>
+            <div style="font-size:30px;margin-top:10px;letter-spacing:2px;">▐▐ ▌▌▐▐▌ ▌▌▐▌▐▐▌▌▐▐</div>
+          </div>
+          <button class="m-btn" onclick="alert('שולח להדפסה...');mobileBack()">🖨️ הדפסה</button>
+        </div>
+
+        <div class="mobile-screen" id="m-report-success">
+          <div style="text-align:center;padding:30px 0;">
+            <div style="font-size:60px;margin-bottom:14px;">📨</div>
+            <div style="font-size:22px;font-weight:800;margin-bottom:8px;">הדיווח נשלח בהצלחה!</div>
+            <div style="font-size:14px;color:var(--text2);margin-bottom:24px;">קופה 123 | <span id="report-sent-date"></span></div>
+            <button class="m-btn" style="max-width:220px;margin:0 auto;" onclick="mobileNav('m-home','ראשי')">חזרה לרשימה</button>
+          </div>
+        </div>
+
+        <div class="mobile-screen" id="m-success">
+          <div style="text-align:center;padding:30px 0;">
+            <div style="font-size:60px;margin-bottom:14px;">✅</div>
+            <div style="font-size:22px;font-weight:800;margin-bottom:8px;">הגביה בוצעה!</div>
+            <div style="font-size:14px;color:var(--text2);margin-bottom:24px;">קופה 123 | מעטפה 8046 | 23/01/2026</div>
+            <button class="m-btn" style="max-width:220px;margin:0 auto;" onclick="mobileNav('m-home','ראשי')">חזרה לרשימה</button>
+          </div>
+        </div>
+
+      </div>
+      <div class="mobile-nav">
+        <button class="mobile-nav-btn active" onclick="mobileNav('m-home','ראשי');setMobileNav(this)"><span class="micon">🏠</span>ראשי</button>
+        <button class="mobile-nav-btn" onclick="mobileNav('m-collect','גביה');setMobileNav(this)"><span class="micon">💰</span>גביה</button>
+        <button class="mobile-nav-btn" onclick="mobileNav('m-alerts','התראות');setMobileNav(this)"><span class="micon">🔔</span>התראות</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     CASHROOM INTERFACE
+============================================================ -->
+<div class="interface" id="interface-cashroom" style="flex-direction:column;">
+  <div style="padding:24px;max-width:600px;">
+    <div class="page-header"><div><div class="page-title">חדר כסף — הזנת סכומים</div></div></div>
+
+    <!-- SCAN FIRST -->
+    <div class="panel" id="cr-scan-panel">
+      <div class="panel-title">שלב 1 — זיהוי מעטפה</div>
+      <div style="display:flex;gap:12px;margin-bottom:14px;">
+        <button class="btn" style="flex:1;padding:20px;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:15px;" onclick="crShowResult()">
+          <span style="font-size:32px;">📷</span>סריקת ברקוד
+        </button>
+        <div style="display:flex;align-items:center;color:var(--text3);">או</div>
+        <div class="field" style="flex:2;">
+          <label>מספר קופה / מעטפה</label>
+          <input type="number" placeholder="הזן מספר" style="font-size:18px;padding:12px;" oninput="if(this.value) crShowResult()">
+        </div>
+      </div>
+    </div>
+
+    <!-- RESULT after scan -->
+    <div class="panel" id="cr-result-panel" style="display:none;border-color:var(--accent);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div class="panel-title" style="margin-bottom:0;color:var(--accent);">✅ מעטפה זוהתה</div>
+        <button class="btn sm" onclick="crReset()">סריקה חדשה</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;">
+        <div class="info-card"><div class="k">קופה</div><div class="v">123</div></div>
+        <div class="info-card"><div class="k">מס' מעטפה</div><div class="v">8045</div></div>
+        <div class="info-card"><div class="k">גובה</div><div class="v">יוסי כהן</div></div>
+        <div class="info-card"><div class="k">כרטסת</div><div class="v">123A</div></div>
+        <div class="info-card"><div class="k">תאריך גביה</div><div class="v">23/01/2026</div></div>
+        <div class="info-card"><div class="k">עיר</div><div class="v">בני ברק</div></div>
+      </div>
+      <div class="field" style="margin-bottom:16px;">
+        <label>סכום (עד 5 ספרות לפני הנקודה)</label>
+        <input type="number" placeholder="0.00" max="99999.99" style="font-size:32px;text-align:center;padding:16px;">
+      </div>
+      <button class="btn success" style="width:100%;padding:14px;font-size:16px;" onclick="crConfirm()">✅ אישור הזנה</button>
+    </div>
+
+    <div class="alert info" style="margin-top:4px;">💡 לאחר אישור — המעטפה עוברת לסטטוס "הוזן" ונעלמת מהרשימה</div>
+
+    <!-- PENDING LIST -->
+    <div class="panel" style="margin-top:16px;">
+      <div class="panel-title">מעטפות ממתינות להזנה (3)</div>
+      <div class="table-wrap">
+        <table>
+          <tr><th>תאריך גביה</th><th>מס' מעטפה</th><th>קופה</th><th>כרטסת</th><th>גובה</th></tr>
+          <tr><td>23/01/2026</td><td>8045</td><td>123</td><td>123A</td><td>יוסי כהן</td></tr>
+          <tr><td>22/01/2026</td><td>8044</td><td>789</td><td>789B</td><td>יוסי כהן</td></tr>
+          <tr><td>21/01/2026</td><td>8043</td><td>456</td><td>456C</td><td>דוד לוי</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MODALS
+============================================================ -->
+
+<!-- TASK MODAL -->
+<div class="modal" id="task-modal">
+  <div class="modal-box">
+    <div class="modal-header"><h3>משימה</h3><button class="btn sm" onclick="closeModal('task-modal')">✕</button></div>
+    <div class="modal-row">
+      <div class="field"><label>סוג משימה</label>
+        <select id="task-type-sel" onchange="checkTaskType()">
+          <option>התקנה</option><option>הסרה</option><option>העברת מיקום</option>
+          <option>החלפת מנעול</option><option>תיקון</option><option>צביעה</option><option>שיפוץ</option>
+        </select>
+      </div>
+      <div class="field"><label>מספר קופה</label><input placeholder="מספר קופה"></div>
+    </div>
+    <div class="modal-row">
+      <div class="field"><label>משויך</label><select><option>דוד לוי</option><option>יוסי כהן</option><option>משה ברנד</option></select></div>
+    </div>
+    <div id="task-logic-note" class="alert info" style="margin-bottom:12px;">
+      📍 בעת אישור ביצוע: יהיה צורך להזין מיקום התקנה מדויק. המערכת תפתח כרטסת חדשה אוטומטית.
+    </div>
+    <div class="field" style="margin-bottom:12px;"><label>הערות / מיקום מבוקש</label><textarea placeholder="פרטים נוספים, מיקום רצוי..."></textarea></div>
+    <div class="modal-footer"><div></div>
+      <div class="actions">
+        <button class="btn primary" onclick="closeModal('task-modal')">שמירה</button>
+        <button class="btn" onclick="closeModal('task-modal')">ביטול</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TASK EXEC MODAL -->
+<div class="modal" id="task-exec-modal">
+  <div class="modal-box">
+    <div class="modal-header"><h3>אישור ביצוע משימה</h3><button class="btn sm" onclick="closeModal('task-exec-modal')">✕</button></div>
+    <div class="modal-row">
+      <div class="field"><label>תוצאה</label><select><option>בוצע</option><option>בוצע חלקית</option><option>לא בוצע</option></select></div>
+      <div class="field"><label>תאריך ביצוע</label><input type="date" id="exec-date-field"></div>
+    </div>
+    <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;">
+      <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;">📍 מיקום מדויק (לפתיחת כרטסת)</div>
+      <div class="modal-row"><div class="field"><label>עיר</label><input placeholder="עיר"></div><div class="field"><label>שכונה</label><input placeholder="שכונה"></div></div>
+      <div class="modal-row"><div class="field"><label>רחוב</label><input placeholder="רחוב"></div><div class="field"><label>מספר</label><input placeholder="מספר"></div></div>
+      <div class="field"><label>הערות מיקום</label><input placeholder="ליד הכניסה, קומה..."></div>
+    </div>
+    <div class="field" style="margin-bottom:12px;"><label>הערות ביצוע</label><textarea placeholder="מה בוצע בפועל"></textarea></div>
+    <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px;font-size:13px;color:var(--text2);margin-bottom:14px;">
+      <strong>לוגיקה לפי סוג:</strong> התקנה → פתיחת כרטסת חדשה | הסרה → <em>סגירת כרטסת</em> (לא הקופה) | העברת מיקום → סגירת כרטסת + פתיחת חדשה
+    </div>
+    <div class="modal-footer"><div></div>
+      <div class="actions">
+        <button class="btn success" onclick="closeModal('task-exec-modal')">✅ אישור ביצוע</button>
+        <button class="btn" onclick="closeModal('task-exec-modal')">ביטול</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- REPORT MODAL — with copy-to-task -->
+<div class="modal" id="report-modal">
+  <div class="modal-box">
+    <div class="modal-header"><h3>דיווח</h3><button class="btn sm" onclick="closeModal('report-modal')">✕</button></div>
+    <div class="modal-row">
+      <div class="field"><label>מספר קופה</label><input id="rep-box" placeholder="קופה" value="123"></div>
+      <div class="field"><label>סוג דיווח</label><select id="rep-type"><option>מנעול</option><option>כתובת</option><option>שיפוץ</option><option>ריק</option><option>אחר</option></select></div>
+    </div>
+    <div class="modal-row">
+      <div class="field"><label>סטטוס</label><select id="rep-status"><option>פתוח</option><option>בטיפול</option><option>סגור</option></select></div>
+      <div class="field"><label>שיוך לטיפול</label><select><option>—</option><option>דוד לוי</option><option>יוסי כהן</option></select></div>
+    </div>
+    <div class="field" style="margin-bottom:14px;"><label>תיאור</label><textarea id="rep-desc" placeholder="פרטי הדיווח">מנעול קשה לפתיחה, נראה חלוד</textarea></div>
+    <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px;margin-bottom:14px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+        <input type="checkbox" checked id="rep-close-on-convert"> סגור דיווח זה לאחר המרה למשימה
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn warn" onclick="convertToTask()">🔄 המרה למשימה</button>
+      <div class="actions">
+        <button class="btn primary" onclick="closeModal('report-modal')">שמירה</button>
+        <button class="btn" onclick="closeModal('report-modal')">ביטול</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TASK TYPE SETTINGS MODAL -->
+<div class="modal" id="tasktype-modal">
+  <div class="modal-box">
+    <div class="modal-header"><h3>עריכת סוג משימה</h3><button class="btn sm" onclick="closeModal('tasktype-modal')">✕</button></div>
+    <div class="modal-row">
+      <div class="field grow"><label>שם סוג המשימה</label><input value="התקנה"></div>
+      <div class="field"><label>אמוג'י / אייקון</label><input value="📦" style="width:70px;text-align:center;font-size:20px;"></div>
+    </div>
+    <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:10px;margin-top:4px;">לוגיקה בעת אישור ביצוע</div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border2);">
+        <input type="checkbox" checked> <span style="font-size:14px;">פתיחת כרטסת חדשה</span> <span class="logic-tag open" style="margin-right:auto;">פתיחת כרטסת</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border2);">
+        <input type="checkbox"> <span style="font-size:14px;">סגירת כרטסת פעילה</span> <span class="logic-tag close" style="margin-right:auto;">סגירת כרטסת</span>
+      </label>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">
+      💡 "העברת מיקום" למשל — מסמן את שניהם: סגירת כרטסת קיימת + פתיחת כרטסת חדשה
+    </div>
+    <div class="modal-footer">
+      <button class="btn danger sm">מחיקת סוג</button>
+      <div class="actions">
+        <button class="btn primary" onclick="closeModal('tasktype-modal')">שמירה</button>
+        <button class="btn" onclick="closeModal('tasktype-modal')">ביטול</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- REPORT TYPE SETTINGS MODAL -->
+<div class="modal" id="reporttype-modal">
+  <div class="modal-box">
+    <div class="modal-header"><h3>עריכת סוג דיווח</h3><button class="btn sm" onclick="closeModal('reporttype-modal')">✕</button></div>
+    <div class="modal-row">
+      <div class="field grow"><label>שם סוג הדיווח</label><input value="מנעול"></div>
+      <div class="field"><label>אמוג'י</label><input value="🔒" style="width:70px;text-align:center;font-size:20px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn danger sm">מחיקת סוג</button>
+      <div class="actions">
+        <button class="btn primary" onclick="closeModal('reporttype-modal')">שמירה</button>
+        <button class="btn" onclick="closeModal('reporttype-modal')">ביטול</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ENVELOPE MODAL -->
+<div class="modal" id="envelope-modal">
+  <div class="modal-box">
+    <div class="modal-header"><h3>עריכת מעטפה</h3><button class="btn sm" onclick="closeModal('envelope-modal')">✕</button></div>
+    <div class="modal-row">
+      <div class="field"><label>מספר מעטפה</label><input value="8001"></div>
+      <div class="field"><label>תאריך גביה</label><input type="date" value="2026-01-01"></div>
+    </div>
+    <div class="modal-row">
+      <div class="field"><label>סכום</label><input value="450" type="number"></div>
+      <div class="field"><label>סטטוס</label><select><option>תקין</option><option>חריג</option></select></div>
+    </div>
+    <div class="field" style="margin-bottom:12px;"><label>הערות</label><input placeholder="הערות"></div>
+    <div class="modal-footer">
+      <button class="btn danger sm">מחיקה</button>
+      <div class="actions">
+        <button class="btn primary" onclick="closeModal('envelope-modal')">שמירה</button>
+        <button class="btn" onclick="closeModal('envelope-modal')">ביטול</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CASHROOM MODAL -->
+<div class="modal" id="cashroom-modal">
+  <div class="modal-box">
+    <div class="modal-header"><h3>הזנת סכום</h3><button class="btn sm" onclick="closeModal('cashroom-modal')">✕</button></div>
+    <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px;margin-bottom:16px;font-size:13px;">
+      קופה 123 | כרטסת 123A | בני ברק | גביה: <span id="cr-date"></span>
+    </div>
+    <!-- Step 1: identify envelope -->
+    <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;">שלב 1 — זיהוי מעטפה</div>
+    <div style="display:flex;gap:10px;margin-bottom:14px;">
+      <button class="btn" style="flex:1;padding:14px;display:flex;flex-direction:column;align-items:center;gap:4px;" onclick="alert('סורק ברקוד...')">
+        <span style="font-size:24px;">📷</span><span style="font-size:13px;">סריקת ברקוד</span>
+      </button>
+      <div style="display:flex;align-items:center;color:var(--text3);font-size:13px;">או</div>
+      <div class="field" style="flex:2;">
+        <label>מספר מעטפה ידני</label>
+        <input type="number" placeholder="8045" style="font-size:18px;text-align:center;padding:12px;">
+      </div>
+    </div>
+    <!-- Step 2: amount -->
+    <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;">שלב 2 — הזנת סכום</div>
+    <div class="field" style="margin-bottom:12px;">
+      <label>סכום (עד 5 ספרות לפני הנקודה)</label>
+      <input type="number" placeholder="0.00" max="99999.99" style="font-size:28px;text-align:center;padding:14px;">
+    </div>
+    <div class="modal-footer"><div></div>
+      <div class="actions">
+        <button class="btn success" onclick="closeModal('cashroom-modal')">✅ אישור הזנה</button>
+        <button class="btn" onclick="closeModal('cashroom-modal')">ביטול</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ADD BOX MODAL -->
+<div class="modal" id="addbox-modal">
+  <div class="modal-box">
+    <div class="modal-header"><h3>הוספת קופה</h3><button class="btn sm" onclick="closeModal('addbox-modal')">✕</button></div>
+    <div class="modal-row">
+      <div class="field"><label>מספר קופה (ברזל)</label><input placeholder="מספר ייחודי"></div>
+      <div class="field"><label>סוג קופה</label><select><option>גדולה</option><option>רגילה</option><option>קטנה</option></select></div>
+    </div>
+    <div class="field" style="margin-bottom:12px;"><label>הערות</label><input placeholder="אופציונלי"></div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:14px;">הקופה תתווסף לרשימת "לא מותקנות". פתיחת כרטסת דרך משימת התקנה בלבד.</div>
+    <div class="modal-footer"><div></div>
+      <div class="actions">
+        <button class="btn primary" onclick="closeModal('addbox-modal')">הוספה</button>
+        <button class="btn" onclick="closeModal('addbox-modal')">ביטול</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- USER MODAL -->
+<div class="modal" id="user-modal">
+  <div class="modal-box">
+    <div class="modal-header"><h3>עריכת משתמש</h3><button class="btn sm" onclick="closeModal('user-modal')">✕</button></div>
+    <div class="modal-row">
+      <div class="field"><label>שם</label><input value="יוסי כהן"></div>
+      <div class="field"><label>תפקיד</label><select><option>גובה</option><option>מנהל</option><option>מזין</option></select></div>
+    </div>
+    <div style="font-size:12px;font-weight:700;color:var(--text2);margin:12px 0 8px;">שיוך אזורים (היררכי — עיר ← שכונה ← רחוב ← קופה)</div>
+    <div class="modal-row" style="margin-bottom:8px;">
+      <div class="field"><label>עיר</label><select><option>בני ברק</option><option>ירושלים</option><option>אשדוד</option></select></div>
+      <div class="field"><label>שכונה (אופציונלי)</label><input placeholder="כל השכונות"></div>
+      <div class="field"><label>רחוב (אופציונלי)</label><input placeholder="כל הרחובות"></div>
+    </div>
+    <div class="actions" style="margin-bottom:10px;"><button class="btn sm">+ הוסף אזור</button></div>
+    <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px;margin-bottom:12px;">
+      <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px;">שיוכים נוכחיים</div>
+      <div class="tag-list">
+        <span class="tag">בני ברק (כל העיר) <span class="rm">✕</span></span>
+        <span class="tag">קופה 789 (בודדת) <span class="rm">✕</span></span>
+      </div>
+    </div>
+    <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;">החרגות</div>
+    <div class="modal-row">
+      <div class="field grow"><label>החרג שכונה / רחוב / קופה</label><input placeholder="למשל: שכונת המשקפיים"></div>
+      <button class="btn sm" style="align-self:flex-end;">הוסף</button>
+    </div>
+    <div class="modal-footer">
+      <button class="btn danger sm">מחיקה</button>
+      <div class="actions">
+        <button class="btn primary" onclick="closeModal('user-modal')">שמירה</button>
+        <button class="btn" onclick="closeModal('user-modal')">ביטול</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ALERT SETTINGS MODAL -->
+<div class="modal" id="alert-settings-modal">
+  <div class="modal-box">
+    <div class="modal-header"><h3>הגדרות התראות</h3><button class="btn sm" onclick="closeModal('alert-settings-modal')">✕</button></div>
+    <div class="field" style="margin-bottom:14px;">
+      <label>התרא על אי-גביה לאחר X ימים (הגדרה גלובלית לכל הכרטסות)</label>
+      <input type="number" value="30" style="width:100px;">
+    </div>
+    <div class="modal-footer"><div></div>
+      <div class="actions">
+        <button class="btn primary" onclick="closeModal('alert-settings-modal')">שמירה</button>
+        <button class="btn" onclick="closeModal('alert-settings-modal')">ביטול</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CARD HISTORY MODAL -->
+<div class="modal" id="history-modal">
+  <div class="modal-box">
+    <div class="modal-header"><h3>היסטוריית כרטסות — קופה 123</h3><button class="btn sm" onclick="closeModal('history-modal')">✕</button></div>
+    <div class="table-wrap">
+      <table>
+        <tr><th>כרטסת</th><th>פתיחה</th><th>סגירה</th><th>מיקום</th><th>סיבת סגירה</th></tr>
+        <tr><td><strong>123A</strong> <span class="pill green" style="font-size:11px;">פעילה</span></td><td>01/03/2025</td><td>—</td><td>בני ברק, רבי עקיבא 10</td><td>—</td></tr>
+        <tr><td>123</td><td>01/01/2024</td><td>01/03/2025</td><td>בני ברק, הרב כהן 6</td><td>העברת מיקום</td></tr>
+      </table>
+    </div>
+    <div class="modal-footer"><div></div><button class="btn" onclick="closeModal('history-modal')">סגירה</button></div>
+  </div>
+</div>
+
+<script>
+// ===== ADMIN NAV =====
+function goTo(btn, screenId) {
+  document.querySelectorAll('#interface-admin .nav-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.querySelectorAll('#interface-admin .screen').forEach(s => s.classList.remove('active'));
+  const t = document.getElementById(screenId);
+  if (t) t.classList.add('active');
+}
+function goToCardDetail() {
+  goTo(document.querySelector('[data-screen="s-cards"]'), 's-card-detail');
+}
+
+// ===== TABS =====
+function switchTab(btn, paneId) {
+  const container = btn.closest('.panel, .screen, .modal-box, .tab-pane');
+  // walk up to find the right container
+  let el = btn.parentElement;
+  while (el && !el.classList.contains('screen') && !el.classList.contains('modal-box') && !el.classList.contains('panel')) {
+    el = el.parentElement;
+  }
+  if (el) {
+    el.querySelectorAll(':scope > .tab-btn, .tabs > .tab-btn').forEach(b => b.classList.remove('active'));
+    el.querySelectorAll(':scope > .tab-pane').forEach(p => p.classList.remove('active'));
+  }
+  btn.classList.add('active');
+  const pane = document.getElementById(paneId);
+  if (pane) pane.classList.add('active');
+}
+
+// ===== MODALS =====
+function openModal(id) { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+document.querySelectorAll('.modal').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('active'); });
+});
+
+// ===== MODE =====
+function setMode(mode) {
+  ['interface-admin','interface-mobile','interface-cashroom'].forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.remove('active');
+    el.style.display = 'none';
+  });
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  const map = {admin:'interface-admin', mobile:'interface-mobile', cashroom:'interface-cashroom'};
+  const modeMap = {admin:0, mobile:1, cashroom:2};
+  const el = document.getElementById(map[mode]);
+  el.style.display = mode === 'cashroom' ? 'flex' : 'flex';
+  el.classList.add('active');
+  document.querySelectorAll('.mode-btn')[modeMap[mode]].classList.add('active');
+}
+document.getElementById('interface-admin').style.display = 'flex';
+
+// ===== EDIT TOGGLE =====
+function toggleEdit(show) {
+  document.getElementById('card-view').style.display = show ? 'none' : 'block';
+  document.getElementById('card-edit').style.display = show ? 'block' : 'none';
+}
+
+// ===== TASK TYPE CHECK =====
+function checkTaskType() {
+  const v = document.getElementById('task-type-sel').value;
+  const note = document.getElementById('task-logic-note');
+  const msgs = {
+    'התקנה': '📍 אישור ביצוע: יש להזין מיקום מדויק. המערכת תפתח כרטסת חדשה.',
+    'הסרה': '🗑️ אישור ביצוע: הכרטסת הפעילה תיסגר. הקופה נשארת במאגר.',
+    'העברת מיקום': '🔄 אישור ביצוע: הכרטסת הנוכחית תיסגר ותיפתח כרטסת חדשה עם המיקום החדש.',
+  };
+  if (msgs[v]) { note.textContent = msgs[v]; note.style.display = 'flex'; }
+  else { note.style.display = 'none'; }
+}
+checkTaskType();
+
+// ===== REPORT → TASK CONVERSION =====
+function convertToTask() {
+  const box = document.getElementById('rep-box').value;
+  const type = document.getElementById('rep-type').value;
+  const desc = document.getElementById('rep-desc').value;
+  closeModal('report-modal');
+  openModal('task-modal');
+  // pre-fill task with report content
+  document.querySelector('#task-modal input[placeholder="מספר קופה"]').value = box;
+  document.querySelector('#task-modal textarea').value = `מקור: דיווח ${type}\n${desc}`;
+  // select matching task type
+  const sel = document.getElementById('task-type-sel');
+  const map = {'מנעול':'החלפת מנעול','שיפוץ':'שיפוץ','כתובת':'תיקון','ריק':'תיקון'};
+  if (map[type]) sel.value = map[type];
+  checkTaskType();
+}
+
+// ===== CLOSE CARD MANUALLY =====
+function closeCardManual() {
+  if (!confirm('האם אתה בטוח שברצונך לסגור את הכרטסה? פעולה זו אינה הפיכה.')) return;
+  const cardId = document.getElementById('s-card-detail').dataset.cardId || '123A';
+  fetch(`/api/cards/${cardId}/close`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.error) {
+      alert('שגיאה: ' + data.error);
+    } else {
+      alert('הכרטסה נסגרה בהצלחה');
+      goTo(document.querySelector('[data-screen=s-cards]'), 's-cards');
+    }
+  })
+  .catch(err => alert('שגיאה בתקשורת: ' + err));
+}
+
+// ===== COMPARE COLS =====
+let ccCount = 3;
+function addCompareCol() {
+  ccCount++;
+  const id = 'cc-' + ccCount;
+  const addBtn = document.querySelector('.add-compare-col');
+  const col = document.createElement('div');
+  col.className = 'compare-col'; col.id = id;
+  col.innerHTML = `
+    <div class="col-header"><span>עמודה ${ccCount}</span><button onclick="removeCol('${id}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;">✕</button></div>
+    <div class="field" style="margin-bottom:6px;"><label>תקופה</label><select><option>חודשי</option><option>שנתי</option><option>טווח</option></select></div>
+    <div class="field" style="margin-bottom:6px;"><label>חודש / שנה</label><input type="month" style="font-size:13px;"></div>
+    <div class="field" style="margin-bottom:6px;"><label>עיר</label><select><option>כל הערים</option><option>בני ברק</option><option>ירושלים</option><option>אשדוד</option></select></div>
+    <div class="field" style="margin-bottom:6px;"><label>שכונה</label><select><option>כל השכונות</option><option>רמת אלחנן</option><option>גאולה</option></select></div>
+    <div class="field" style="margin-bottom:10px;"><label>קופה ספציפית</label><input placeholder="(אופציונלי)" style="font-size:13px;"></div>
+    <div class="col-val">₪—</div><div class="col-lbl">סה"כ גביה</div>
+    <div class="col-val" style="font-size:16px;">—</div><div class="col-lbl">מעטפות</div>
+    <div class="col-val" style="font-size:16px;">—</div><div class="col-lbl">ממוצע לקופה</div>
+  `;
+  addBtn.parentElement.insertBefore(col, addBtn);
+}
+function removeCol(id) {
+  const el = document.getElementById(id);
+  if (el) el.remove();
+}
+
+// ===== PERIOD FIELDS =====
+function showPeriodFields(sel) {
+  document.getElementById('f-month').style.display = 'none';
+  document.getElementById('f-year').style.display = 'none';
+  document.getElementById('f-from').style.display = 'none';
+  document.getElementById('f-to').style.display = 'none';
+  if (sel.value === 'month') document.getElementById('f-month').style.display = 'flex';
+  else if (sel.value === 'year') document.getElementById('f-year').style.display = 'flex';
+  else { document.getElementById('f-from').style.display = 'flex'; document.getElementById('f-to').style.display = 'flex'; }
+}
+
+function toggleReceiptCol(sel) {
+  const show = sel.value === 'only';
+  document.querySelectorAll('.receipt-col').forEach(el => {
+    el.style.display = show ? '' : 'none';
+  });
+}
+function toggleReceiptDetails(cb) {
+  document.getElementById('receipt-details').style.display = cb.checked ? 'block' : 'none';
+}
+// ===== CASHROOM SCAN =====
+function crShowResult() {
+  document.getElementById('cr-scan-panel').style.display = 'none';
+  document.getElementById('cr-result-panel').style.display = 'block';
+}
+function crReset() {
+  document.getElementById('cr-scan-panel').style.display = 'block';
+  document.getElementById('cr-result-panel').style.display = 'none';
+}
+
+function todayStr() {
+  const d = new Date();
+  return d.toLocaleDateString('he-IL',{day:'2-digit',month:'2-digit',year:'numeric'});
+}
+function todayISO() {
+  return new Date().toISOString().split('T')[0];
+}
+// set auto dates on load
+window.addEventListener('DOMContentLoaded', () => {
+  const execField = document.getElementById('exec-date-field');
+  if (execField) execField.value = todayISO();
+  const crDate = document.getElementById('cr-date');
+  if (crDate) crDate.textContent = todayStr();
+  const printDate = document.getElementById('print-date');
+  if (printDate) printDate.textContent = todayStr();
+  const reportDate = document.getElementById('report-sent-date');
+  if (reportDate) reportDate.textContent = todayStr();
+});
+// also set when modals open
+const origOpenModal = openModal;
+window.openModal = function(id) {
+  origOpenModal(id);
+  if (id === 'task-exec-modal') {
+    const f = document.getElementById('exec-date-field');
+    if (f) f.value = todayISO();
+  }
+  if (id === 'cashroom-modal') {
+    const d = document.getElementById('cr-date');
+    if (d) d.textContent = todayStr();
+  }
+};
+function mobileReportSuccess() {
+  mobileHistory = [];
+  document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('m-report-success').classList.add('active');
+  document.getElementById('m-title').textContent = 'דיווח נשלח';
+  document.getElementById('m-back-btn').style.display = 'none';
+  const d = document.getElementById('report-sent-date');
+  if (d) d.textContent = todayStr();
+}
+let mobileHistory = [];
+function mobileNav(screenId, title) {
+  const cur = document.querySelector('.mobile-screen.active');
+  if (cur) mobileHistory.push({id: cur.id, title: document.getElementById('m-title').textContent});
+  document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(screenId).classList.add('active');
+  document.getElementById('m-title').textContent = title;
+  document.getElementById('m-back-btn').style.display = mobileHistory.length > 0 ? 'flex' : 'none';
+}
+function mobileBack() {
+  if (!mobileHistory.length) return;
+  const prev = mobileHistory.pop();
+  document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(prev.id).classList.add('active');
+  document.getElementById('m-title').textContent = prev.title;
+  document.getElementById('m-back-btn').style.display = mobileHistory.length > 0 ? 'flex' : 'none';
+}
+function setMobileNav(btn) {
+  document.querySelectorAll('.mobile-nav-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+function mobileSuccess() {
+  mobileHistory = [];
+  document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('m-collect').classList.add('active');
+  document.getElementById('m-title').textContent = 'גביה';
+  document.getElementById('m-back-btn').style.display = 'none';
+  const banner = document.getElementById('m-collect-banner');
+  banner.style.display = 'flex';
+  setTimeout(() => { banner.style.display = 'none'; }, 2500);
+}
+function crConfirm() {
+  const amtInput = document.querySelector('#cr-result-panel input[type="number"]');
+  if (!amtInput || !amtInput.value) {
+    amtInput.style.borderColor = 'var(--red)';
+    amtInput.placeholder = 'חובה להזין סכום';
+    setTimeout(() => { amtInput.style.borderColor = ''; amtInput.placeholder = '0.00'; }, 1800);
+    return;
+  }
+  amtInput.value = '';
+  const btn = document.querySelector('#cr-result-panel .btn.success');
+  const orig = btn.textContent;
+  btn.textContent = '✅ נשמר!';
+  setTimeout(() => { crReset(); btn.textContent = orig; }, 800);
+}
+function selectRType(btn) {
+  btn.closest('.report-types').querySelectorAll('.report-type-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+}
+</script>
+</body>
+</html>
