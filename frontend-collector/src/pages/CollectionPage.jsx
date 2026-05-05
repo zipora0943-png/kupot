@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { cards as cardsApi } from '../api/endpoints'
 import { computeCardLabels } from '../utils/cardLabel'
 
@@ -20,6 +20,7 @@ function formatAddress(c) {
 export default function CollectionPage() {
   const { cardId } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const [card, setCard] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -28,6 +29,17 @@ export default function CollectionPage() {
   const [boxNumberInput, setBoxNumberInput] = useState('')
   const [lookupLoading, setLookupLoading] = useState(false)
   const [lookupError, setLookupError] = useState(null)
+
+  const [toast, setToast] = useState(null)
+
+  useEffect(() => {
+    const t = location.state?.toast
+    if (!t) return
+    setToast(t)
+    navigate(location.pathname, { replace: true, state: {} })
+    const timer = setTimeout(() => setToast(null), 3000)
+    return () => clearTimeout(timer)
+  }, [location.state, location.pathname, navigate])
 
   useEffect(() => {
     if (!cardId) {
@@ -154,6 +166,8 @@ export default function CollectionPage() {
           </button>
         </div>
       </div>
+
+      {toast && <div className="toast success">{toast}</div>}
     </div>
   )
 }
