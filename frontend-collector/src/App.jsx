@@ -4,6 +4,7 @@ import LoginPage from './pages/LoginPage'
 import ProtectedRoute from './components/ProtectedRoute'
 import MobileLayout from './components/MobileLayout'
 import BoxesPage from './pages/BoxesPage'
+import CollectionPage from './pages/CollectionPage'
 
 function Placeholder({ title }) {
   return <div>{title}</div>
@@ -24,8 +25,8 @@ function App() {
       >
         <Route index element={<Navigate to="/boxes" replace />} />
         <Route path="boxes" element={<BoxesPage />} />
-        <Route path="collection" element={<Placeholder title="גביה" />} />
-        <Route path="collection/:cardId" element={<Placeholder title="גביה - קופה" />} />
+        <Route path="collection" element={<CollectionPage />} />
+        <Route path="collection/:cardId" element={<CollectionPage />} />
         <Route path="tasks-alerts" element={<Placeholder title="משימות והתראות" />} />
         <Route path="task/:taskId" element={<Placeholder title="משימה" />} />
       </Route>
