@@ -11,6 +11,8 @@ export default function ScanPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
   const [scannerKey, setScannerKey] = useState(0)
+  const [manualOpen, setManualOpen] = useState(false)
+  const [manualInput, setManualInput] = useState('')
 
   function handleScan(value) {
     setPendingValue(String(value))
@@ -46,9 +48,63 @@ export default function ScanPage() {
     }
   }
 
+  function submitManual(e) {
+    e?.preventDefault?.()
+    const v = manualInput.trim()
+    if (!v) return
+    setManualOpen(false)
+    setManualInput('')
+    setPendingValue(v)
+    setError(null)
+  }
+
   return (
     <>
       <BarcodeScanner key={scannerKey} onScan={handleScan} onClose={handleClose} />
+
+      {!pendingValue && !manualOpen && (
+        <div className="scanner-actions">
+          <button
+            type="button"
+            className="scanner-manual-btn"
+            onClick={() => setManualOpen(true)}
+          >
+            — או הזן ידנית —
+          </button>
+        </div>
+      )}
+
+      {manualOpen && (
+        <div className="scanner-manual-form" role="dialog" aria-modal="true">
+          <form className="box" onSubmit={submitManual}>
+            <h4>הזנת מספר מעטפה</h4>
+            <input
+              type="text"
+              inputMode="numeric"
+              autoFocus
+              value={manualInput}
+              onChange={(e) => setManualInput(e.target.value)}
+              placeholder="מספר מעטפה"
+            />
+            <div className="row">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => { setManualOpen(false); setManualInput('') }}
+              >
+                ביטול
+              </button>
+              <button
+                type="submit"
+                className="btn primary"
+                disabled={!manualInput.trim()}
+              >
+                אישור
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {pendingValue && (
         <div className="scanner-manual-form" role="dialog" aria-modal="true">
