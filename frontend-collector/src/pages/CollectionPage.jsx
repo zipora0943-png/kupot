@@ -143,6 +143,16 @@ export default function CollectionPage() {
             <span className="v">{formatDate(card.last_collection_at)}</span>
           </div>
         </div>
+
+        <div className="collection-actions">
+          <button
+            type="button"
+            className="btn-block"
+            onClick={() => navigate(`/scan/${card.id}`)}
+          >
+            💰 בצע גביה
+          </button>
+        </div>
       </div>
     </div>
   )

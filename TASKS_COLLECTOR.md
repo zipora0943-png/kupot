@@ -212,12 +212,12 @@
 - view-only
 - אימות: כל השדות מוצגים.
 
-**משימה 27: כפתור "בצע גביה"** — 🔄 בביצוע
+**משימה 27: כפתור "בצע גביה"** — ✅ בוצע
 - כפתור גדול מרכזי, רקע `--accent`
 - onClick → `navigate(\`/scan/\${cardId}\`)` (route חדש שייווצר במשימה הבאה)
 - אימות: הכפתור גלוי.
 
-**משימה 28: BarcodeScanner.jsx** — ⏳ ממתינה
+**משימה 28: BarcodeScanner.jsx** — 🔄 בביצוע
 - `src/components/BarcodeScanner.jsx`
 - שימוש ב-`BrowserMultiFormatReader` מ-`@zxing/browser`
 - מבקש הרשאת מצלמה ב-mount
