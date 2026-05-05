@@ -110,26 +110,26 @@
 
 ### שלב ב׳ — Auth + Layout בסיסי (11–17)
 
-**משימה 11: LoginPage** — ⏳ ממתינה
+**משימה 11: LoginPage** — ✅ בוצע
 - העתק מ-`frontend-admin/src/pages/LoginPage.jsx` ל-`frontend-collector/src/pages/LoginPage.jsx`
 - התאם CSS למובייל: full-height, מרכוז אנכי, פדינג גדול לכפתור
 - אימות: `/login` מציג טופס במובייל.
 
-**משימה 12: BottomNav.jsx** — ⏳ ממתינה
+**משימה 12: BottomNav.jsx** — ✅ בוצע
 - צור `src/components/BottomNav.jsx`
 - 3 פריטים: 📦 קופות (`/boxes`), 💰 גביה (`/collection`), 🔔 משימות (`/tasks-alerts`)
 - `position: fixed; bottom: 0; left: 0; right: 0`
 - מציין טאב פעיל לפי `useLocation()`
 - אימות: רינדור עם 3 כפתורים, עיצוב תקין.
 
-**משימה 13: MobileLayout.jsx** — ⏳ ממתינה
+**משימה 13: MobileLayout.jsx** — ✅ בוצע
 - צור `src/components/MobileLayout.jsx`
 - top bar: שם משתמש מ-AuthContext + אייקון 👤 בצד שמאל
 - `<Outlet/>` באמצע עם `padding-bottom: 70px`
 - `<BottomNav/>` בתחתית
 - אימות: מבנה נכון.
 
-**משימה 14: Routes ב-App.jsx** — ⏳ ממתינה
+**משימה 14: Routes ב-App.jsx** — ✅ בוצע
 - `/login` → LoginPage
 - `/` → ProtectedRoute → MobileLayout
   - `index` → `<Navigate to="/boxes"/>`
@@ -140,17 +140,17 @@
   - `/task/:taskId` → placeholder
 - אימות: לחיצה על כל טאב ב-BottomNav מנווטת.
 
-**משימה 15: logout מ-👤** — ⏳ ממתינה
+**משימה 15: logout מ-👤** — ✅ בוצע
 - ב-MobileLayout: onClick על 👤 → קורא ל-`logout()` מ-AuthContext → `navigate('/login')`
 - אימות: לחיצה מנתקת ומפנה ל-login.
 
-**משימה 16: בדיקת auth flow** — ⏳ ממתינה
+**משימה 16: בדיקת auth flow** — ✅ בוצע
 - בצע login עם משתמש collector קיים מהמסד
 - אמת שה-JWT נשמר ב-localStorage
 - אמת שניווט פנימי לא מאבד auth (רענון דף)
 - אימות: ✅ או רשימת באגים.
 
-**משימה 17: safe-area-inset לאייפונים** — ⏳ ממתינה
+**משימה 17: safe-area-inset לאייפונים** — ✅ בוצע
 - ב-`index.css`: ל-BottomNav הוסף `padding-bottom: env(safe-area-inset-bottom)`
 - ל-top bar הוסף `padding-top: env(safe-area-inset-top)`
 - אימות: ב-DevTools במצב iPhone — לא נחתך.
@@ -159,39 +159,39 @@
 
 ### שלב ג׳ — תצוגת קופה (18–24)
 
-**משימה 18: BoxesPage שלד** — ⏳ ממתינה
+**משימה 18: BoxesPage שלד** — ✅ בוצע
 - `src/pages/BoxesPage.jsx`
 - בטעינה: GET `/api/cards/active` (או endpoint שמסנן לפי הגובה המחובר)
 - מציג רשימה: מספר קופה + שם + עיר
 - אימות: רשימה נטענת.
 
-**משימה 19: helper daysSince** — ⏳ ממתינה
+**משימה 19: helper daysSince** — ✅ בוצע
 - צור `src/utils/daysSince.js`
 - פונקציה `daysSince(dateStr)` מחזירה מספר ימים, או `null` אם הקלט null
 - אימות: ייבוא הפונקציה עובד.
 
-**משימה 20: תג ימים-ללא-גביה** — ⏳ ממתינה
+**משימה 20: תג ימים-ללא-גביה** — ✅ בוצע
 - בכל שורה ב-BoxesPage: תג עם מספר הימים מאז `last_collection_at`
 - אם null → "טרם נגבה"
 - צבע אחיד (`--accent`)
 - אימות: התג מופיע בכל שורה.
 
-**משימה 21: שדה חיפוש** — ⏳ ממתינה
+**משימה 21: שדה חיפוש** — ✅ בוצע
 - input אחד בראש BoxesPage
 - מסנן client-side על: `box_number`, `custom_name`, `name`, `city`, `neighborhood`, `street`
 - debounce 200ms (`useEffect` עם `setTimeout`)
 - אימות: הקלדה מסננת בזמן אמת.
 
-**משימה 22: מיון** — ⏳ ממתינה
+**משימה 22: מיון** — ✅ בוצע
 - dropdown: ימים-ללא-גביה (default, יורד), מספר קופה (עולה), שם (א-ת)
 - אימות: שינוי מיון מסדר את הרשימה.
 
-**משימה 23: תצוגת custom_name** — ⏳ ממתינה
+**משימה 23: תצוגת custom_name** — ✅ בוצע
 - העתק `src/utils/cardLabel.js` מ-frontend-admin
 - השתמש בו ב-BoxesPage להצגת השם
 - אימות: בקופה עם custom_name — מוצג השם המותאם.
 
-**משימה 24: ניווט לתצוגת גביה** — ⏳ ממתינה
+**משימה 24: ניווט לתצוגת גביה** — ✅ בוצע
 - onClick על שורה → `navigate(\`/collection/\${cardId}\`)`
 - כל השורה לחיצה (לא רק טקסט)
 - אימות: לחיצה פותחת תצוגת גביה.
