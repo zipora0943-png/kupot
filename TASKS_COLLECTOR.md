@@ -240,7 +240,7 @@
 - אותה לוגיקת POST כמו במשימה 29
 - אימות: יצירת מעטפה ללא סריקה.
 
-**משימה 31: ReportFormPage** — 🔄 בביצוע
+**משימה 31: ReportFormPage** — ✅ בוצע
 - `src/pages/ReportFormPage.jsx`, route `/report/:cardId`
 - כפתור "צור דיווח" ב-CollectionPage מנווט אליו
 - שדות: סוג דיווח (GET `/api/reports/types`), תיאור, צילום
@@ -248,7 +248,7 @@
 - POST `/api/reports` (multipart/form-data) — דומה ל-ManualReportModal
 - אימות: דיווח נוצר עם תמונה.
 
-**משימה 32: היסטוריית מעטפות** — ⏳ ממתינה
+**משימה 32: היסטוריית מעטפות** — 🔄 בביצוע
 - בתחתית CollectionPage: 5 המעטפות האחרונות של הקופה
 - GET `/api/envelopes?card_id=X&limit=5`
 - אימות: רשימה מציגה את המעטפות.

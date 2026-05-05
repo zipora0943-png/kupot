@@ -164,6 +164,13 @@ export default function CollectionPage() {
           >
             💰 בצע גביה
           </button>
+          <button
+            type="button"
+            className="btn-block secondary"
+            onClick={() => navigate(`/report/${card.id}`)}
+          >
+            📝 צור דיווח
+          </button>
         </div>
       </div>
 

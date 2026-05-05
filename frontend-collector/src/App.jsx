@@ -6,6 +6,7 @@ import MobileLayout from './components/MobileLayout'
 import BoxesPage from './pages/BoxesPage'
 import CollectionPage from './pages/CollectionPage'
 import ScanPage from './pages/ScanPage'
+import ReportFormPage from './pages/ReportFormPage'
 
 function Placeholder({ title }) {
   return <div>{title}</div>
@@ -37,6 +38,7 @@ function App() {
         <Route path="boxes" element={<BoxesPage />} />
         <Route path="collection" element={<CollectionPage />} />
         <Route path="collection/:cardId" element={<CollectionPage />} />
+        <Route path="report/:cardId" element={<ReportFormPage />} />
         <Route path="tasks-alerts" element={<Placeholder title="משימות והתראות" />} />
         <Route path="task/:taskId" element={<Placeholder title="משימה" />} />
       </Route>
