@@ -5,6 +5,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import MobileLayout from './components/MobileLayout'
 import BoxesPage from './pages/BoxesPage'
 import CollectionPage from './pages/CollectionPage'
+import ScanPage from './pages/ScanPage'
 
 function Placeholder({ title }) {
   return <div>{title}</div>
@@ -14,6 +15,15 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+
+      <Route
+        path="/scan/:cardId"
+        element={
+          <ProtectedRoute>
+            <ScanPage />
+          </ProtectedRoute>
+        }
+      />
 
       <Route
         path="/"

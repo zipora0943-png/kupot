@@ -217,7 +217,7 @@
 - onClick → `navigate(\`/scan/\${cardId}\`)` (route חדש שייווצר במשימה הבאה)
 - אימות: הכפתור גלוי.
 
-**משימה 28: BarcodeScanner.jsx** — 🔄 בביצוע
+**משימה 28: BarcodeScanner.jsx** — ✅ בוצע
 - `src/components/BarcodeScanner.jsx`
 - שימוש ב-`BrowserMultiFormatReader` מ-`@zxing/browser`
 - מבקש הרשאת מצלמה ב-mount
@@ -227,7 +227,7 @@
 - הוסף route `/scan/:cardId` שמרנדר את הסורק
 - אימות: סריקת ברקוד אמיתי בדפדפן (Chrome/HTTPS) מחזירה ערך.
 
-**משימה 29: אישור סריקה ויצירת מעטפה** — ⏳ ממתינה
+**משימה 29: אישור סריקה ויצירת מעטפה** — 🔄 בביצוע
 - אחרי scan: confirm dialog "מעטפה {value} — לאשר?"
 - אישור → POST `/api/envelopes` עם `{ card_id, envelope_number: value }`
 - הצלחה → toast + ניווט בחזרה ל-`/collection/:cardId`
