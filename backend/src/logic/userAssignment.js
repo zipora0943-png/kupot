@@ -338,6 +338,38 @@ const RESOLVED_COLLECTOR_LATERAL = `
   ) rc ON TRUE
 `;
 
+/**
+ * SQL fragment: LATERAL subquery that resolves ALL collectors whose rules
+ * match each card (multi-assignment, "כפילויות"). A collector is included iff
+ * at least one of their `area_assignments` matches the card AND none of their
+ * `area_exclusions` match. Specificity is intentionally NOT used to break
+ * ties — every qualifying collector is returned, ordered by user id.
+ *
+ * Expects the outer query to alias the cards table as `c` (with c.city,
+ * c.neighborhood, c.street, c.building, c.box_id). Yields:
+ *   rc.ids       — int[]  of collector ids   (empty array if none)
+ *   rc.names_arr — text[] of collector names (parallel to ids)
+ *   rc.names     — text   "name1, name2"     (NULL if none)
+ */
+const RESOLVED_COLLECTORS_LATERAL = `
+  LEFT JOIN LATERAL (
+    SELECT
+      COALESCE(array_agg(u.id   ORDER BY u.id), ARRAY[]::int[])  AS ids,
+      COALESCE(array_agg(u.name ORDER BY u.id), ARRAY[]::text[]) AS names_arr,
+      string_agg(u.name, ', ' ORDER BY u.id)                      AS names
+      FROM users u
+     WHERE u.role = 'collector' AND u.active = TRUE
+       AND EXISTS (
+         SELECT 1 FROM jsonb_array_elements(u.area_assignments) r
+          WHERE ${RULE_MATCHES_CARD}
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM jsonb_array_elements(u.area_exclusions) r
+          WHERE ${RULE_MATCHES_CARD}
+       )
+  ) rc ON TRUE
+`;
+
 module.exports = {
   getBoxesForCollector,
   isBoxAssignedToCollector,
@@ -350,4 +382,5 @@ module.exports = {
   findCollectorForLocation,
   normalizeRule,
   RESOLVED_COLLECTOR_LATERAL,
+  RESOLVED_COLLECTORS_LATERAL,
 };

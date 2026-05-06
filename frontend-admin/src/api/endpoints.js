@@ -86,6 +86,8 @@ export const envelopes = {
   updateAmount: (id, amount, reason) =>
     api.patch(`/envelopes/${id}/amount`, { amount, reason: reason || null }),
   getPending: ()         => api.get('/envelopes/pending'),
+  // Task 37: most-recent entered envelopes (for cashroom recent-envelopes panel)
+  getRecentEntered: (limit) => api.get('/envelopes/entered-recent', limit ? { limit } : undefined),
   byNumber: (number)     => api.get(`/envelopes/by-number/${encodeURIComponent(number)}`),
 };
 

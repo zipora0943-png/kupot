@@ -1,5 +1,5 @@
 import React from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import LoginPage from './pages/LoginPage'
 import ProtectedRoute from './components/ProtectedRoute'
 import MobileLayout from './components/MobileLayout'
@@ -7,9 +7,29 @@ import BoxesPage from './pages/BoxesPage'
 import CollectionPage from './pages/CollectionPage'
 import ScanPage from './pages/ScanPage'
 import ReportFormPage from './pages/ReportFormPage'
+import TasksAlertsPage from './pages/TasksAlertsPage'
+import TaskViewPage from './pages/TaskViewPage'
+import CashroomAdminPage from './pages/CashroomAdminPage'
+import { useAuth } from './context/AuthContext'
+import { defaultPathForRole } from './utils/defaultPath'
 
-function Placeholder({ title }) {
-  return <div>{title}</div>
+// Cashroom users are locked to /cashroom-admin (their only screen). Non-cashroom
+// users hitting /cashroom-admin are bounced back to their default landing — the
+// page is invisible to them. Both directions are enforced at the route level so
+// URL typing, deep-links, and post-reload restores all behave the same way.
+function RoleGuard({ children }) {
+  const { user } = useAuth()
+  const location = useLocation()
+  const role = user?.role
+  const onCashroomScreen = location.pathname === '/cashroom-admin'
+
+  if (role === 'cashroom' && !onCashroomScreen) {
+    return <Navigate to="/cashroom-admin" replace />
+  }
+  if (role && role !== 'cashroom' && onCashroomScreen) {
+    return <Navigate to={defaultPathForRole(role)} replace />
+  }
+  return children
 }
 
 function App() {
@@ -21,7 +41,9 @@ function App() {
         path="/scan/:cardId"
         element={
           <ProtectedRoute>
-            <ScanPage />
+            <RoleGuard>
+              <ScanPage />
+            </RoleGuard>
           </ProtectedRoute>
         }
       />
@@ -30,7 +52,9 @@ function App() {
         path="/"
         element={
           <ProtectedRoute>
-            <MobileLayout />
+            <RoleGuard>
+              <MobileLayout />
+            </RoleGuard>
           </ProtectedRoute>
         }
       >
@@ -39,8 +63,9 @@ function App() {
         <Route path="collection" element={<CollectionPage />} />
         <Route path="collection/:cardId" element={<CollectionPage />} />
         <Route path="report/:cardId" element={<ReportFormPage />} />
-        <Route path="tasks-alerts" element={<Placeholder title="משימות והתראות" />} />
-        <Route path="task/:taskId" element={<Placeholder title="משימה" />} />
+        <Route path="tasks-alerts" element={<TasksAlertsPage />} />
+        <Route path="task/:taskId" element={<TaskViewPage />} />
+        <Route path="cashroom-admin" element={<CashroomAdminPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

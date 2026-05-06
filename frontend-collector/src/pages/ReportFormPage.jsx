@@ -19,6 +19,7 @@ export default function ReportFormPage() {
   const [imageFile, setImageFile] = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
   const cameraInputRef = useRef(null)
+  const fileInputRef = useRef(null)
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
@@ -55,6 +56,7 @@ export default function ReportFormPage() {
     setImageFile(null)
     setImagePreview(null)
     if (cameraInputRef.current) cameraInputRef.current.value = ''
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const trimmedDesc = description.trim()
@@ -150,7 +152,34 @@ export default function ReportFormPage() {
               capture="environment"
               onChange={onPickImage}
               disabled={submitting}
+              style={{ display: 'none' }}
             />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={onPickImage}
+              disabled={submitting}
+              style={{ display: 'none' }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                className="btn-block secondary"
+                onClick={() => cameraInputRef.current?.click()}
+                disabled={submitting}
+              >
+                📷 צלם
+              </button>
+              <button
+                type="button"
+                className="btn-block secondary"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={submitting}
+              >
+                📁 בחר קובץ
+              </button>
+            </div>
           </div>
 
           <div className="collection-actions">

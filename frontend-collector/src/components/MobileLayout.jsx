@@ -6,6 +6,9 @@ import BottomNav from './BottomNav'
 export default function MobileLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  // Cashroom users have a single locked screen; the bottom nav (boxes / גביה /
+  // משימות) doesn't apply to them and would expose other parts of the app.
+  const isCashroom = user?.role === 'cashroom'
 
   function handleLogout() {
     logout()
@@ -31,7 +34,7 @@ export default function MobileLayout() {
         <Outlet />
       </main>
 
-      <BottomNav />
+      {!isCashroom && <BottomNav />}
     </div>
   )
 }

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { envelopes as envelopesApi } from '../../api/endpoints'
 import CreateEnvelopeModal from '../../components/CreateEnvelopeModal'
 import CashroomModal from '../../components/CashroomModal'
+import { exportCsv, csvFilename } from '../../utils/exportCsv'
 
 function formatDate(iso) {
   if (!iso) return '—'
@@ -65,16 +66,32 @@ export default function EnvelopesTab({ cardId, boxId }) {
 
   return (
     <>
-      <div className="actions" style={{ marginBottom: 12 }}>
-        <button
-          className="btn sm primary"
-          onClick={() => setShowCreateModal(true)}
-        >
-          ➕ מעטפה חדשה
-        </button>
-        <div style={{ fontSize: 13, color: 'var(--text2)', marginRight: 'auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8 }}>
+        <div style={{ fontSize: 13, color: 'var(--text2)' }}>
           סה"כ: <strong style={{ color: 'var(--text)' }}>{formatAmount(total)}</strong>
           {' · '}{list.length} מעטפות ({enteredCount} הוזנו)
+        </div>
+        <div className="entity-actions">
+          <button
+            className="btn sm"
+            disabled={list.length === 0}
+            onClick={() => exportCsv(
+              list,
+              [
+                { key: 'collected_at',     label: 'תאריך גביה', format: (v) => v ? new Date(v).toLocaleDateString('he-IL') : '' },
+                { key: 'envelope_number',  label: 'מס\' מעטפה' },
+                { key: 'amount',           label: 'סכום' },
+                { key: 'collected_by_name', label: 'גובה' },
+                { key: 'status',           label: 'סטטוס', format: (v) => STATUS[v]?.label || v || '' },
+                { key: 'notes',            label: 'הערות' },
+              ],
+              csvFilename(`card_${cardId}_envelopes`)
+            )}
+          >📥 יצוא לאקסל</button>
+          <button
+            className="btn sm"
+            onClick={() => setShowCreateModal(true)}
+          >➕ צור מעטפה</button>
         </div>
       </div>
 

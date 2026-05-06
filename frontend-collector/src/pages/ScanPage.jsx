@@ -1,18 +1,28 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import BarcodeScanner from '../components/BarcodeScanner'
-import { envelopes as envelopesApi } from '../api/endpoints'
+import { cards as cardsApi, envelopes as envelopesApi } from '../api/endpoints'
 
 export default function ScanPage() {
   const { cardId } = useParams()
   const navigate = useNavigate()
 
+  const [boxId, setBoxId] = useState(null)
   const [pendingValue, setPendingValue] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
   const [scannerKey, setScannerKey] = useState(0)
   const [manualOpen, setManualOpen] = useState(false)
   const [manualInput, setManualInput] = useState('')
+
+  useEffect(() => {
+    if (!cardId) return
+    let cancelled = false
+    cardsApi.get(cardId)
+      .then((data) => { if (!cancelled) setBoxId(data?.box_id ?? null) })
+      .catch(() => { /* keep boxId null; submit will surface the error */ })
+    return () => { cancelled = true }
+  }, [cardId])
 
   function handleScan(value) {
     setPendingValue(String(value))
@@ -32,15 +42,19 @@ export default function ScanPage() {
 
   async function confirmEnvelope() {
     if (!pendingValue || submitting) return
+    if (!boxId) {
+      setError('טוען פרטי קופה...')
+      return
+    }
     setSubmitting(true)
     setError(null)
     try {
       await envelopesApi.create({
-        card_id: Number(cardId),
+        box_id: Number(boxId),
         envelope_number: pendingValue,
       })
       navigate(`/collection/${cardId}`, {
-        state: { toast: `מעטפה ${pendingValue} נוצרה` },
+        state: { toast: `שיוך מעטפה מס׳ ${pendingValue}` },
       })
     } catch (err) {
       setError(err?.message || 'שגיאה ביצירת מעטפה')

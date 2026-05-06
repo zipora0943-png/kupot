@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { cards as cardsApi } from '../api/endpoints'
+import { useAuth } from '../context/AuthContext'
 import { computeCardLabels } from '../utils/cardLabel'
 import EnvelopesTab from './cardTabs/EnvelopesTab'
 import EventsTab    from './cardTabs/EventsTab'
@@ -10,7 +11,7 @@ import CloseCardModal from '../components/CloseCardModal'
 import ReopenCardModal from '../components/ReopenCardModal'
 import LocationCombobox from '../components/LocationCombobox'
 
-const TABS = [
+const ALL_TABS = [
   { key: 'envelopes', label: '✉️ מעטפות' },
   { key: 'events',    label: '📅 אירועים' },
   { key: 'tasks',     label: '✅ משימות' },
@@ -37,12 +38,17 @@ const STATUS_PILL = {
 export default function CardDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const isCollector = user?.role === 'collector'
+
+  // Task 35: collectors don't see the envelopes tab.
+  const TABS = isCollector ? ALL_TABS.filter(t => t.key !== 'envelopes') : ALL_TABS
 
   const [card, setCard]     = useState(null)
   const [cardLabel, setCardLabel] = useState(null) // e.g. "1019A"
   const [loading, setLoading] = useState(true)
   const [errMsg, setErrMsg]   = useState(null)
-  const [activeTab, setActiveTab] = useState('envelopes')
+  const [activeTab, setActiveTab] = useState(isCollector ? 'events' : 'envelopes')
 
   // Edit mode
   const [editing, setEditing]     = useState(false)
@@ -214,13 +220,13 @@ export default function CardDetailPage() {
           <span className={'pill ' + statusPill.cls} style={{ padding: '6px 14px', fontSize: 13 }}>
             {statusPill.label}
           </span>
-          {!editing && card.status === 'active' && (
+          {!editing && card.status === 'active' && !isCollector && (
             <>
               <button className="btn sm" onClick={handleEdit}>✏️ עריכת פרטים</button>
               <button className="btn sm danger" onClick={() => setShowCloseModal(true)}>🚪 סגירת כרטסת</button>
             </>
           )}
-          {!editing && card.status === 'closed' && (
+          {!editing && card.status === 'closed' && !isCollector && (
             <button className="btn sm success" onClick={() => setShowReopenModal(true)}>
               🔓 פתיחה מחדש
             </button>
@@ -413,7 +419,7 @@ export default function CardDetailPage() {
       </div>
 
       <div className="panel">
-        {activeTab === 'envelopes' && <EnvelopesTab cardId={card.id} boxId={card.box_id} />}
+        {activeTab === 'envelopes' && !isCollector && <EnvelopesTab cardId={card.id} boxId={card.box_id} />}
         {activeTab === 'events'    && <EventsTab    cardId={card.id} cardLabel={titleLabel} />}
         {activeTab === 'tasks'     && <TasksTab     cardId={card.id} boxId={card.box_id} />}
         {activeTab === 'reports'   && <ReportsTab   cardId={card.id} cardLabel={titleLabel} />}

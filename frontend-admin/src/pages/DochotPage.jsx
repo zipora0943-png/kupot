@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   reportsExport as reportsExportApi,
   envelopes as envelopesApi,
@@ -9,6 +10,8 @@ import {
 import { computeCardLabels } from '../utils/cardLabel'
 import { exportCsv, csvFilename } from '../utils/exportCsv'
 import MonthYearPicker from '../components/MonthYearPicker'
+import CardChoiceModal from '../components/CardChoiceModal'
+import { useSortable, SortableTh } from '../utils/sortable.jsx'
 
 const TABS = [
   { key: 'summary', label: 'סיכום כללי' },
@@ -53,6 +56,7 @@ function periodToRange(period, monthVal, yearVal, fromVal, toVal) {
 // === Tab 1: סיכום כללי =======================================================
 // =============================================================================
 function SummaryTab() {
+  const navigate = useNavigate()
   const today = new Date()
   const defaultMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
 
@@ -62,6 +66,7 @@ function SummaryTab() {
   const [fromVal,   setFromVal]   = useState('')
   const [toVal,     setToVal]     = useState('')
   const [city,      setCity]      = useState('')
+  // selected collector id (string, '' for all). Named *Name historically — now an id.
   const [collectorName, setCollectorName] = useState('')
   const [customName,    setCustomName]    = useState('')
   const [receiptFilter, setReceiptFilter] = useState('') // '', 'yes', 'no'
@@ -74,16 +79,28 @@ function SummaryTab() {
   // load distinct cities once (from /cards)
   const [cities, setCities] = useState([])
   const [collectors, setCollectors] = useState([])
+  // Map<card_id, "1019A"> — chronological-letter labels computed from all cards
+  const [cardLabels, setCardLabels] = useState(new Map())
   useEffect(() => {
     cardsApi.getAll().then(d => {
       const arr = Array.isArray(d) ? d : []
       const cs = new Set(); const cmap = new Map()
       for (const c of arr) {
         if (c.city) cs.add(c.city)
-        if (c.collector_id && c.collector_name) cmap.set(c.collector_id, c.collector_name)
+        const ids   = Array.isArray(c.collector_ids)   ? c.collector_ids   : []
+        const names = Array.isArray(c.collector_names) ? c.collector_names : []
+        ids.forEach((id, i) => {
+          const name = names[i]
+          if (id != null && name) cmap.set(id, name)
+        })
       }
       setCities(Array.from(cs).sort())
-      setCollectors(Array.from(cmap.values()).sort((a, b) => a.localeCompare(b, 'he')))
+      setCollectors(
+        Array.from(cmap.entries())
+          .map(([id, name]) => ({ id, name }))
+          .sort((a, b) => a.name.localeCompare(b.name, 'he'))
+      )
+      setCardLabels(computeCardLabels(arr))
     }).catch(() => {})
   }, [])
 
@@ -102,8 +119,14 @@ function SummaryTab() {
           : undefined,
       })
       let list = Array.isArray(data) ? data : []
-      // collector filter — server doesn't filter by collector, so do it client-side
-      if (collectorName) list = list.filter(r => r.collector_name === collectorName)
+      // collector filter — server doesn't filter by collector, so do it client-side.
+      // Multi-collector ("כפילויות"): match if the chosen collector id is among
+      // the row's resolved collectors.
+      if (collectorName) {
+        const target = Number(collectorName)
+        list = list.filter(r => Array.isArray(r.collector_ids)
+          && r.collector_ids.some(id => Number(id) === target))
+      }
       setRows(list)
       setLoaded(true)
     } catch (err) {
@@ -121,10 +144,31 @@ function SummaryTab() {
     return { total, envelopes, activeCount, avg }
   }, [rows])
 
+  const summaryAccessors = useMemo(() => ({
+    iron:         (r) => r.iron_number,
+    card:         (r) => cardLabels.get(r.card_id) || '',
+    name:         (r) => r.custom_name || (r.street ? `${r.street}${r.building ? ' ' + r.building : ''}` : ''),
+    city:         (r) => r.city,
+    neighborhood: (r) => r.neighborhood,
+    collector:    (r) => r.collector_name,
+    receipt:      (r) => r.receipt_required ? 1 : 0,
+    total:        (r) => Number(r.total_amount) || 0,
+    count:        (r) => Number(r.collection_count) || 0,
+    avg:          (r) => {
+      const total = Number(r.total_amount) || 0
+      const count = Number(r.collection_count) || 0
+      return count ? total / count : 0
+    },
+    last:         (r) => r.last_collection_date ? new Date(r.last_collection_date) : null,
+  }), [cardLabels])
+  const { sorted: sortedRows, sort, toggle } = useSortable(rows, summaryAccessors)
+
   function exportSummary() {
     if (rows.length === 0) return
     const cols = [
       { key: 'iron_number',   label: 'קופה' },
+      { key: 'card_id',       label: 'כרטסת',
+        format: (v) => v ? (cardLabels.get(v) || `#${v}`) : '' },
       { key: 'custom_name',   label: 'שם מותאם' },
       { key: 'city',          label: 'עיר' },
       { key: 'neighborhood',  label: 'שכונה' },
@@ -183,7 +227,7 @@ function SummaryTab() {
           <label>גובה</label>
           <select value={collectorName} onChange={(e) => setCollectorName(e.target.value)}>
             <option value="">כל הגובים</option>
-            {collectors.map(c => <option key={c} value={c}>{c}</option>)}
+            {collectors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
         <div className="field">
@@ -242,26 +286,51 @@ function SummaryTab() {
                 <table>
                   <thead>
                     <tr>
-                      <th>קופה</th>
-                      <th>שם / מיקום</th>
-                      <th>עיר</th>
-                      <th>שכונה</th>
-                      <th>גובה</th>
-                      <th>קבלה</th>
-                      <th>סה"כ</th>
-                      <th>מעטפות</th>
-                      <th>ממוצע</th>
-                      <th>גביה אחרונה</th>
+                      <SortableTh sortKey="iron"         sort={sort} onToggle={toggle}>קופה</SortableTh>
+                      <SortableTh sortKey="card"         sort={sort} onToggle={toggle}>כרטסת</SortableTh>
+                      <SortableTh sortKey="name"         sort={sort} onToggle={toggle}>שם / מיקום</SortableTh>
+                      <SortableTh sortKey="city"         sort={sort} onToggle={toggle}>עיר</SortableTh>
+                      <SortableTh sortKey="neighborhood" sort={sort} onToggle={toggle}>שכונה</SortableTh>
+                      <SortableTh sortKey="collector"    sort={sort} onToggle={toggle}>גובה</SortableTh>
+                      <SortableTh sortKey="receipt"      sort={sort} onToggle={toggle}>קבלה</SortableTh>
+                      <SortableTh sortKey="total"        sort={sort} onToggle={toggle}>סה"כ</SortableTh>
+                      <SortableTh sortKey="count"        sort={sort} onToggle={toggle}>מעטפות</SortableTh>
+                      <SortableTh sortKey="avg"          sort={sort} onToggle={toggle}>ממוצע</SortableTh>
+                      <SortableTh sortKey="last"         sort={sort} onToggle={toggle}>גביה אחרונה</SortableTh>
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map(r => {
+                    {sortedRows.map(r => {
                       const total = Number(r.total_amount) || 0
                       const count = Number(r.collection_count) || 0
                       const avg = count ? Math.round(total / count) : 0
+                      const cardLabel = cardLabels.get(r.card_id) || (r.card_id ? `#${r.card_id}` : '—')
                       return (
-                        <tr key={r.iron_number}>
-                          <td><strong>{r.iron_number}</strong></td>
+                        <tr key={r.card_id ?? r.iron_number}>
+                          <td>
+                            {r.card_id ? (
+                              <strong
+                                className="clickable"
+                                style={{ color: 'var(--accent)', cursor: 'pointer' }}
+                                onClick={() => navigate(`/cards/${r.card_id}`)}
+                                title="פתיחת הכרטסת"
+                              >{r.iron_number}</strong>
+                            ) : (
+                              <strong>{r.iron_number}</strong>
+                            )}
+                          </td>
+                          <td>
+                            {r.card_id ? (
+                              <span
+                                className="clickable"
+                                style={{ color: 'var(--accent)', cursor: 'pointer' }}
+                                onClick={() => navigate(`/cards/${r.card_id}`)}
+                                title="פתיחת הכרטסת"
+                              >{cardLabel}</span>
+                            ) : (
+                              <span style={{ color: 'var(--text3)' }}>—</span>
+                            )}
+                          </td>
                           <td>
                             {r.custom_name
                               ? <strong>{r.custom_name}</strong>
@@ -302,16 +371,23 @@ function SummaryTab() {
 // === Tab 2: פר קופה ==========================================================
 // =============================================================================
 function PerBoxTab() {
+  const navigate = useNavigate()
   const [ironInput, setIronInput] = useState('')
   const [fromVal, setFromVal] = useState('')
   const [toVal,   setToVal]   = useState('')
 
   const [boxInfo,  setBoxInfo]  = useState(null)  // { iron_number, city, ... }
   const [cardInfo, setCardInfo] = useState(null)
+  const [cardLabel, setCardLabel] = useState('')  // e.g. "1019B"
   const [envs,     setEnvs]     = useState([])
   const [loaded,   setLoaded]   = useState(false)
   const [loading,  setLoading]  = useState(false)
   const [errMsg,   setErrMsg]   = useState(null)
+
+  // When the box has more than one card, hold the box + card list here
+  // until the user picks one in the modal.
+  const [pendingChoice, setPendingChoice] = useState(null)
+  // ^ shape: { box, cards }
 
   async function generate() {
     setErrMsg(null)
@@ -326,15 +402,36 @@ function PerBoxTab() {
         : null
       if (!box) { setErrMsg(`לא נמצאה קופה ${ironInput}`); setLoaded(true); setBoxInfo(null); setEnvs([]); return }
 
-      // Fetch the active card (or most recent) for this box
+      // Fetch all cards for this box (active + historical)
       const cards = await cardsApi.getAll({ box_id: box.id })
       const list = Array.isArray(cards) ? cards : []
-      const card = list.find(c => c.status === 'active') || list[0] || null
 
+      // If the box has more than one card, ask the user which one to use.
+      if (list.length > 1) {
+        setPendingChoice({ box, cards: list })
+        setLoading(false)
+        return
+      }
+
+      // Only one (or zero) cards — proceed directly.
+      const card = list[0] || null
+      await runReport(box, card, list)
+    } catch (err) {
+      setErrMsg(err.message || 'שגיאה בהפקת הדוח')
+      setLoading(false)
+    }
+  }
+
+  async function runReport(box, card, allCards) {
+    setLoading(true)
+    try {
       setBoxInfo(box)
       setCardInfo(card)
+      // Compute the suffix label (1019A / 1019B / …) when there's history.
+      const cardsForLabels = Array.isArray(allCards) && allCards.length ? allCards : (card ? [card] : [])
+      const labels = computeCardLabels(cardsForLabels)
+      setCardLabel(card ? (labels.get(card.id) || '') : '')
 
-      // Envelopes for the active card, filtered by date if provided
       if (card) {
         const filters = { card_id: card.id }
         if (fromVal) filters.from = fromVal
@@ -355,6 +452,17 @@ function PerBoxTab() {
     }
   }
 
+  function handleCardChosen(card) {
+    if (!pendingChoice) return
+    const { box, cards } = pendingChoice
+    setPendingChoice(null)
+    runReport(box, card, cards)
+  }
+
+  function handleCardChoiceCancel() {
+    setPendingChoice(null)
+  }
+
   const totals = useMemo(() => {
     let total = 0, count = 0
     for (const e of envs) {
@@ -362,6 +470,15 @@ function PerBoxTab() {
     }
     return { total, count }
   }, [envs])
+
+  const envAccessors = useMemo(() => ({
+    date:      (e) => e.collected_at ? new Date(e.collected_at) : null,
+    envelope:  (e) => e.envelope_number,
+    amount:    (e) => e.amount != null ? Number(e.amount) : null,
+    collector: (e) => e.collector_name,
+    status:    (e) => e.status,
+  }), [])
+  const { sorted: sortedEnvs, sort: envSort, toggle: envToggle } = useSortable(envs, envAccessors)
 
   return (
     <div>
@@ -393,10 +510,27 @@ function PerBoxTab() {
       {loaded && boxInfo && (
         <div className="panel">
           <div className="panel-title">
-            קופה {boxInfo.iron_number}
+            קופה{' '}
+            {cardInfo ? (
+              <span
+                className="clickable"
+                style={{ color: 'var(--accent)', cursor: 'pointer' }}
+                onClick={() => navigate(`/cards/${cardInfo.id}`)}
+                title="פתיחת הכרטסת"
+              >{boxInfo.iron_number}</span>
+            ) : (
+              <span>{boxInfo.iron_number}</span>
+            )}
+            {cardLabel && (
+              <span style={{ color: 'var(--text2)', fontWeight: 500 }}>
+                {' '}· כרטסת <strong>{cardLabel}</strong>
+                {cardInfo && cardInfo.status !== 'active' &&
+                  <span className="pill" style={{ marginInlineStart: 6, background: 'var(--surface)', color: 'var(--text3)' }}>סגורה</span>}
+              </span>
+            )}
             {cardInfo
               ? <> | {cardInfo.city || ''}{cardInfo.street ? ` · ${cardInfo.street}` : ''}</>
-              : <span style={{ color: 'var(--text3)' }}> · אין כרטסת פעילה</span>}
+              : <span style={{ color: 'var(--text3)' }}> · אין כרטסת</span>}
           </div>
 
           <div className="stats-row stats-3" style={{ marginBottom: 14 }}>
@@ -421,15 +555,15 @@ function PerBoxTab() {
               <table>
                 <thead>
                   <tr>
-                    <th>תאריך</th>
-                    <th>מעטפה</th>
-                    <th>סכום</th>
-                    <th>גובה</th>
-                    <th>סטטוס</th>
+                    <SortableTh sortKey="date"      sort={envSort} onToggle={envToggle}>תאריך</SortableTh>
+                    <SortableTh sortKey="envelope"  sort={envSort} onToggle={envToggle}>מעטפה</SortableTh>
+                    <SortableTh sortKey="amount"    sort={envSort} onToggle={envToggle}>סכום</SortableTh>
+                    <SortableTh sortKey="collector" sort={envSort} onToggle={envToggle}>גובה</SortableTh>
+                    <SortableTh sortKey="status"    sort={envSort} onToggle={envToggle}>סטטוס</SortableTh>
                   </tr>
                 </thead>
                 <tbody>
-                  {envs.map(e => (
+                  {sortedEnvs.map(e => (
                     <tr key={e.id}>
                       <td>{formatDate(e.collected_at)}</td>
                       <td><strong>{e.envelope_number}</strong></td>
@@ -451,6 +585,15 @@ function PerBoxTab() {
 
       {!loaded && !loading && (
         <div className="alert info">💡 הזן מספר קופה ולחץ "הפק" כדי לראות את היסטוריית הגביות שלה</div>
+      )}
+
+      {pendingChoice && (
+        <CardChoiceModal
+          ironNumber={pendingChoice.box.iron_number}
+          cards={pendingChoice.cards}
+          onSelect={handleCardChosen}
+          onClose={handleCardChoiceCancel}
+        />
       )}
     </div>
   )
@@ -479,6 +622,8 @@ function CompareTab({ exportRef }) {
       collectorName: '',
       boxTypeId: '',
       ironNumber: '',
+      cardId: null,       // chosen card_id when the box has multiple cards
+      cardLabel: '',      // suffix label of the chosen card (e.g. "1019B")
       customName: '',
       receiptFilter: '',
       rows: [],
@@ -489,6 +634,11 @@ function CompareTab({ exportRef }) {
   }
 
   const [columns, setColumns] = useState([defaultCol(1), defaultCol(2)])
+
+  // When a column's iron_number resolves to a box with >1 cards we hold the
+  // pending choice here until the user picks one in the modal.
+  const [pendingChoice, setPendingChoice] = useState(null)
+  // ^ shape: { columnId, ironNumber, cards }
 
   function addColumn() {
     setColumns(prev => {
@@ -509,6 +659,11 @@ function CompareTab({ exportRef }) {
         const next = { ...c, [key]: value }
         // reset neighborhood when city changes (it's city-dependent)
         if (key === 'city') next.neighborhood = ''
+        // reset card choice if iron number changes
+        if (key === 'ironNumber') {
+          next.cardId = null
+          next.cardLabel = ''
+        }
         return next
       })
     )
@@ -524,6 +679,47 @@ function CompareTab({ exportRef }) {
       return
     }
 
+    // If user filtered by an iron_number AND no card has been picked yet,
+    // resolve the box → check how many cards it has → ask the user if >1.
+    const ironN = col.ironNumber.trim()
+    if (ironN && !col.cardId) {
+      updateColumn(id, 'loading', true)
+      updateColumn(id, 'errMsg', null)
+      try {
+        const boxes = await boxesApi.getAll({ search: ironN })
+        const box = Array.isArray(boxes)
+          ? boxes.find(b => b.iron_number === ironN) || boxes[0]
+          : null
+        if (!box) {
+          updateColumn(id, 'errMsg', `לא נמצאה קופה ${ironN}`)
+          updateColumn(id, 'loading', false)
+          return
+        }
+        const cards = await cardsApi.getAll({ box_id: box.id })
+        const list = Array.isArray(cards) ? cards : []
+        if (list.length > 1) {
+          setPendingChoice({ columnId: id, ironNumber: ironN, cards: list })
+          updateColumn(id, 'loading', false)
+          return
+        }
+        // Single card (or none) — proceed; pin the card_id so we always
+        // hit that exact card even when multiple boxes share an iron_number.
+        const cardId = list[0]?.id || null
+        const labels = computeCardLabels(list)
+        const cardLabel = cardId ? (labels.get(cardId) || '') : ''
+        await fetchCompareData(id, range, col, cardId, cardLabel)
+        return
+      } catch (err) {
+        updateColumn(id, 'errMsg', err.message || 'שגיאה בהפקת הדוח')
+        updateColumn(id, 'loading', false)
+        return
+      }
+    }
+
+    await fetchCompareData(id, range, col, col.cardId, col.cardLabel)
+  }
+
+  async function fetchCompareData(id, range, col, cardId, cardLabel) {
     updateColumn(id, 'loading', true)
     updateColumn(id, 'errMsg', null)
     try {
@@ -540,16 +736,38 @@ function CompareTab({ exportRef }) {
       let arr = Array.isArray(data) ? data : []
       // client-side filters (server only filters by city)
       if (col.neighborhood)  arr = arr.filter(r => r.neighborhood === col.neighborhood)
-      if (col.collectorName) arr = arr.filter(r => r.collector_name === col.collectorName)
+      if (col.collectorName) {
+        const target = Number(col.collectorName)
+        arr = arr.filter(r => Array.isArray(r.collector_ids)
+          && r.collector_ids.some(id => Number(id) === target))
+      }
       if (col.boxTypeId)     arr = arr.filter(r => String(r.box_type_id) === String(col.boxTypeId))
-      if (col.ironNumber)    arr = arr.filter(r => String(r.iron_number) === col.ironNumber.trim())
-      updateColumn(id, 'rows', arr)
-      updateColumn(id, 'loaded', true)
+      if (cardId)            arr = arr.filter(r => String(r.card_id) === String(cardId))
+      else if (col.ironNumber) arr = arr.filter(r => String(r.iron_number) === col.ironNumber.trim())
+      // Persist choice on the column (so subsequent re-generates skip the modal)
+      setColumns(prev => prev.map(c =>
+        c.id === id ? { ...c, rows: arr, loaded: true, cardId: cardId || null, cardLabel: cardLabel || '' } : c
+      ))
     } catch (err) {
       updateColumn(id, 'errMsg', err.message || 'שגיאה בהפקת הדוח')
     } finally {
       updateColumn(id, 'loading', false)
     }
+  }
+
+  function handleColumnCardChosen(card) {
+    if (!pendingChoice) return
+    const { columnId, cards } = pendingChoice
+    const col = columns.find(c => c.id === columnId)
+    setPendingChoice(null)
+    if (!col) return
+    const range = periodToRange(col.period, col.monthVal, col.yearVal, col.fromVal, col.toVal)
+    const labels = computeCardLabels(cards)
+    fetchCompareData(columnId, range, col, card.id, labels.get(card.id) || '')
+  }
+
+  function handleColumnCardCancel() {
+    setPendingChoice(null)
   }
 
   function calcStats(rows) {
@@ -575,13 +793,22 @@ function CompareTab({ exportRef }) {
           if (!nbMap[c.city]) nbMap[c.city] = new Set()
           nbMap[c.city].add(c.neighborhood)
         }
-        if (c.collector_id && c.collector_name) cmap.set(c.collector_id, c.collector_name)
+        const ids   = Array.isArray(c.collector_ids)   ? c.collector_ids   : []
+        const names = Array.isArray(c.collector_names) ? c.collector_names : []
+        ids.forEach((id, i) => {
+          const name = names[i]
+          if (id != null && name) cmap.set(id, name)
+        })
       })
       setCities(Array.from(cs).sort((a, b) => a.localeCompare(b, 'he')))
       setNeighborhoodsByCity(Object.fromEntries(
         Object.entries(nbMap).map(([k, v]) => [k, Array.from(v).sort((a, b) => a.localeCompare(b, 'he'))])
       ))
-      setCollectors(Array.from(cmap.values()).sort((a, b) => a.localeCompare(b, 'he')))
+      setCollectors(
+        Array.from(cmap.entries())
+          .map(([id, name]) => ({ id, name }))
+          .sort((a, b) => a.name.localeCompare(b.name, 'he'))
+      )
     }).catch(() => {})
     boxTypesApi.getAll().then(d => {
       setBoxTypes(Array.isArray(d) ? d : [])
@@ -603,7 +830,10 @@ function CompareTab({ exportRef }) {
       const parts = []
       if (col.city)          parts.push(col.city)
       if (col.neighborhood)  parts.push(col.neighborhood)
-      if (col.collectorName) parts.push(col.collectorName)
+      if (col.collectorName) {
+        const c = collectors.find(x => String(x.id) === String(col.collectorName))
+        parts.push(c ? c.name : `גובה #${col.collectorName}`)
+      }
       if (col.boxTypeId) {
         const bt = boxTypes.find(b => String(b.id) === String(col.boxTypeId))
         if (bt) parts.push(bt.name)
@@ -778,7 +1008,7 @@ function CompareTab({ exportRef }) {
                 >
                   <option value="">כל הגובים</option>
                   {collectors.map(c => (
-                    <option key={c} value={c}>{c}</option>
+                    <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
               </div>
@@ -805,6 +1035,17 @@ function CompareTab({ exportRef }) {
                   placeholder="מספר קופה (אופציונלי)"
                   style={{ fontSize: 13 }}
                 />
+                {col.cardLabel && (
+                  <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 4 }}>
+                    כרטסת נבחרה: <strong style={{ color: 'var(--accent)' }}>{col.cardLabel}</strong>
+                    <button
+                      type="button"
+                      onClick={() => updateColumn(col.id, 'ironNumber', col.ironNumber)}
+                      style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 11, marginInlineStart: 6, textDecoration: 'underline' }}
+                      title="בחר כרטסת אחרת"
+                    >החלף</button>
+                  </div>
+                )}
               </div>
 
               <div className="field" style={{ marginBottom: 6 }}>
@@ -865,6 +1106,15 @@ function CompareTab({ exportRef }) {
       <div style={{ marginTop: 14 }}>
         <button className="btn sm" onClick={exportCompare}>📥 יצוא לאקסל</button>
       </div>
+
+      {pendingChoice && (
+        <CardChoiceModal
+          ironNumber={pendingChoice.ironNumber}
+          cards={pendingChoice.cards}
+          onSelect={handleColumnCardChosen}
+          onClose={handleColumnCardCancel}
+        />
+      )}
     </div>
   )
 }

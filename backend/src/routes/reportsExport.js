@@ -3,9 +3,10 @@ const pool   = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
 const { requireRole }  = require('../middleware/roles');
 const { sendCsv }      = require('../utils/csv');
-const { RESOLVED_COLLECTOR_LATERAL } = require('../logic/userAssignment');
+const { RESOLVED_COLLECTORS_LATERAL } = require('../logic/userAssignment');
 
-router.use(authenticate, requireRole('admin', 'cashroom'));
+// Task 36: cashroom users have no access to dochot — only the cashroom workflow.
+router.use(authenticate, requireRole('admin'));
 
 // helper: extract `format=csv` query and short-circuit to CSV when requested
 function maybeCsv(req, res, rows, filename, columns) {
@@ -72,7 +73,10 @@ router.get('/summary', async (req, res, next) => {
 router.get('/per-box', async (req, res, next) => {
   const { from, to, city, status, custom_name, receipt_required } = req.query;
 
-  // Build envelope-aggregate subquery with optional date filter
+  // Build envelope-aggregate subquery with optional date filter.
+  // Counts/totals are scoped to the period; `last_collection_date` is
+  // computed separately (below) so it always reflects the actual most
+  // recent collection — even when it predates the report period.
   const envParams = [];
   let envWhere = `WHERE status = 'entered'`;
   if (from !== undefined) {
@@ -88,29 +92,41 @@ router.get('/per-box', async (req, res, next) => {
   const envSubquery = `
     SELECT card_id,
            COUNT(*) AS collection_count,
-           SUM(amount) AS total_amount,
-           MAX(collected_at) AS last_collection_date
+           SUM(amount) AS total_amount
       FROM envelopes
       ${envWhere}
       GROUP BY card_id`;
 
+  // All-time last collection per card (no date filter).
+  const lastCollectionSubquery = `
+    SELECT card_id,
+           MAX(collected_at) AS last_collection_date
+      FROM envelopes
+     WHERE status = 'entered'
+     GROUP BY card_id`;
+
   // Outer query joins boxes/cards once + the aggregate subquery
   const params = [...envParams];
   let q = `
-    SELECT b.iron_number,
+    SELECT c.id AS card_id,
+           b.id AS box_id,
+           b.iron_number,
            b.box_type_id,
            bt.name AS box_type_name,
            c.city, c.neighborhood, c.street, c.building, c.custom_name,
            c.receipt_required,
-           rc.name AS collector_name,
+           rc.ids       AS collector_ids,
+           rc.names_arr AS collector_names,
+           rc.names     AS collector_name,
            COALESCE(e.collection_count, 0) AS collection_count,
            COALESCE(e.total_amount, 0)     AS total_amount,
-           e.last_collection_date
+           lc.last_collection_date
       FROM cards c
       JOIN boxes b ON b.id = c.box_id
       LEFT JOIN box_types bt ON bt.id = b.box_type_id
-      ${RESOLVED_COLLECTOR_LATERAL}
+      ${RESOLVED_COLLECTORS_LATERAL}
       LEFT JOIN ( ${envSubquery} ) e ON e.card_id = c.id
+      LEFT JOIN ( ${lastCollectionSubquery} ) lc ON lc.card_id = c.id
      WHERE 1=1`;
 
   if (typeof city === 'string' && city) {

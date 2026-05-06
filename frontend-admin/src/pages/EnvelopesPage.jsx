@@ -159,7 +159,7 @@ export default function EnvelopesPage() {
           className="btn sm"
           disabled={filtered.length === 0}
           onClick={() => exportEnvelopes(filtered, `מעטפות_${new Date().toLocaleDateString('he-IL')}`)}
-        >⬇️ ייצוא CSV</button>
+        >📥 יצוא לאקסל</button>
       </div>
 
       {/* STATS */}

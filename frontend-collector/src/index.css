@@ -150,9 +150,10 @@ a { color: inherit; text-decoration: none; }
 
 /* ===== FORM ===== */
 .filters-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; align-items: flex-end; }
-.field { display: flex; flex-direction: column; gap: 6px; }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .field label { font-size: 13px; color: var(--text2); font-weight: 600; }
 .field input, .field select, .field textarea {
+  width: 100%; max-width: 100%;
   padding: 10px 14px; background: var(--surface); border: 1px solid var(--border2);
   border-radius: var(--radius-sm); color: var(--text); font-family: 'Heebo', sans-serif;
   font-size: 14px; outline: none; transition: all .2s;
@@ -249,7 +250,7 @@ tr:last-child td { border-bottom: none; }
 }
 .modal-box {
   width: min(600px, 100%); background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 32px; box-shadow: 0 20px 40px -10px rgba(0,0,0,0.1);
+  border-radius: var(--radius); padding: 20px; box-shadow: 0 20px 40px -10px rgba(0,0,0,0.1);
   max-height: 90vh; overflow-y: auto;
 }
 .modal-box.wide { width: min(800px, 100%); }
@@ -263,8 +264,9 @@ tr:last-child td { border-bottom: none; }
   font-size: 20px; cursor: pointer; transition: all .2s; line-height: 1;
 }
 .modal-close:hover { background: var(--border); color: var(--text); }
-.modal-row { display: flex; gap: 16px; margin-bottom: 16px; }
-.modal-row .field { flex: 1; }
+.modal-row { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+.modal-row .field { flex: 1 1 140px; min-width: 0; }
+.modal-backdrop { padding: 12px; }
 .modal-footer {
   display: flex; justify-content: space-between; align-items: center; margin-top: 32px;
   padding-top: 24px; border-top: 1px solid var(--border);
@@ -393,7 +395,7 @@ tr:last-child td { border-bottom: none; }
 .box-row:active { background: var(--surface2); }
 .box-row-num {
   font-weight: 800; color: var(--accent); font-size: 14px;
-  min-width: 56px; flex-shrink: 0;
+  min-width: 80px; flex-shrink: 0;
 }
 .box-row-main { flex: 1; min-width: 0; }
 .box-row-name {
@@ -507,9 +509,10 @@ tr:last-child td { border-bottom: none; }
   pointer-events: none;
 }
 .scanner-actions {
-  position: absolute; left: 0; right: 0;
+  position: fixed; left: 0; right: 0;
   bottom: calc(env(safe-area-inset-bottom) + 16px);
   display: flex; justify-content: center; padding: 0 16px;
+  z-index: 1600;
 }
 .scanner-manual-btn {
   background: rgba(255,255,255,0.95); color: var(--text);
@@ -518,10 +521,11 @@ tr:last-child td { border-bottom: none; }
   font-family: inherit;
 }
 .scanner-manual-form {
-  position: absolute; inset: 0;
+  position: fixed; inset: 0;
   background: rgba(0,0,0,0.75);
   display: flex; align-items: center; justify-content: center;
   padding: 16px;
+  z-index: 1600;
 }
 .scanner-manual-form .box {
   background: var(--surface); border-radius: var(--radius);
@@ -595,6 +599,10 @@ tr:last-child td { border-bottom: none; }
 .simple-row:active { background: var(--surface2); }
 .simple-row-title { font-weight: 700; font-size: 15px; color: var(--text); }
 .simple-row-meta { font-size: 13px; color: var(--text2); }
+.simple-row-section-title {
+  font-weight: 700; font-size: 14px; color: var(--text2);
+  margin: 14px 4px 8px;
+}
 
 /* ===== LOADING ===== */
 .loading {
@@ -651,6 +659,82 @@ tr:last-child td { border-bottom: none; }
 }
 .add-compare-col:hover {
   background: var(--accent-soft); border-color: var(--accent); color: var(--accent);
+}
+
+/* ===== CASHROOM (mobile-first) ===== */
+.cashroom-screen { padding: 0; }
+.cashroom-screen .page-header { margin-bottom: 16px; }
+.cashroom-screen .panel { padding: 16px; margin-bottom: 16px; }
+
+.cashroom-scan-form {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.cashroom-scan-input {
+  width: 100%; padding: 14px 16px; font-size: 18px; font-weight: 600;
+  border: 1px solid var(--border2); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--text);
+  font-family: inherit; outline: none;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02) inset;
+}
+.cashroom-scan-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.cashroom-scan-actions {
+  display: flex; gap: 10px;
+}
+.cashroom-scan-actions .btn { flex: 1; justify-content: center; padding: 14px; font-size: 15px; }
+.cashroom-camera-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-size: 16px; font-weight: 700;
+}
+
+.cashroom-list {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.cashroom-row {
+  width: 100%;
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px;
+  text-align: right; font-family: inherit;
+  cursor: pointer; box-shadow: var(--shadow);
+  transition: background .15s ease, transform .1s ease;
+}
+.cashroom-row:active { background: var(--surface2); transform: scale(0.998); }
+.cashroom-row.locked { cursor: default; opacity: 0.7; }
+.cashroom-row.locked:active { background: var(--surface); transform: none; }
+.cashroom-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.cashroom-row-title {
+  font-size: 15px; font-weight: 700; color: var(--text);
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.cashroom-row-title strong { color: var(--accent); font-weight: 800; }
+.cashroom-row-amount {
+  font-size: 13px; font-weight: 800; color: var(--green);
+  background: var(--green-soft); padding: 2px 10px; border-radius: 999px;
+}
+.cashroom-row-meta { font-size: 13px; color: var(--text2); }
+.cashroom-row-cta {
+  flex-shrink: 0; font-size: 13px; font-weight: 700;
+  color: var(--accent); white-space: nowrap;
+}
+.cashroom-row.locked .cashroom-row-cta { color: var(--text3); }
+
+/* Stack stats on narrow phones; tighten typography */
+@media (max-width: 480px) {
+  .cashroom-stats { gap: 8px; margin-bottom: 16px; }
+  .cashroom-stats .stat-card { padding: 12px; }
+  .cashroom-stats .stat-card .val { font-size: 22px; }
+  .cashroom-stats .stat-card .lbl { font-size: 11px; margin-top: 4px; }
+}
+
+/* Larger viewports: keep camera button beside the input */
+@media (min-width: 720px) {
+  .cashroom-scan-form { flex-direction: row; align-items: stretch; }
+  .cashroom-scan-input { flex: 1; }
+  .cashroom-scan-actions { flex: 0 0 auto; }
+  .cashroom-scan-actions .btn { flex: 0 0 auto; padding: 12px 18px; }
 }
 
 /* ===== SCROLLBAR ===== */

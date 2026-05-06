@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import ManualReportModal from '../../components/ManualReportModal'
 import CloseReportModal from '../../components/CloseReportModal'
 import ReportModal from '../../components/ReportModal'
+import { exportCsv, csvFilename } from '../../utils/exportCsv'
 
 function formatDate(iso) {
   if (!iso) return '—'
@@ -20,6 +21,7 @@ const STATUS = {
 export default function ReportsTab({ cardId, cardLabel }) {
   const { user } = useAuth()
   const canCreate = user?.role === 'admin'
+  const canCreateReport = user?.role === 'admin' || user?.role === 'collector'
 
   const [list, setList]     = useState([])
   const [loading, setLoading] = useState(true)
@@ -50,13 +52,29 @@ export default function ReportsTab({ cardId, cardLabel }) {
 
   return (
     <>
-      {canCreate && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+      <div className="entity-actions" style={{ marginBottom: 12 }}>
+        <button
+          className="btn sm"
+          disabled={list.length === 0}
+          onClick={() => exportCsv(
+            list,
+            [
+              { key: 'created_at',    label: 'תאריך', format: (v) => v ? new Date(v).toLocaleDateString('he-IL') : '' },
+              { key: 'type_name',     label: 'סוג' },
+              { key: 'description',   label: 'תיאור' },
+              { key: 'reporter_name', label: 'מדווח' },
+              { key: 'status',        label: 'סטטוס', format: (v) => STATUS[v]?.label || v || '' },
+              { key: 'closure_reason', label: 'סיבת סגירה' },
+            ],
+            csvFilename(`card_${cardId}_reports`)
+          )}
+        >📥 יצוא לאקסל</button>
+        {canCreateReport && (
           <button className="btn sm" onClick={() => setShowModal(true)}>
             ➕ צור דיווח
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {loading && <div className="loading"><div className="spinner" /><span>טוען דיווחים...</span></div>}
       {!loading && errMsg && <div className="alert red">{errMsg}</div>}

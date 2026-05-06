@@ -5,15 +5,21 @@ const { requireRole }  = require('../middleware/roles');
 const { completeTask, markTaskDoneNoLifecycle, EVENT } = require('../logic/cardLogic');
 
 router.use(authenticate);
+// Task 36: cashroom users have no access to tasks — only the cashroom workflow.
+router.use(requireRole('admin', 'collector'));
 
 const VALID_STATUSES = ['open', 'in_progress', 'done', 'cancelled'];
 
 // ─── helpers ──────────────────────────────────────────────────────
 async function fetchTaskWithType(taskId) {
   const { rows } = await pool.query(
-    `SELECT t.*, tt.opens_card, tt.closes_card, tt.name AS type_name, tt.icon
+    `SELECT t.*, tt.opens_card, tt.closes_card, tt.name AS type_name, tt.icon,
+            b.iron_number, u.name AS assigned_name, cb.name AS created_by_name
        FROM tasks t
        JOIN task_types tt ON tt.id = t.task_type_id
+       JOIN boxes b ON b.id = t.box_id
+       LEFT JOIN users u  ON u.id  = t.assigned_to
+       LEFT JOIN users cb ON cb.id = t.created_by
       WHERE t.id = $1`,
     [taskId]
   );

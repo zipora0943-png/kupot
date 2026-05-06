@@ -13,6 +13,7 @@ import TaskModal from '../components/TaskModal'
 import CancelTaskModal from '../components/CancelTaskModal'
 import { useAuth } from '../context/AuthContext'
 import { exportCsv, csvFilename } from '../utils/exportCsv'
+import { useSortable, SortableTh } from '../utils/sortable.jsx'
 
 const STATUS_LABELS = {
   open:        { label: 'פתוח',   pill: 'yellow' },
@@ -175,6 +176,16 @@ export default function TasksPage() {
     setSearch(''); setStatus(''); setTypeId(''); setAssignee('')
   }
 
+  const sortAccessors = useMemo(() => ({
+    type:     (t) => t.type_name,
+    iron:     (t) => t.iron_number,
+    card:     (t) => t.card_id ? (labels.get(t.card_id) || '') : '',
+    status:   (t) => STATUS_LABELS[t.status]?.label || t.status,
+    assigned: (t) => t.assigned_name,
+    source:   (t) => reportByTaskId.get(t.id) ? 1 : 0,
+  }), [labels, reportByTaskId])
+  const { sorted, sort, toggle } = useSortable(filtered, sortAccessors)
+
   return (
     <div className="screen">
       <div className="page-header">
@@ -182,7 +193,7 @@ export default function TasksPage() {
           <div className="page-title">משימות</div>
           <div className="page-subtitle">ניהול משימות שטח של הגובים</div>
         </div>
-        <div className="actions">
+        <div className="entity-actions">
           <button
             className="btn sm"
             disabled={filtered.length === 0}
@@ -203,7 +214,9 @@ export default function TasksPage() {
               csvFilename('tasks')
             )}
           >📥 יצוא לאקסל</button>
-          <button className="btn primary" onClick={openCreate}>+ משימה חדשה</button>
+          {isAdmin && (
+            <button className="btn primary" onClick={openCreate}>➕ צור משימה</button>
+          )}
         </div>
       </div>
 
@@ -282,17 +295,17 @@ export default function TasksPage() {
             <table>
               <thead>
                 <tr>
-                  <th>סוג</th>
-                  <th>קופה</th>
-                  <th>כרטסת</th>
-                  <th>סטטוס</th>
-                  <th>משויך</th>
-                  <th>מקור</th>
+                  <SortableTh sortKey="type"     sort={sort} onToggle={toggle}>סוג</SortableTh>
+                  <SortableTh sortKey="iron"     sort={sort} onToggle={toggle}>קופה</SortableTh>
+                  <SortableTh sortKey="card"     sort={sort} onToggle={toggle}>כרטסת</SortableTh>
+                  <SortableTh sortKey="status"   sort={sort} onToggle={toggle}>סטטוס</SortableTh>
+                  <SortableTh sortKey="assigned" sort={sort} onToggle={toggle}>משויך</SortableTh>
+                  <SortableTh sortKey="source"   sort={sort} onToggle={toggle}>מקור</SortableTh>
                   <th>פעולות</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(t => {
+                {sorted.map(t => {
                   const st = STATUS_LABELS[t.status] || { label: t.status, pill: 'gray' }
                   const cardLabel = t.card_id
                     ? (labels.get(t.card_id) || `#${t.card_id}`)

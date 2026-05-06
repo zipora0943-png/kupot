@@ -6,6 +6,8 @@ const { closeActiveCardForBox, EVENT } = require('../logic/cardLogic');
 const { getBoxesForCollector, isBoxAssignedToCollector } = require('../logic/userAssignment');
 
 router.use(authenticate);
+// Task 36: cashroom users have no access to box data — only the cashroom workflow.
+router.use(requireRole('admin', 'collector'));
 
 const VALID_STATUSES = ['uninstalled', 'active', 'inactive', 'unusable'];
 

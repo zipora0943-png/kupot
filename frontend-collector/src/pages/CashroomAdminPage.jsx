@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { envelopes as envelopesApi } from '../api/endpoints'
 import CashroomModal from '../components/CashroomModal'
+import BarcodeScanner from '../components/BarcodeScanner'
 
 function formatDate(iso) {
   if (!iso) return '—'
@@ -31,20 +32,16 @@ export default function CashroomAdminPage() {
   const [loading, setLoading] = useState(true)
   const [errMsg,  setErrMsg]  = useState(null)
 
-  // barcode scan
   const [scanValue, setScanValue] = useState('')
   const [scanErr,   setScanErr]   = useState(null)
   const [scanning,  setScanning]  = useState(false)
+  const [cameraOpen, setCameraOpen] = useState(false)
   const scanRef = useRef(null)
 
-  // modal
   const [openEnv, setOpenEnv] = useState(null)
 
-  // track today's entered envelopes (since this page started) — survives backend pending filter
   const [enteredToday, setEnteredToday] = useState([])
 
-  // Task 37: recent entered envelopes (most-recent first) shown at the bottom
-  // of the page; cashroom may edit only those entered today.
   const [recent, setRecent] = useState([])
   const [recentLoading, setRecentLoading] = useState(true)
   const [recentErr, setRecentErr] = useState(null)
@@ -81,46 +78,50 @@ export default function CashroomAdminPage() {
     return () => { cancelled = true }
   }, [])
 
-  // re-focus the scan input whenever the modal closes
   useEffect(() => {
-    if (!openEnv) scanRef.current?.focus()
-  }, [openEnv])
+    if (!openEnv && !cameraOpen) scanRef.current?.focus()
+  }, [openEnv, cameraOpen])
 
   function handleEnvSaved(updated) {
     if (!updated) return
-    // remove from pending list (no-op if it wasn't pending)
     setPending(prev => prev.filter(e => e.id !== updated.id))
-    // record for today's stat (only if entered today)
     if (updated.status === 'entered' && isToday(updated.entered_at || new Date().toISOString())) {
       setEnteredToday(prev => {
         if (prev.some(e => e.id === updated.id)) return prev
         return [...prev, updated]
       })
     }
-    // Task 37: keep the recent list in sync — refetch so ordering / joined
-    // fields (iron_number, city, etc.) come back from the server.
     loadRecent()
   }
 
-  async function handleScan(e) {
-    e?.preventDefault?.()
-    const num = scanValue.trim()
-    if (!num) return
+  async function performLookup(num) {
+    const value = String(num || '').trim()
+    if (!value) return
     setScanErr(null)
     setScanning(true)
     try {
-      const env = await envelopesApi.byNumber(num)
+      const env = await envelopesApi.byNumber(value)
       if (!env) {
-        setScanErr(`מעטפה ${num} לא נמצאה`)
+        setScanErr(`מעטפה ${value} לא נמצאה`)
         return
       }
       setOpenEnv(env)
       setScanValue('')
     } catch (err) {
-      setScanErr(err.message || `מעטפה ${num} לא נמצאה`)
+      setScanErr(err.message || `מעטפה ${value} לא נמצאה`)
     } finally {
       setScanning(false)
     }
+  }
+
+  async function handleScan(e) {
+    e?.preventDefault?.()
+    await performLookup(scanValue)
+  }
+
+  function handleCameraScan(value) {
+    setCameraOpen(false)
+    performLookup(value)
   }
 
   const totalToday = useMemo(
@@ -129,7 +130,7 @@ export default function CashroomAdminPage() {
   )
 
   return (
-    <div className="screen">
+    <div className="screen cashroom-screen">
       <div className="page-header">
         <div>
           <div className="page-title">חדר כסף</div>
@@ -137,8 +138,7 @@ export default function CashroomAdminPage() {
         </div>
       </div>
 
-      {/* STATS */}
-      <div className="stats-row stats-3">
+      <div className="stats-row stats-3 cashroom-stats">
         <div className="stat-card">
           <div className="val" style={{ color: 'var(--yellow)' }}>{pending.length}</div>
           <div className="lbl">ממתינות להזנה</div>
@@ -153,32 +153,39 @@ export default function CashroomAdminPage() {
         </div>
       </div>
 
-      {/* SCAN PANEL */}
       <div className="panel">
         <div className="page-title" style={{ fontSize: 16, marginBottom: 8 }}>סריקת מעטפה</div>
-        <form onSubmit={handleScan} className="filters-row" style={{ alignItems: 'flex-end' }}>
-          <div className="field grow">
-            <label>מספר מעטפה (ברקוד)</label>
-            <input
-              ref={scanRef}
-              autoFocus
-              placeholder="סרוק או הקלד מספר מעטפה ולחץ Enter"
-              value={scanValue}
-              onChange={(e) => { setScanValue(e.target.value); setScanErr(null) }}
+        <form onSubmit={handleScan} className="cashroom-scan-form">
+          <input
+            ref={scanRef}
+            autoFocus
+            placeholder="סרוק או הקלד מספר מעטפה"
+            value={scanValue}
+            onChange={(e) => { setScanValue(e.target.value); setScanErr(null) }}
+            disabled={scanning}
+            inputMode="numeric"
+            className="cashroom-scan-input"
+          />
+          <div className="cashroom-scan-actions">
+            <button
+              type="button"
+              className="btn cashroom-camera-btn"
+              onClick={() => setCameraOpen(true)}
               disabled={scanning}
-              style={{ fontSize: 18, padding: 12, fontWeight: 600 }}
-            />
+              aria-label="פתח מצלמה לסריקה"
+            >
+              📷 <span>סריקת מצלמה</span>
+            </button>
+            <button
+              type="submit"
+              className="btn primary"
+              disabled={scanning || !scanValue.trim()}
+            >{scanning ? 'מחפש...' : 'חיפוש'}</button>
           </div>
-          <button
-            type="submit"
-            className="btn primary"
-            disabled={scanning || !scanValue.trim()}
-          >{scanning ? 'מחפש...' : 'חיפוש'}</button>
         </form>
         {scanErr && <div className="alert red" style={{ marginTop: 10 }}>{scanErr}</div>}
       </div>
 
-      {/* PENDING QUEUE */}
       <div className="panel">
         <div className="actions" style={{ marginBottom: 12 }}>
           <div className="page-title" style={{ fontSize: 16 }}>תור מעטפות ממתינות</div>
@@ -194,41 +201,36 @@ export default function CashroomAdminPage() {
         ) : pending.length === 0 ? (
           <div className="empty">אין מעטפות ממתינות 🎉</div>
         ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>תאריך גביה</th>
-                  <th>מס' מעטפה</th>
-                  <th>קופה</th>
-                  <th>עיר</th>
-                  <th>גובה</th>
-                  <th>פעולה</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pending.map(e => (
-                  <tr key={e.id}>
-                    <td>{formatDate(e.collected_at)}</td>
-                    <td><strong>{e.envelope_number || '—'}</strong></td>
-                    <td>{e.iron_number || '—'}</td>
-                    <td>{e.city || '—'}</td>
-                    <td>{e.collector_name || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
-                    <td>
-                      <button
-                        className="btn sm primary"
-                        onClick={() => setOpenEnv(e)}
-                      >הזנת סכום</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="cashroom-list">
+            {pending.map(e => (
+              <button
+                key={e.id}
+                type="button"
+                className="cashroom-row pending"
+                onClick={() => setOpenEnv(e)}
+              >
+                <div className="cashroom-row-main">
+                  <div className="cashroom-row-title">
+                    מעטפה <strong>#{e.envelope_number || '—'}</strong>
+                  </div>
+                  <div className="cashroom-row-meta">
+                    {[
+                      e.iron_number ? `קופה ${e.iron_number}` : null,
+                      e.city,
+                      formatDate(e.collected_at),
+                    ].filter(Boolean).join(' · ')}
+                  </div>
+                  {e.collector_name && (
+                    <div className="cashroom-row-meta">גובה: {e.collector_name}</div>
+                  )}
+                </div>
+                <span className="cashroom-row-cta">הזנת סכום ‹</span>
+              </button>
+            ))}
           </div>
         )}
       </div>
 
-      {/* RECENT ENTERED ENVELOPES (Task 37) */}
       <div className="panel">
         <div className="actions" style={{ marginBottom: 12 }}>
           <div className="page-title" style={{ fontSize: 16 }}>מעטפות אחרונות שהוזנו</div>
@@ -244,47 +246,40 @@ export default function CashroomAdminPage() {
         ) : recent.length === 0 ? (
           <div className="empty">עדיין לא הוזנו מעטפות</div>
         ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>תאריך הזנה</th>
-                  <th>מס' מעטפה</th>
-                  <th>קופה</th>
-                  <th>עיר</th>
-                  <th>גובה</th>
-                  <th>סכום</th>
-                  <th>פעולה</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recent.map(e => {
-                  const editable = isToday(e.entered_at)
-                  return (
-                    <tr key={e.id}>
-                      <td>{formatDate(e.entered_at)}</td>
-                      <td><strong>{e.envelope_number || '—'}</strong></td>
-                      <td>{e.iron_number || '—'}</td>
-                      <td>{e.city || '—'}</td>
-                      <td>{e.collector_name || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
-                      <td>{formatMoney(e.amount) || '—'}</td>
-                      <td>
-                        {editable ? (
-                          <button
-                            className="btn sm"
-                            onClick={() => setOpenEnv(e)}
-                          >✏️ ערוך סכום</button>
-                        ) : (
-                          <span style={{ fontSize: 12, color: 'var(--text3)' }}>
-                            לא ניתן לתיקון
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+          <div className="cashroom-list">
+            {recent.map(e => {
+              const editable = isToday(e.entered_at)
+              const amount = formatMoney(e.amount)
+              const Tag = editable ? 'button' : 'div'
+              return (
+                <Tag
+                  key={e.id}
+                  type={editable ? 'button' : undefined}
+                  className={`cashroom-row entered${editable ? '' : ' locked'}`}
+                  onClick={editable ? () => setOpenEnv(e) : undefined}
+                >
+                  <div className="cashroom-row-main">
+                    <div className="cashroom-row-title">
+                      מעטפה <strong>#{e.envelope_number || '—'}</strong>
+                      {amount && <span className="cashroom-row-amount">{amount}</span>}
+                    </div>
+                    <div className="cashroom-row-meta">
+                      {[
+                        e.iron_number ? `קופה ${e.iron_number}` : null,
+                        e.city,
+                        formatDate(e.entered_at),
+                      ].filter(Boolean).join(' · ')}
+                    </div>
+                    {e.collector_name && (
+                      <div className="cashroom-row-meta">גובה: {e.collector_name}</div>
+                    )}
+                  </div>
+                  <span className="cashroom-row-cta">
+                    {editable ? '✏️ ערוך ‹' : 'נעול'}
+                  </span>
+                </Tag>
+              )
+            })}
           </div>
         )}
       </div>
@@ -295,6 +290,13 @@ export default function CashroomAdminPage() {
         onClose={() => setOpenEnv(null)}
         onSaved={handleEnvSaved}
       />
+
+      {cameraOpen && (
+        <BarcodeScanner
+          onScan={handleCameraScan}
+          onClose={() => setCameraOpen(false)}
+        />
+      )}
     </div>
   )
 }

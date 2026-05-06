@@ -4,24 +4,35 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole }  = require('../middleware/roles');
 const { openCard, closeCard, reopenCard, getActiveCard, EVENT } = require('../logic/cardLogic');
 const {
-  isCardAssignedToCollector, buildLocationClause, temporaryAccessClause,
-  RESOLVED_COLLECTOR_LATERAL,
+  isCardAssignedToCollector, isBoxAssignedToCollector,
+  buildLocationClause, temporaryAccessClause,
+  RESOLVED_COLLECTORS_LATERAL,
 } = require('../logic/userAssignment');
 
-// Overlay each row's collector_id / collector_name with the resolved values
-// from the LATERAL subquery, so the rule-based hierarchy is the source of truth.
+// Overlay each row's collector_id / collector_name with the resolved set of
+// collectors from the LATERAL subquery (multi-assignment, "כפילויות"). All
+// matching collectors are returned as parallel arrays; `collector_id` /
+// `collector_name` keep singular shape (first matching collector) for any
+// older callers, but the canonical fields going forward are the plural ones.
 function applyResolvedCollector(row) {
   if (!row) return row;
+  const ids   = Array.isArray(row.resolved_collector_ids)   ? row.resolved_collector_ids   : [];
+  const names = Array.isArray(row.resolved_collector_names) ? row.resolved_collector_names : [];
   return {
     ...row,
-    collector_id:   row.resolved_collector_id ?? null,
-    collector_name: row.resolved_collector_name ?? null,
-    resolved_collector_id: undefined,
-    resolved_collector_name: undefined,
+    collector_id:    ids[0]   ?? null,
+    collector_name:  row.resolved_collector_name ?? null,
+    collector_ids:   ids,
+    collector_names: names,
+    resolved_collector_ids:   undefined,
+    resolved_collector_names: undefined,
+    resolved_collector_name:  undefined,
   };
 }
 
 router.use(authenticate);
+// Task 36: cashroom users have no access to card data — only the cashroom workflow.
+router.use(requireRole('admin', 'collector'));
 
 const VALID_STATUSES = ['active', 'closed'];
 
@@ -37,8 +48,9 @@ router.get('/', async (req, res, next) => {
   const { city, neighborhood, street, collector_id, status, custom_name, receipt_required, box_id } = req.query;
 
   let q = `SELECT c.*, b.iron_number,
-                  rc.id   AS resolved_collector_id,
-                  rc.name AS resolved_collector_name,
+                  rc.ids       AS resolved_collector_ids,
+                  rc.names_arr AS resolved_collector_names,
+                  rc.names     AS resolved_collector_name,
                   GREATEST(
                     (SELECT MAX(e.collected_at) FROM envelopes e WHERE e.card_id = c.id),
                     (SELECT MAX(ev.created_at)  FROM events    ev WHERE ev.card_id = c.id AND ev.event_type = 'collection')
@@ -47,7 +59,7 @@ router.get('/', async (req, res, next) => {
                   EXISTS (SELECT 1 FROM tasks   t WHERE t.card_id = c.id AND t.status IN ('open','in_progress')) AS has_open_task
              FROM cards c
              JOIN boxes b ON b.id = c.box_id
-             ${RESOLVED_COLLECTOR_LATERAL}
+             ${RESOLVED_COLLECTORS_LATERAL}
             WHERE 1=1`;
   const p = [];
 
@@ -78,7 +90,7 @@ router.get('/', async (req, res, next) => {
   if (collector_id !== undefined) {
     const cid = Number(collector_id);
     if (!Number.isInteger(cid)) return res.status(400).json({ error: 'Invalid collector_id' });
-    p.push(cid); q += ` AND rc.id = $${p.length}`;
+    p.push(cid); q += ` AND $${p.length} = ANY(rc.ids)`;
   }
   if (status !== undefined) {
     if (!VALID_STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status' });
@@ -141,6 +153,50 @@ router.get('/locations', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/cards/lookup-by-iron/:iron_number
+// Resolve a box by its iron_number to the active card, with distinct error
+// states for the collector flow (manual box-number entry):
+//   404 'box_not_found' — no box has that iron_number
+//   403 'not_assigned'  — active card exists but is not visible to this collector
+//   409 'card_closed'   — box exists but has no active card
+//   200 + card row      — happy path
+// Registered before GET /:id so the literal path is matched first.
+router.get('/lookup-by-iron/:iron_number', async (req, res, next) => {
+  const iron = String(req.params.iron_number || '').trim();
+  if (!iron) return res.status(400).json({ error: 'iron_number required' });
+
+  try {
+    const { rows: boxRows } = await pool.query(
+      `SELECT id FROM boxes WHERE iron_number = $1`,
+      [iron]
+    );
+    if (!boxRows[0]) return res.status(404).json({ error: 'box_not_found' });
+    const boxId = boxRows[0].id;
+
+    const { rows: activeRows } = await pool.query(
+      `SELECT c.*, b.iron_number, b.status AS box_status,
+              rc.ids       AS resolved_collector_ids,
+              rc.names_arr AS resolved_collector_names,
+              rc.names     AS resolved_collector_name
+         FROM cards c
+         JOIN boxes b ON b.id = c.box_id
+         ${RESOLVED_COLLECTORS_LATERAL}
+        WHERE c.box_id = $1 AND c.status = 'active'
+        LIMIT 1`,
+      [boxId]
+    );
+
+    if (!activeRows[0]) return res.status(409).json({ error: 'card_closed' });
+
+    if (req.user.role === 'collector') {
+      const allowed = await isBoxAssignedToCollector(boxId, req.user.id);
+      if (!allowed) return res.status(403).json({ error: 'not_assigned' });
+    }
+
+    res.json(applyResolvedCollector(activeRows[0]));
+  } catch (err) { next(err); }
+});
+
 // GET /api/cards/:id
 router.get('/:id', async (req, res, next) => {
   const id = Number(req.params.id);
@@ -152,12 +208,17 @@ router.get('/:id', async (req, res, next) => {
     }
     const { rows } = await pool.query(
       `SELECT c.*, b.iron_number, b.status AS box_status, bt.name AS box_type_name,
-              rc.id   AS resolved_collector_id,
-              rc.name AS resolved_collector_name
+              rc.ids       AS resolved_collector_ids,
+              rc.names_arr AS resolved_collector_names,
+              rc.names     AS resolved_collector_name,
+              GREATEST(
+                (SELECT MAX(e.collected_at) FROM envelopes e WHERE e.card_id = c.id),
+                (SELECT MAX(ev.created_at)  FROM events    ev WHERE ev.card_id = c.id AND ev.event_type = 'collection')
+              ) AS last_collection_at
          FROM cards c
          JOIN boxes b ON b.id = c.box_id
          LEFT JOIN box_types bt ON bt.id = b.box_type_id
-         ${RESOLVED_COLLECTOR_LATERAL}
+         ${RESOLVED_COLLECTORS_LATERAL}
         WHERE c.id = $1`,
       [id]
     );
@@ -301,10 +362,11 @@ router.get('/:id/history', async (req, res, next) => {
     if (!card[0]) return res.status(404).json({ error: 'Not found' });
     const { rows } = await pool.query(
       `SELECT c.*,
-              rc.id   AS resolved_collector_id,
-              rc.name AS resolved_collector_name
+              rc.ids       AS resolved_collector_ids,
+              rc.names_arr AS resolved_collector_names,
+              rc.names     AS resolved_collector_name
          FROM cards c
-         ${RESOLVED_COLLECTOR_LATERAL}
+         ${RESOLVED_COLLECTORS_LATERAL}
         WHERE c.box_id = $1 ORDER BY c.opened_at`,
       [card[0].box_id]
     );

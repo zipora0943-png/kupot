@@ -5,45 +5,65 @@ export default function BarcodeScanner({ onScan, onClose }) {
   const videoRef = useRef(null)
   const controlsRef = useRef(null)
   const handledRef = useRef(false)
+  const onScanRef = useRef(onScan)
   const [error, setError] = useState(null)
 
-  useEffect(() => {
-    const reader = new BrowserMultiFormatReader()
-    let cancelled = false
+  useEffect(() => { onScanRef.current = onScan }, [onScan])
 
-    async function start() {
-      try {
-        const controls = await reader.decodeFromVideoDevice(
-          undefined,
-          videoRef.current,
-          (result, err, ctrls) => {
-            if (cancelled || handledRef.current) return
-            if (result) {
-              handledRef.current = true
-              const value = result.getText()
-              try { ctrls?.stop?.() } catch { /* ignore */ }
-              onScan?.(value)
-            }
+  useEffect(() => {
+    let cancelled = false
+    let reader = null
+    const startTimer = setTimeout(() => {
+      if (cancelled) return
+      reader = new BrowserMultiFormatReader()
+      const constraints = {
+        audio: false,
+        video: {
+          facingMode: { ideal: 'environment' },
+          width:  { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+      }
+      reader.decodeFromConstraints(
+        constraints,
+        videoRef.current,
+        (result, err, ctrls) => {
+          if (cancelled || handledRef.current) return
+          if (result) {
+            handledRef.current = true
+            const value = result.getText()
+            try { ctrls?.stop?.() } catch { /* ignore */ }
+            onScanRef.current?.(value)
           }
-        )
+        }
+      ).then((controls) => {
         if (cancelled) {
           try { controls.stop() } catch { /* ignore */ }
           return
         }
         controlsRef.current = controls
-      } catch (e) {
+      }).catch((e) => {
         if (cancelled) return
         setError(e?.message || 'לא ניתן לגשת למצלמה')
-      }
-    }
-
-    start()
+      })
+    }, 120)
 
     return () => {
       cancelled = true
-      try { controlsRef.current?.stop?.() } catch { /* ignore */ }
+      clearTimeout(startTimer)
+      const controls = controlsRef.current
+      controlsRef.current = null
+      if (controls) {
+        try { controls.stop() } catch { /* ignore */ }
+      }
+      const v = videoRef.current
+      const stream = v && v.srcObject
+      if (stream && typeof stream.getTracks === 'function') {
+        try { stream.getTracks().forEach((t) => t.stop()) } catch { /* ignore */ }
+        try { v.srcObject = null } catch { /* ignore */ }
+      }
     }
-  }, [onScan])
+  }, [])
 
   return (
     <div className="scanner-screen">

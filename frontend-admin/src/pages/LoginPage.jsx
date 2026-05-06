@@ -1,9 +1,10 @@
 import React, { useState } from 'react'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { defaultPathForRole } from '../utils/defaultPath'
 
 export default function LoginPage() {
-  const { login, isAuthenticated, loading: authLoading } = useAuth()
+  const { login, isAuthenticated, loading: authLoading, user: currentUser } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -12,9 +13,9 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
   const [errMsg, setErrMsg] = useState(null)
 
-  // If already logged in, bounce to home
+  // If already logged in, bounce to home (role-aware default)
   if (!authLoading && isAuthenticated) {
-    const dest = location.state?.from?.pathname || '/cards'
+    const dest = location.state?.from?.pathname || defaultPathForRole(currentUser?.role)
     return <Navigate to={dest} replace />
   }
 
@@ -28,11 +29,7 @@ export default function LoginPage() {
     setSubmitting(true)
     try {
       const user = await login(username.trim(), password)
-      // Only admin should access this app, but for demo we allow all
-      if (user.role !== 'admin') {
-        setErrMsg(`שים לב — משתמש זה הוא ${user.role}, לא מנהל. ייתכנו הגבלות גישה.`)
-      }
-      const dest = location.state?.from?.pathname || '/cards'
+      const dest = location.state?.from?.pathname || defaultPathForRole(user?.role)
       navigate(dest, { replace: true })
     } catch (err) {
       setErrMsg(err.message || 'שגיאת התחברות')

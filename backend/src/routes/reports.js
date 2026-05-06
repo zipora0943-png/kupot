@@ -6,6 +6,8 @@ const { getActiveCard, EVENT } = require('../logic/cardLogic');
 const { isCardAssignedToCollector, isBoxAssignedToCollector, buildLocationClause } = require('../logic/userAssignment');
 
 router.use(authenticate);
+// Task 36: cashroom users have no access to reports — only the cashroom workflow.
+router.use(requireRole('admin', 'collector'));
 
 const VALID_STATUSES = ['open', 'converted', 'closed'];
 

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { events as eventsApi } from '../../api/endpoints'
 import { useAuth } from '../../context/AuthContext'
 import ManualEventModal from '../../components/ManualEventModal'
+import { exportCsv, csvFilename } from '../../utils/exportCsv'
 
 function formatDate(iso) {
   if (!iso) return '—'
@@ -35,16 +36,25 @@ export default function EventsTab({ cardId, cardLabel }) {
   const [reloadCounter, setReloadCounter] = useState(0)
 
   const canCreate = user?.role === 'admin'
+  const isCollector = user?.role === 'collector'
 
   useEffect(() => {
     let cancelled = false
     setLoading(true); setErrMsg(null)
     eventsApi.getByCard(cardId)
-      .then(d => { if (!cancelled) setList(Array.isArray(d) ? d : []) })
+      .then(d => {
+        if (cancelled) return
+        const items = Array.isArray(d) ? d : []
+        // Task 35: collectors see only events tied to themselves.
+        const visible = isCollector
+          ? items.filter(e => Number(e.user_id) === Number(user?.id))
+          : items
+        setList(visible)
+      })
       .catch(err => { if (!cancelled) setErrMsg(err.message || 'שגיאה בטעינת אירועים') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [cardId, reloadCounter])
+  }, [cardId, reloadCounter, isCollector, user?.id])
 
   function handleCreated() {
     setReloadCounter(c => c + 1)
@@ -52,13 +62,27 @@ export default function EventsTab({ cardId, cardLabel }) {
 
   return (
     <>
-      {canCreate && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+      <div className="entity-actions" style={{ marginBottom: 12 }}>
+        <button
+          className="btn sm"
+          disabled={list.length === 0}
+          onClick={() => exportCsv(
+            list,
+            [
+              { key: 'created_at',  label: 'תאריך', format: (v) => v ? new Date(v).toLocaleDateString('he-IL') : '' },
+              { key: 'event_type',  label: 'סוג', format: (v) => EVENT_TYPE[v]?.label || v || '' },
+              { key: 'description', label: 'תיאור' },
+              { key: 'user_name',   label: 'משתמש' },
+            ],
+            csvFilename(`card_${cardId}_events`)
+          )}
+        >📥 יצוא לאקסל</button>
+        {canCreate && (
           <button className="btn sm" onClick={() => setShowModal(true)}>
             ➕ צור אירוע
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {loading && <div className="loading"><div className="spinner" /><span>טוען אירועים...</span></div>}
       {!loading && errMsg && <div className="alert red">{errMsg}</div>}

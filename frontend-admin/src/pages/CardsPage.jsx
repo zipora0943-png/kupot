@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { cards as cardsApi, alerts as alertsApi, reports as reportsApi } from '../api/endpoints'
 import { computeCardLabels } from '../utils/cardLabel'
 import { exportCards } from '../utils/exportToCsv'
+import { useSortable, SortableTh } from '../utils/sortable.jsx'
 
 const STATUS_LABELS = {
   active: { label: 'פעילה',     pill: 'green' },
@@ -48,7 +49,9 @@ export default function CardsPage() {
 
   // load stats (best-effort, errors silenced)
   useEffect(() => {
-    alertsApi.getAll().then(d => setAlertCount(Array.isArray(d) ? d.length : 0)).catch(() => {})
+    alertsApi.noCollection()
+      .then(d => setAlertCount(typeof d?.count === 'number' ? d.count : (Array.isArray(d?.items) ? d.items.length : 0)))
+      .catch(() => {})
     reportsApi.getAll({ status: 'open' }).then(d => setOpenReports(Array.isArray(d) ? d.length : 0)).catch(() => {})
   }, [])
 
@@ -62,7 +65,12 @@ export default function CardsPage() {
   const collectors = useMemo(() => {
     const map = new Map()
     allCards.forEach(c => {
-      if (c.collector_id && c.collector_name) map.set(c.collector_id, c.collector_name)
+      const ids   = Array.isArray(c.collector_ids)   ? c.collector_ids   : []
+      const names = Array.isArray(c.collector_names) ? c.collector_names : []
+      ids.forEach((id, i) => {
+        const name = names[i]
+        if (id != null && name) map.set(id, name)
+      })
     })
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }))
                 .sort((a, b) => a.name.localeCompare(b.name, 'he'))
@@ -78,7 +86,11 @@ export default function CardsPage() {
     if (statusTab === 'active') list = list.filter(c => c.status === 'active')
     if (status)    list = list.filter(c => c.status === status)
     if (city)      list = list.filter(c => c.city === city)
-    if (collector) list = list.filter(c => String(c.collector_id) === String(collector))
+    if (collector) {
+      const target = Number(collector)
+      list = list.filter(c => Array.isArray(c.collector_ids)
+        && c.collector_ids.some(id => Number(id) === target))
+    }
     if (search) {
       const q = search.trim().toLowerCase()
       list = list.filter(c => {
@@ -99,6 +111,20 @@ export default function CardsPage() {
   function resetFilters() {
     setSearch(''); setStatus(''); setCity(''); setCollector('')
   }
+
+  const sortAccessors = useMemo(() => ({
+    iron:         (c) => c.iron_number,
+    card:         (c) => labels.get(c.id) || '',
+    city:         (c) => c.city,
+    neighborhood: (c) => c.neighborhood,
+    street:       (c) => c.street,
+    building:     (c) => c.building,
+    collector:    (c) => c.collector_name,
+    last:         (c) => c.last_collection_at ? new Date(c.last_collection_at) : null,
+    status:       (c) => STATUS_LABELS[c.status]?.label || c.status,
+    flags:        (c) => (c.has_open_report ? 2 : 0) + (c.has_open_task ? 1 : 0),
+  }), [labels])
+  const { sorted, sort, toggle } = useSortable(filtered, sortAccessors)
 
   return (
     <div className="screen">
@@ -174,7 +200,7 @@ export default function CardsPage() {
             className="btn sm"
             onClick={() => exportCards(filtered, `כרטסות_${new Date().toLocaleDateString('he-IL')}`)}
             disabled={filtered.length === 0}
-          >⬇️ ייצוא CSV</button>
+          >📥 יצוא לאקסל</button>
           <div style={{ marginRight: 'auto', fontSize: 13, color: 'var(--text2)' }}>
             סה"כ: <strong style={{ color: 'var(--text)' }}>{filtered.length}</strong>
           </div>
@@ -191,21 +217,21 @@ export default function CardsPage() {
             <table>
               <thead>
                 <tr>
-                  <th>קופה</th>
-                  <th>כרטסת</th>
-                  <th>עיר</th>
-                  <th>שכונה</th>
-                  <th>רחוב</th>
-                  <th>בנין</th>
-                  <th>גובה</th>
-                  <th>גביה אחרונה</th>
-                  <th>סטטוס</th>
-                  <th>סימונים</th>
+                  <SortableTh sortKey="iron"         sort={sort} onToggle={toggle}>קופה</SortableTh>
+                  <SortableTh sortKey="card"         sort={sort} onToggle={toggle}>כרטסת</SortableTh>
+                  <SortableTh sortKey="city"         sort={sort} onToggle={toggle}>עיר</SortableTh>
+                  <SortableTh sortKey="neighborhood" sort={sort} onToggle={toggle}>שכונה</SortableTh>
+                  <SortableTh sortKey="street"       sort={sort} onToggle={toggle}>רחוב</SortableTh>
+                  <SortableTh sortKey="building"     sort={sort} onToggle={toggle}>בנין</SortableTh>
+                  <SortableTh sortKey="collector"    sort={sort} onToggle={toggle}>גובה</SortableTh>
+                  <SortableTh sortKey="last"         sort={sort} onToggle={toggle}>גביה אחרונה</SortableTh>
+                  <SortableTh sortKey="status"       sort={sort} onToggle={toggle}>סטטוס</SortableTh>
+                  <SortableTh sortKey="flags"        sort={sort} onToggle={toggle}>סימונים</SortableTh>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(c => {
+                {sorted.map(c => {
                   const st = STATUS_LABELS[c.status] || { label: c.status, pill: 'gray' }
                   const label = labels.get(c.id) || `#${c.id}`
                   const cardLabel = c.custom_name

@@ -11,6 +11,7 @@ import ManualReportModal from '../components/ManualReportModal'
 import CloseReportModal from '../components/CloseReportModal'
 import { exportReports } from '../utils/exportToCsv'
 import { useAuth } from '../context/AuthContext'
+import { useSortable, SortableTh } from '../utils/sortable.jsx'
 
 const STATUS_LABELS = {
   open:      { label: 'פתוח',  pill: 'yellow' },
@@ -29,6 +30,7 @@ export default function ReportsPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const canCreate = user?.role === 'admin'
+  const canCreateReport = user?.role === 'admin' || user?.role === 'collector'
 
   const [allReports, setAllReports] = useState([])
   const [allCards,   setAllCards]   = useState([])
@@ -115,6 +117,17 @@ export default function ReportsPage() {
     setSearch(''); setStatus(''); setTypeId('')
   }
 
+  const sortAccessors = useMemo(() => ({
+    date:     (r) => r.created_at ? new Date(r.created_at) : null,
+    iron:     (r) => r.iron_number,
+    card:     (r) => r.card_id ? (labels.get(r.card_id) || '') : '',
+    type:     (r) => r.type_name,
+    desc:     (r) => r.description,
+    reporter: (r) => r.reporter_name,
+    status:   (r) => STATUS_LABELS[r.status]?.label || r.status,
+  }), [labels])
+  const { sorted, sort, toggle } = useSortable(filtered, sortAccessors)
+
   return (
     <div className="screen">
       <div className="page-header">
@@ -122,18 +135,18 @@ export default function ReportsPage() {
           <div className="page-title">דיווחים</div>
           <div className="page-subtitle">דיווחי תקלות מהשטח — לטיפול והמרה למשימות</div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {canCreate && (
-            <button
-              className="btn sm success"
-              onClick={() => setShowCreate(true)}
-            >➕ צור דיווח</button>
-          )}
+        <div className="entity-actions">
           <button
             className="btn sm"
             disabled={filtered.length === 0}
             onClick={() => exportReports(filtered, `דיווחים_${new Date().toLocaleDateString('he-IL')}`)}
-          >⬇️ ייצוא CSV</button>
+          >📥 יצוא לאקסל</button>
+          {canCreateReport && (
+            <button
+              className="btn primary"
+              onClick={() => setShowCreate(true)}
+            >➕ צור דיווח</button>
+          )}
         </div>
       </div>
 
@@ -202,18 +215,18 @@ export default function ReportsPage() {
             <table>
               <thead>
                 <tr>
-                  <th>תאריך</th>
-                  <th>קופה</th>
-                  <th>כרטסת</th>
-                  <th>סוג</th>
-                  <th>תיאור</th>
-                  <th>גובה</th>
-                  <th>סטטוס</th>
+                  <SortableTh sortKey="date"     sort={sort} onToggle={toggle}>תאריך</SortableTh>
+                  <SortableTh sortKey="iron"     sort={sort} onToggle={toggle}>קופה</SortableTh>
+                  <SortableTh sortKey="card"     sort={sort} onToggle={toggle}>כרטסת</SortableTh>
+                  <SortableTh sortKey="type"     sort={sort} onToggle={toggle}>סוג</SortableTh>
+                  <SortableTh sortKey="desc"     sort={sort} onToggle={toggle}>תיאור</SortableTh>
+                  <SortableTh sortKey="reporter" sort={sort} onToggle={toggle}>גובה</SortableTh>
+                  <SortableTh sortKey="status"   sort={sort} onToggle={toggle}>סטטוס</SortableTh>
                   <th>פעולה</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(r => {
+                {sorted.map(r => {
                   const st = STATUS_LABELS[r.status] || { label: r.status, pill: 'gray' }
                   const cardLabel = r.card_id ? (labels.get(r.card_id) || `#${r.card_id}`) : null
                   return (

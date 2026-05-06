@@ -1,9 +1,12 @@
 const router = require('express').Router();
 const pool   = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
-const { buildLocationClause, RESOLVED_COLLECTOR_LATERAL } = require('../logic/userAssignment');
+const { requireRole }  = require('../middleware/roles');
+const { buildLocationClause, RESOLVED_COLLECTORS_LATERAL } = require('../logic/userAssignment');
 
 router.use(authenticate);
+// Task 36: cashroom users have no access to alerts — only the cashroom workflow.
+router.use(requireRole('admin', 'collector'));
 
 // Default grace period for newly-opened cards before they can trigger alerts.
 // Cards opened more recently than threshold_days ago are excluded.
@@ -53,8 +56,9 @@ router.get('/no-collection', async (req, res, next) => {
         c.box_id,
         b.iron_number,
         c.city, c.neighborhood, c.street, c.building, c.custom_name,
-        rc.id   AS collector_id,
-        rc.name AS collector_name,
+        rc.ids       AS collector_ids,
+        rc.names_arr AS collector_names,
+        rc.names     AS collector_name,
         c.alert_days_personal,
         COALESCE(c.alert_days_personal, $1) AS threshold_days,
         c.opened_at,
@@ -63,7 +67,7 @@ router.get('/no-collection', async (req, res, next) => {
           AS days_since
       FROM cards c
       JOIN boxes b ON b.id = c.box_id
-      ${RESOLVED_COLLECTOR_LATERAL}
+      ${RESOLVED_COLLECTORS_LATERAL}
       LEFT JOIN last_collections lc ON lc.card_id = c.id
       WHERE c.status = 'active'
         ${collectorClause}

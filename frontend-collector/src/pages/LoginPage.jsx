@@ -1,9 +1,10 @@
 import React, { useState } from 'react'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { defaultPathForRole } from '../utils/defaultPath'
 
 export default function LoginPage() {
-  const { login, isAuthenticated, loading: authLoading } = useAuth()
+  const { login, user, isAuthenticated, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -13,7 +14,12 @@ export default function LoginPage() {
   const [errMsg, setErrMsg] = useState(null)
 
   if (!authLoading && isAuthenticated) {
-    const dest = location.state?.from?.pathname || '/boxes'
+    // Cashroom users always go straight to the cashroom screen — even if they
+    // were redirected here from a different deep-link, RoleGuard would bounce
+    // them right back. Skip the round-trip.
+    const dest = user?.role === 'cashroom'
+      ? defaultPathForRole(user.role)
+      : (location.state?.from?.pathname || '/boxes')
     return <Navigate to={dest} replace />
   }
 
@@ -26,8 +32,10 @@ export default function LoginPage() {
     }
     setSubmitting(true)
     try {
-      await login(username.trim(), password)
-      const dest = location.state?.from?.pathname || '/boxes'
+      const loggedIn = await login(username.trim(), password)
+      const dest = loggedIn?.role === 'cashroom'
+        ? defaultPathForRole(loggedIn.role)
+        : (location.state?.from?.pathname || '/boxes')
       navigate(dest, { replace: true })
     } catch (err) {
       setErrMsg(err.message || 'שגיאת התחברות')

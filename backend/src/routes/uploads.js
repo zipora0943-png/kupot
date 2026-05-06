@@ -1,9 +1,12 @@
 const router = require('express').Router();
 const path   = require('path');
 const { authenticate } = require('../middleware/auth');
+const { requireRole }  = require('../middleware/roles');
 const { uploadSingle } = require('../middleware/upload');
 
 router.use(authenticate);
+// Task 36: cashroom users have no access to image uploads — only the cashroom workflow.
+router.use(requireRole('admin', 'collector'));
 
 // POST /api/uploads/image  — multipart form, field name "image"
 // Returns: { path: '/uploads/<filename>' }

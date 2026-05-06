@@ -4,6 +4,7 @@ import TaskModal from '../../components/TaskModal'
 import TaskExecDetailsModal from '../../components/TaskExecDetailsModal'
 import CancelTaskModal from '../../components/CancelTaskModal'
 import { useAuth } from '../../context/AuthContext'
+import { exportCsv, csvFilename } from '../../utils/exportCsv'
 
 function formatDate(iso) {
   if (!iso) return '—'
@@ -55,13 +56,34 @@ export default function TasksTab({ cardId, boxId }) {
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+      <div className="entity-actions" style={{ marginBottom: 12 }}>
         <button
-          className="btn primary sm"
-          type="button"
-          onClick={() => setCreateOpen(true)}
-          disabled={!boxId}
-        >➕ צור משימה</button>
+          className="btn sm"
+          disabled={list.length === 0}
+          onClick={() => exportCsv(
+            list,
+            [
+              { key: 'created_at',     label: 'תאריך', format: (v) => v ? new Date(v).toLocaleDateString('he-IL') : '' },
+              { key: 'type_name',      label: 'סוג' },
+              { key: 'status',         label: 'סטטוס', format: (v) => STATUS[v]?.label || v || '' },
+              { key: 'assigned_name',  label: 'משויך' },
+              { key: 'created_by_name', label: 'נוצר ע"י' },
+              { key: 'notes',          label: 'הערות' },
+              { key: 'execution_notes', label: 'הערות ביצוע' },
+              { key: 'cancellation_reason', label: 'סיבת ביטול' },
+              { key: 'executed_at',    label: 'בוצע בתאריך', format: (v) => v ? new Date(v).toLocaleDateString('he-IL') : '' },
+            ],
+            csvFilename(`card_${cardId}_tasks`)
+          )}
+        >📥 יצוא לאקסל</button>
+        {isAdmin && (
+          <button
+            className="btn sm"
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            disabled={!boxId}
+          >➕ צור משימה</button>
+        )}
       </div>
 
       {loading ? (

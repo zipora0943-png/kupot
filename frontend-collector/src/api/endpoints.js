@@ -74,6 +74,10 @@ export const cards = {
   // Distinct location values for autocomplete combobox (task 26).
   // params: { level: 'city'|'neighborhood'|'street', city?, neighborhood? }
   locations: (params)    => api.get('/cards/locations', params),
+  // Resolve a box by iron_number to its active card. Throws an error whose
+  // .data.error is one of: 'box_not_found' | 'not_assigned' | 'card_closed'.
+  lookupByIron: (ironNumber) =>
+    api.get(`/cards/lookup-by-iron/${encodeURIComponent(ironNumber)}`),
 };
 
 // ---- ENVELOPES ----
@@ -86,6 +90,8 @@ export const envelopes = {
   updateAmount: (id, amount, reason) =>
     api.patch(`/envelopes/${id}/amount`, { amount, reason: reason || null }),
   getPending: ()         => api.get('/envelopes/pending'),
+  // Task 37: most-recent entered envelopes (for cashroom recent-envelopes panel)
+  getRecentEntered: (limit) => api.get('/envelopes/entered-recent', limit ? { limit } : undefined),
   byNumber: (number)     => api.get(`/envelopes/by-number/${encodeURIComponent(number)}`),
 };
 

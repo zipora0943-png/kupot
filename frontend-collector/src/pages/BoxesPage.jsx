@@ -2,7 +2,19 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { cards as cardsApi } from '../api/endpoints'
 import { daysSince } from '../utils/daysSince'
-import { computeCardLabels } from '../utils/cardLabel'
+
+const STORAGE_KEY = 'collector:boxes:filters'
+
+function readStoredFilters() {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return (parsed && typeof parsed === 'object') ? parsed : null
+  } catch {
+    return null
+  }
+}
 
 export default function BoxesPage() {
   const navigate = useNavigate()
@@ -10,9 +22,16 @@ export default function BoxesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const [searchInput, setSearchInput] = useState('')
-  const [search, setSearch] = useState('')
-  const [sort, setSort] = useState('days_desc')
+  const stored = useMemo(() => readStoredFilters(), [])
+  const [searchInput, setSearchInput] = useState(stored?.search ?? '')
+  const [search, setSearch] = useState(stored?.search ?? '')
+  const [sort, setSort] = useState(stored?.sort ?? 'days_desc')
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ search: searchInput, sort }))
+    } catch { /* ignore quota errors */ }
+  }, [searchInput, sort])
 
   useEffect(() => {
     let cancelled = false
@@ -36,8 +55,6 @@ export default function BoxesPage() {
     const t = setTimeout(() => setSearch(searchInput.trim().toLowerCase()), 200)
     return () => clearTimeout(t)
   }, [searchInput])
-
-  const labels = useMemo(() => computeCardLabels(list), [list])
 
   const filtered = useMemo(() => {
     const base = !search
@@ -70,6 +87,8 @@ export default function BoxesPage() {
         const nb = b.custom_name || `קופה ${b.iron_number}`
         return na.localeCompare(nb, 'he')
       })
+    } else if (sort === 'street_asc') {
+      arr.sort((a, b) => (a.street || '').localeCompare(b.street || '', 'he'))
     }
     return arr
   }, [list, search, sort])
@@ -90,6 +109,7 @@ export default function BoxesPage() {
           <option value="days_desc">מיון: ימים ללא גביה (יורד)</option>
           <option value="iron_asc">מיון: מספר קופה (עולה)</option>
           <option value="name_asc">מיון: שם (א-ת)</option>
+          <option value="street_asc">מיון: רחוב (א-ת)</option>
         </select>
       </div>
 
@@ -98,8 +118,6 @@ export default function BoxesPage() {
       ) : (
         <div className="boxes-list">
           {filtered.map((c) => {
-            const label = labels.get(c.id) || String(c.iron_number ?? '')
-            const title = c.custom_name || label
             const days = daysSince(c.last_collection_at)
             const tagText = days == null ? 'טרם נגבה' : `${days} ימים`
             return (
@@ -116,10 +134,14 @@ export default function BoxesPage() {
                   }
                 }}
               >
-                <div className="box-row-num">#{label}</div>
+                <div className="box-row-num">קופה: {c.iron_number ?? '—'}</div>
                 <div className="box-row-main">
-                  <div className="box-row-name">{title}</div>
-                  <div className="box-row-city">{c.city || ''}</div>
+                  {c.custom_name && <div className="box-row-name">{c.custom_name}</div>}
+                  <div className="box-row-city">
+                    {[c.city, c.neighborhood, [c.street, c.building].filter(Boolean).join(' ')]
+                      .filter((s) => typeof s === 'string' && s.trim())
+                      .join(' • ')}
+                  </div>
                 </div>
                 <div className="box-row-tag">{tagText}</div>
               </div>

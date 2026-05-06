@@ -28,9 +28,14 @@
 
 ## ⏳ ממתינות
 
+### 35. גובה — סליידר מצומצם והרשאות מוגבלות בתוך הכרטסת
+כשמשתמש מסוג "גובה" נכנס, בסליידר השמאלי יוצגו לו רק: **כרטסת, משימות, התראות, דיווחים**. בתוך הכרטסת: לא יוכל לסגור כרטסת, לא יראה את טאב המעטפות, ובטאב האירועים יראה רק אירועים שמשויכים אליו.
+
 ---
 
 ## 🔄 בביצוע
+
+_(אין משימה בביצוע)_
 
 ---
 
@@ -41,6 +46,209 @@
 **מה נעשה:** סיכום קצר
 **קבצים ששונו:** רשימה
 -->
+
+### 38. כרטסות — כרטיס "לא רוקנו" יציג את כמות התראות אי-גביה — 2026-05-07
+**מה נעשה:** בעמוד "כרטסות" (`CardsPage.jsx`) כרטיס הסטטיסטיקה "לא רוקנו" השתמש ב-`alertsApi.getAll()` שפונה ל-`GET /api/alerts` — אנדפוינט שלא קיים בבק-אנד (קובץ `routes/alerts.js` חושף רק `/no-collection`). כתוצאה מכך הקריאה נכשלה (`.catch(() => {})` בלע אותה בשקט) והמספר נותר תמיד 0. החלפתי את הקריאה ל-`alertsApi.noCollection()` שמחזיר `{ global_threshold, count, items: [] }`, וכעת `alertCount` נטען מ-`d.count` (עם fallback ל-`d.items.length`). כך הכותרת בכרטסת "לא רוקנו" מציגה כראוי את מספר ההתראות בפועל מאחורי כרטסות שלא רוקנו בזמן שהוגדר ב-`alert_days_global` (או הסף האישי של הכרטסת).
+
+**קבצים ששונו:**
+- `frontend-admin/src/pages/CardsPage.jsx` — `alertsApi.getAll()` → `alertsApi.noCollection()`, וקריאת `d.count` במקום `d.length`.
+
+---
+
+### 36. חדר כסף — מסך נעול יחיד + חסימת API לכל יתר המערכת — 2026-05-07
+**מה נעשה:** משתמש מסוג "חדר כסף" (מזין) נכנס למערכת ורואה רק את תצוגת חדר הכסף — בלי סליידר, בלי גישה לעמודים אחרים, ובלי גישת API לאף משאב שאינו קשור לחדר הכסף. ההגבלה היא דו-שכבתית: גם UI נקי וגם Backend חוסם.
+
+- **Backend — חסימת ראוטים שאינם של חדר כסף:** הוספתי `router.use(requireRole('admin', 'collector'))` מיד אחרי `router.use(authenticate)` בכל ראוטר שאינו רלוונטי לחדר כסף — `boxes.js`, `cards.js`, `events.js`, `tasks.js`, `reports.js`, `alerts.js`, `settings.js`, `uploads.js`. כל בקשה של משתמש cashroom לראוטים אלה מחזירה כעת 403. ב-`reportsExport.js` שיניתי את `requireRole('admin', 'cashroom')` ל-`requireRole('admin')` — חדר הכסף איבד את גישתו לעמוד הדוחות (`/dochot`). `users.js` ממילא היה `admin`-only. ראוטר ה-envelopes נשאר ללא חסימה כללית כי שם נמצאים בדיוק האנדפוינטים שחדר הכסף צריך — `/pending`, `/entered-recent`, `/by-number/:n`, `PUT /:id`, `PATCH /:id/amount` — וכולם כבר היו מוגנים ב-`requireRole('admin', 'cashroom')` ברמת ה-endpoint. אנדפוינט ה-Login וה-`/auth/me` נשארו פתוחים כדי לאפשר התחברות ושמירת סשן.
+
+- **Frontend — סליידר נעלם:** ב-`Layout.jsx` הוספתי בדיקת `isCashroom = user?.role === 'cashroom'` ועיטוף ה-`<Sidebar />` ב-`{!isCashroom && ...}`. כך משתמש cashroom רואה רק את ה-TopBar (שם משתמש + יציאה) ואת התוכן הראשי, ללא ניווט צדי בכלל.
+
+- **Frontend — נעילת ניווט:** ב-`App.jsx` הוספתי רכיב `CashroomLockGuard` שעוטף את ה-Layout בתוך ה-ProtectedRoute. הרכיב בודק `useLocation()` ואם המשתמש הוא cashroom וה-URL אינו `/cashroom-admin` — מבצע `<Navigate to="/cashroom-admin" replace />`. זה מטפל בכל וקטורי הניווט: הקלדה ידנית של URL, deep-link, רענון של דף, או ניסיון לעקוף את הסליידר. בנוסף, `defaultPathForRole('cashroom')` כבר היה מחזיר `/cashroom-admin` (מההתממשות הקודמת של 36) — כך שגם כניסה מ-`/login` או מהשורש מובילה ישר לתצוגת חדר הכסף.
+
+- **שיקול עיצובי:** ההגנה הדו-שכבתית (UI + Backend) מבטיחה שגם אם משתמש cashroom ישנה משהו ב-DOM/devtools או ינסה לקרוא ידנית ל-API — הוא יקבל 403 מהשרת. ה-CashroomLockGuard מותקן כעטיפה ב-Route element ולא כ-middleware של React Router כדי שהוא יחול גם על URL-ים שאינם בעץ הראוטים שלנו (catch-all `*` הופך ל-`HomeRedirect` שגם הוא מחזיר ל-`/cashroom-admin`).
+
+**קבצים ששונו:**
+- `backend/src/routes/boxes.js` (`router.use(requireRole('admin', 'collector'))`)
+- `backend/src/routes/cards.js` (אותו דפוס)
+- `backend/src/routes/events.js` (אותו דפוס)
+- `backend/src/routes/tasks.js` (אותו דפוס)
+- `backend/src/routes/reports.js` (אותו דפוס)
+- `backend/src/routes/alerts.js` (import של `requireRole` + `router.use(requireRole(...))`)
+- `backend/src/routes/settings.js` (אותו דפוס)
+- `backend/src/routes/uploads.js` (import של `requireRole` + `router.use(requireRole(...))`)
+- `backend/src/routes/reportsExport.js` (`requireRole('admin', 'cashroom')` → `requireRole('admin')`)
+- `frontend-admin/src/components/Layout.jsx` (import של `useAuth`; הסתרת ה-Sidebar למשתמש cashroom)
+- `frontend-admin/src/App.jsx` (הוספת `CashroomLockGuard` ועטיפת ה-Layout בו; import של `useLocation`)
+
+---
+
+### 37. חדר כסף — רשימת מעטפות אחרונות + הרשאת תיקון ביום ההזנה — 2026-05-07
+**מה נעשה:** הוטמע במלואו במהלך עבודה קודמת אך לא סומן כהושלם רשמית. הסטטוס מתעדכן עכשיו בעקבות מיפוי המצב בזמן ביצוע משימה 36.
+
+- **תצוגת "מעטפות אחרונות":** `frontend-admin/src/pages/CashroomAdminPage.jsx` כולל פאנל בתחתית הדף שמציג את 20 המעטפות האחרונות שהוזנו, עם `iron_number`, עיר, גובה, מי הזין, וסכום. הנתונים נמשכים מ-`envelopesApi.getRecentEntered(20)` ומתרעננים אוטומטית בכל הזנה/עריכה (`loadRecent()` נקרא בתוך `handleEnvSaved`).
+- **API ייעודי:** `GET /api/envelopes/entered-recent` ב-`backend/src/routes/envelopes.js` — מחזיר עד 100 מעטפות שהוזנו, ממויינות `entered_at DESC NULLS LAST`. מוגן ב-`requireRole('admin', 'cashroom')`. ברירת מחדל 20, פרמטר `?limit=N`.
+- **הרשאת תיקון ביום ההזנה בלבד:** `PATCH /api/envelopes/:id/amount` בודק `if (req.user.role === 'cashroom')` שה-`entered_at` הוא today (לפי `getFullYear/getMonth/getDate`). אם לא — 403 עם הודעה "ניתן לתקן מעטפה רק ביום ההזנה שלה". לאדמין אין הגבלה. כל תיקון יוצר אירוע `amount_changed` בכרטסת עם הסכום הישן והחדש לאודיט.
+
+**קבצים שכבר היו מוטמעים (אין שינוי בסיבוב הזה):**
+- `backend/src/routes/envelopes.js` — אנדפוינט `/entered-recent` ובלוק ה-same-day-check ב-`PATCH /:id/amount`.
+- `frontend-admin/src/pages/CashroomAdminPage.jsx` — state `recent` + `loadRecent()` + פאנל "מעטפות אחרונות" בתחתית הדף.
+- `frontend-admin/src/components/CashroomModal.jsx` — מצב `edit` שנפתח על מעטפות שכבר הוזנו (UX-wise חדר הכסף יראה כפתור "ערוך סכום" רק על מעטפות מהיום, אבל גם אם יבקש ידנית, השרת יחזיר 403).
+- `frontend-admin/src/api/endpoints.js` — `envelopes.getRecentEntered`.
+
+---
+
+### 34. שיוך קופה — תמיכה בכמה גובים במקביל ("כפילויות") — 2026-05-06
+**מה נעשה:** השיוך של קופה לגובה הפך מ-1:1 ל-N:M — כל גובה שכלליו תופסים את הכרטסת (ולא קיים אצלו כלל החרגה תואם) משויך אליה. הסינונים בכל המסכים שמסתמכים על שיוך הותאמו: דורסי מספר קופה, קופות ללא גביה ודוח "פר קופה" מציגים עכשיו רשימת גובים מלאה ("יוסי, חיים") ומאפשרים סינון לפי גובה אחד מתוך הקבוצה.
+
+- **בק-אנד (`backend/src/logic/userAssignment.js`):** הוספתי `RESOLVED_COLLECTORS_LATERAL` (ברבים) — `LEFT JOIN LATERAL` שמאגדת את **כל** הגובים הפעילים שמתאימים לכרטסת. שאילתת ה-`u.role='collector' AND u.active=TRUE AND EXISTS(...assignments) AND NOT EXISTS(...exclusions)` נשארה זהה ל-`RESOLVED_COLLECTOR_LATERAL` המקורית, אבל בלי `LIMIT 1`/`ORDER BY specificity` — במקום זה `array_agg(u.id ORDER BY u.id)` ל-`ids` (`int[]`), `array_agg(u.name ORDER BY u.id)` ל-`names_arr` (`text[]`), ו-`string_agg(u.name, ', ')` ל-`names` (טקסט מצורף בפסיקים לתצוגה). `COALESCE(..., ARRAY[]::int[])` מבטיח מערך ריק במקום NULL כשאין גובים תואמים. ה-LATERAL הקיים בגרסה היחידנית נשמר (לא נמחק) כי הוא חלק מה-API ייתכן וייעשה בו שימוש חיצוני, אבל אף אחד מהקונסיומרים שלנו כבר לא משתמש בו.
+
+- **בק-אנד — קונסיומרים שעודכנו ל-LATERAL החדש:**
+  - **`backend/src/routes/alerts.js`** — `GET /no-collection`: החלפתי את `rc.id AS collector_id, rc.name AS collector_name` ב-`rc.ids AS collector_ids, rc.names_arr AS collector_names, rc.names AS collector_name`. כך התראת "קופה רדומה" מצוננת (לפי הבהרת המשתמשת) "אצל **כל** הגובים המשויכים" — לא רק אחד.
+  - **`backend/src/routes/cards.js`** — 4 שאילתות (`GET /`, `GET /lookup-by-iron/:iron_number`, `GET /:id`, `GET /:id/history`) הומרו. שיניתי את `applyResolvedCollector` כך שיעטוף את התוצאה: `collector_ids: int[]`, `collector_names: text[]`, `collector_name: text` (מצורף בפסיקים), ו-`collector_id: ids[0] ?? null` נשמר לתאימות לאחור (לקוחות ישנים שמסתמכים על שדה יחיד עדיין יקבלו את הגובה הראשון לפי id). הסינון `?collector_id=X` ב-querystring שונה מ-`AND rc.id = $X` ל-`AND $X = ANY(rc.ids)` — לקוח שמסנן לפי גובה ספציפי יקבל **כל** קופה ששייכת אליו (גם אם היא משוייכת בנוסף לעוד אחד).
+  - **`backend/src/routes/reportsExport.js`** — `GET /per-box`: אותו דפוס — `rc.ids AS collector_ids, rc.names_arr AS collector_names, rc.names AS collector_name`. הדוח נשאר עם עמודה אחת "גובה" שמציגה את כל הגובים המצורפים בפסיקים.
+
+- **פרונט-אנד — סינוני "גובה" עברו לעבוד על מערך:**
+  - **`AlertsPage.jsx`** — `ncCollectors` (dropdown) נבנה מ-`it.collector_ids[i]`/`it.collector_names[i]` של כל item (במקום הזוג היחידני `it.collector_id/it.collector_name` הישן). הסינון `it.collector_id === ncCollector` הפך ל-`it.collector_ids.some(id => Number(id) === target)`. תצוגת הגובה (עמודת "גובה" וב-CSV) ממשיכה לקרוא את `it.collector_name` שעכשיו זה מחרוזת מצורפת — כך שמופיע "יוסי, חיים" אוטומטית בלי שינוי בקוד התצוגה.
+  - **`CardsPage.jsx`** — אותו דפוס: `collectors` נבנה מהמערכים החדשים, `c.collector_id === collector` הפך לבדיקת חברות במערך `c.collector_ids`. ה-`exportCards` ממשיך לקרוא את `c.collector_name` בלי שינוי.
+  - **`DochotPage.jsx`** — שתי לשוניות (`SummaryTab` ו-`CompareTab`). ב-`SummaryTab` ה-state `collectorName` נשמר כשם משתנה (היסטורי), אבל הסמנטיקה שלו השתנתה — מחזיק עכשיו את ה-id של הגובה הנבחר (כדי לאפשר סינון נכון). ה-dropdown משתמש ב-`<option key={c.id} value={c.id}>{c.name}</option>` (במקום `value=name`/`label=name`). הסינון `r.collector_name === collectorName` הומר ל-`r.collector_ids.some(id => Number(id) === target)`. ב-`CompareTab` אותו שינוי על `col.collectorName` (גם הוא עכשיו מחזיק id), ו-`exportCompare` (תוויות עמודות) שוף לשמות דרך מיפוי `collectors.find(x => x.id === col.collectorName)` כדי להציג את שם הגובה ב-label של ה-CSV.
+
+- **קונסיומרים שלא נגעתי בהם בכוונה:**
+  - `routes/envelopes.js` — שדה `collector_name` שם מגיע מ-`uc.name AS collector_name FROM users uc ON uc.id = e.collected_by` — זה **הגובה שאסף בפועל** את המעטפה (מתועד ב-`envelopes.collected_by`), לא הגובה ש"אמור" להיות משויך. אין משמעות ל"כפילויות" כאן — מי שאסף את המעטפה הוא מי שאסף.
+  - `cardLogic.js findCollectorForLocation` ו-`cards.collector_id` (העמודה ב-DB) — נשארו ללא שינוי. `findCollectorForLocation` עדיין מחזיר גובה יחיד (best-specificity-then-id) ב-`openCard`, וזה נשמר ל-`cards.collector_id`. אבל `routes/cards.js` דורס את הערך הזה ב-`applyResolvedCollector` בזמן קריאה, אז הוא לא מתבטא בשום צד-לקוח. השארתי כדי לא לשנות את הסכימה. אם בעתיד תוסר העמודה — אפשר למחוק גם את `findCollectorForLocation`.
+  - שיוך משימות אוטומטי — לפי הבהרת המשתמשת, אין כזה היום (המנהל משייך ידנית), אז לא שיניתי דבר ב-`tasks` או ב-`reports`.
+  - תצוגת "הקופות שלי" של גובה — `getBoxesForCollector(userId)` כבר עכשיו תומכת מטבעה במולטי-אסיינמנט: היא מחזירה את הקופות שתואמות **לכללי המשתמש המחובר**, אז אם ל-2 גובים יש כללים שתופסים אותה קופה — כל אחד יראה אותה ב-"הקופות שלי" שלו, בנפרד. אין שינוי נדרש.
+
+**מספר טסטים:** 46 unit tests עוברים (`backend/`). Build של frontend-admin עובר נקי (85 modules, 1.17s). הטסטים הקיימים בודקים את ה-helpers הטהורים (`matchesRule`, `buildLocationClause`, `bestMatchSpecificity`) ולא את ה-LATERAL ישירות — שינוי ה-LATERAL לא שובר אותם.
+
+**קבצים ששונו:**
+- `backend/src/logic/userAssignment.js` (הוספת `RESOLVED_COLLECTORS_LATERAL` ויצוא שלו; ה-LATERAL היחידני נשאר)
+- `backend/src/routes/alerts.js` (import + select + שאילתת ה-`/no-collection`)
+- `backend/src/routes/cards.js` (import + `applyResolvedCollector` החדש; 4 SELECT-ים + שינוי הסינון `?collector_id` ל-`= ANY(rc.ids)`)
+- `backend/src/routes/reportsExport.js` (import + select של `/per-box`)
+- `frontend-admin/src/pages/AlertsPage.jsx` (`ncCollectors` נבנה מהמערכים, סינון `it.collector_ids.some(...)`)
+- `frontend-admin/src/pages/CardsPage.jsx` (אותו דפוס — מערכים במקום שדה יחיד)
+- `frontend-admin/src/pages/DochotPage.jsx` (שתי לשוניות — `SummaryTab` + `CompareTab`: dropdown ל-`{id, name}`, סינון לפי `collector_ids.some(...)`, ובלוק `exportCompare` ממיר id חזרה לשם דרך `collectors.find()`)
+
+---
+
+### 31b. דוחות — מיון לפי "קופה" נתקע + הוספת עמודת "כרטסת" — 2026-05-06
+**מה נעשה:** המשתמשת זיהתה בדוחות (לשונית "סיכום כללי") שמיון לפי "קופה" לא עובד והטבלה "נתקעת" — כלומר אחרי לחיצה על "קופה" גם מיון לפי עמודה אחרת (כמו "שם / מיקום") מפסיק לעבוד. בנוסף ביקשה להציג גם את התווית של הכרטסת ולא רק מספר הקופה.
+
+- **שורש הבעיה:** SQL של `/api/reports-export/per-box` מצרף `cards c JOIN boxes b` ללא סינון על `c.status`, ולכן לקופה עם היסטוריה (כרטסת פעילה + סגורות) חוזרות **כמה שורות עם אותו `iron_number`**. ב-`SummaryTab` ה-JSX השתמש ב-`<tr key={r.iron_number}>` — מפתחות-React כפולים. ברגע שהמיון מסדר מחדש את השורות, ה-reconciler של React לא יודע איזו שורה ל"זהות" ולכן שומר את אותם DOM-nodes במקומם, גם כשהמיון מחזיר סדר חדש. זה גורם גם לכך שמיון לעמודה אחרת לאחר מכן לא משפיע על המסך — DOM-nodes "תקועים" בסדר הקודם. אגב, `localeCompare` בעצמו עבד נכון; הבעיה הייתה אך ורק ברמת ה-rendering.
+
+- **תיקון 1 — מפתח React:** `<tr key={r.card_id ?? r.iron_number}>` — `card_id` הוא ה-PK של `cards` ולכן ייחודי לכל שורה. ה-`?? r.iron_number` הוא fallback הגנתי, אם כי בפועל כל שורה תמיד מכילה `card_id` כי השאילתה היא `FROM cards c`.
+
+- **תיקון 2 — עמודת "כרטסת":** הוספתי עמודה חדשה בין "קופה" לבין "שם / מיקום" שמציגה את התווית הקנונית (`1019A`/`1019B`/...). הוספתי state `cardLabels` שמתאכלס מתוך אותו `cardsApi.getAll()` שכבר נקרא ב-`useEffect` הקיים (פעם אחת בטעינת הקומפוננטה) — מחושב פעם אחת ב-`computeCardLabels(arr)` ונשמר כמפה. החישוב נעשה על **כל** הכרטסות (כולל סגורות) כך שהאות הוא נכון לפי סדר פתיחה היסטורי. התא קליקבילי באותו דפוס כמו עמודת "קופה" — מנווט ל-`/cards/:id`. כשאין `card_id` לשורה (לא קורה בפועל אבל הגנתי) — מציג "—" אפור.
+
+- **שיקול עיצובי:** שקלתי לחלץ את העמודה מתוך `rows` עצמו (כי כל שורה היא card אחד עם `card_id` ידוע), אבל זה היה מחייב להעביר גם `opened_at` מהשרת (`computeCardLabels` נשען עליו לסדר כרונולוגי), ומיקרו-אופטימיזציה כזו מסבכת את הבק-אנד בלי תועלת ברורה. השארתי את החישוב על-בסיס `cardsApi.getAll()` שכבר נטען בכל מקרה.
+
+- **תיקון 3 — מיון לפי "כרטסת":** הוספתי accessor `card: (r) => cardLabels.get(r.card_id) || ''` ל-`summaryAccessors` (שעודכן ל-`useMemo` עם `[cardLabels]` בתור dependency כדי לרענן את המיון אם הלייבלים מתעדכנים). הכותרת החדשה `<SortableTh sortKey="card">` נוספה מימין ל-"קופה". המיון משתמש באותו localeCompare-with-numeric של עמודות אחרות, כך ש-"1019A" → "1019B" → "1019C" יסתדרו טבעית.
+
+- **תיקון 4 — יצוא CSV:** הוספתי לעמודות ה-CSV את `{ key: 'card_id', label: 'כרטסת', format: (v) => v ? (cardLabels.get(v) || #v) : '' }` בין "קופה" ל"שם מותאם", כדי שגם בקובץ ה-Excel המיוצא תופיע התווית.
+
+- **למה הבעיה לא צצה במקומות אחרים:** ב-`AlertsPage`/`TasksPage`/`ReportsPage`/`CardsPage` ה-`<tr key>` כבר היה `card_id` או `id` (ייחודיים), ולכן המיון תפקד שם תקין מהרגע שמשימה 31 הוחלה.
+
+**מספר טסטים:** Build של frontend-admin עובר ללא שגיאות (85 modules — אותם רכיבים, רק שינויי-תוכן ב-DochotPage, 1.32s).
+
+**קבצים ששונו:**
+- `frontend-admin/src/pages/DochotPage.jsx` — ב-`SummaryTab`: state `cardLabels` חדש שמתעדכן ב-useEffect הקיים אחרי `cardsApi.getAll()`; הוספת accessor `card` ל-summaryAccessors (וצירוף `cardLabels` ל-deps של `useMemo`); הוספת `<SortableTh sortKey="card">` בכותרת; שינוי `<tr key={r.iron_number}>` ל-`<tr key={r.card_id ?? r.iron_number}>`; הוספת תא חדש קליקבילי שמציג את התווית; הוספת עמודת "כרטסת" ל-`exportSummary()`.
+
+---
+
+### 31. מיון לפי כותרות הטבלה — דוחות / כרטסות / התראות / משימות / דיווחים — 2026-05-06
+**מה נעשה:** כותרות הטבלאות בעמודים הראשיים (דוחות, כרטסות, התראות, משימות, דיווחים) הפכו ללחיצות — לחיצה ראשונה ממיינת עולה ▲, שנייה יורד ▼, שלישית מנקה (חוזר לסדר המקורי). אינדיקטור-מיון קטן (▲/▼ בצבע ה-accent כשפעיל, ↕ אפור כשלא) מוצג ליד שם העמודה. ערכים ריקים (`null` / `''`) הולכים תמיד לסוף, ללא קשר לכיוון.
+
+- **רכיב משותף חדש (`utils/sortable.jsx`):**
+  - **`useSortable(rows, columnAccessors, initialSort?)`** — hook שמחזיר `{ sorted, sort, toggle }`. ה-`columnAccessors` הוא מפה `{ [colKey]: (row) => sortableValue }` — כל עמוד מגדיר אותה ב-`useMemo` כדי לא לחשב מחדש. המיון נעשה ב-`useMemo` נפרד, כך שאם ה-`sort` לא משתנה אין השפעת ביצועים.
+  - **`compareVals(a, b)`** — מקרים מטופלים: ערכים ריקים → לסוף; שני מספרים → השוואת מספרים; שני `Date` → השוואת `getTime()`; אחרת → `localeCompare('he', { numeric: true, sensitivity: 'base' })` שמטפל גם בעברית וגם במספרים בתוך טקסט (למשל "1019B" אחרי "1019A").
+  - **`SortableTh`** — רכיב שמרנדר `<th>` רגיל אבל עם `cursor: pointer`, `userSelect: none`, click handler, ואינדיקטור-חץ קטן ליד הכותרת.
+  - מנוע ה-toggle: `null → asc → desc → null` (3 לחיצות חוזרות לבסיס).
+
+- **AlertsPage** — שני פאנלים, כל אחד עם useSortable משלו:
+  - פאנל 1 (קופות ללא גביה): מיון לפי שם/קופה (custom_name או iron_number), כרטסת (label), עיר, גובה, גביה אחרונה (Date), ימים (number), סף התראה (אישי או גלובלי כ-number).
+  - פאנל 2 (דיווחים פתוחים): מיון לפי קופה, סוג, תיאור, ימים פתוח (חישוב מ-`created_at`).
+  - עמודת "פעולה" לא מתמיינת — נשארה `<th>` רגיל.
+
+- **TasksPage** — מיון לפי סוג, קופה, כרטסת, סטטוס, משויך, מקור (1 אם דיווח, 0 אם ידני). עמודת "פעולות" לא מתמיינת.
+
+- **ReportsPage** — מיון לפי תאריך (Date), קופה, כרטסת, סוג, תיאור, גובה, סטטוס. עמודת "פעולה" לא מתמיינת.
+
+- **DochotPage** — שתי לשוניות:
+  - **SummaryTab**: מיון לפי קופה, שם/מיקום (custom_name או רחוב+בנין), עיר, שכונה, גובה, קבלה (boolean→0/1), סה"כ (number), מעטפות (number), ממוצע (חישוב), גביה אחרונה (Date).
+  - **PerBoxTab**: מיון לפי תאריך (Date), מעטפה, סכום (number), גובה, סטטוס.
+  - **CompareTab**: לא קיבל מיון — הוא מציג סטטיסטיקות מצטברות בעמודות, לא טבלת שורות.
+
+- **CardsPage** (כרטסות): מיון לפי קופה, כרטסת (label), עיר, שכונה, רחוב, בנין, גובה, גביה אחרונה (Date), סטטוס, סימונים (משוקלל: דיווח פתוח 2 + משימה פתוחה 1). עמודת ה-button של "פתיחה" לא מתמיינת.
+
+- **שיקול עיצובי:** העדפתי לבנות hook משותף ולא לשכפל לוגיקת מיון בכל עמוד. ה-`columnAccessors` מאפשר להגדיר ערך-מיון שונה מערך-תצוגה (למשל בעמודת "כרטסת" שמציגה pill צבעוני אבל ממיינת לפי label-string), וזה הופך את הפתרון נקי ועקבי בכל המסכים. בחרתי לכבד גם את הסינון (filteredItems, filtered) — המיון רץ אחרי הסינון כך שלא ממיינים שורות שלא יוצגו.
+
+- **לא נכלל בסיבוב הזה (לפי בקשת המשתמשת "בראשים, לא בטאבים פנימיים"):** הטאבים הפנימיים של דף הכרטסת `CardDetailPage` (EnvelopesTab, EventsTab, TasksTab, ReportsTab) נשארו ללא מיון. גם `BoxesPage`, `UsersPage`, `EnvelopesPage`, `CashroomAdminPage` לא נגעתי בהם בסיבוב הזה — נשמר ל-future task אם תבקשי.
+
+**מספר טסטים:** Build של frontend-admin עובר ללא שגיאות (85 modules — נוסף `sortable.jsx`, 1.13s).
+
+**קבצים ששונו:**
+- `frontend-admin/src/utils/sortable.jsx` (חדש — hook + רכיב SortableTh + compareVals)
+- `frontend-admin/src/pages/AlertsPage.jsx` (import, ncAccessors+repAccessors, החלפת `<th>` ב-`<SortableTh>` ב-2 הפאנלים, החלפת `filteredItems.map`/`filteredReports.map` ב-`sortedItems`/`sortedReports`)
+- `frontend-admin/src/pages/TasksPage.jsx` (import, sortAccessors, החלפת כותרות ה-table, `filtered.map` → `sorted.map`)
+- `frontend-admin/src/pages/ReportsPage.jsx` (זהה ל-TasksPage)
+- `frontend-admin/src/pages/DochotPage.jsx` (import; ב-SummaryTab `summaryAccessors` + sortedRows; ב-PerBoxTab `envAccessors` + sortedEnvs; החלפת כותרות 2 הטבלאות)
+- `frontend-admin/src/pages/CardsPage.jsx` (import, sortAccessors, החלפת כותרות, `filtered.map` → `sorted.map`)
+
+---
+
+### 33. דוחות — הצגת גביה אחרונה גם אם היא לפני תקופת הדוח — 2026-05-06
+**מה נעשה:** ב-endpoint `/api/reports-export/per-box`, השדה `last_collection_date` חושב עד היום בתוך אותה תת-שאילתה ש־`COUNT`/`SUM` סוננו לפי `from`/`to`. התוצאה: לקופה שגביתה האחרונה הייתה לפני תקופת הדוח, השדה חזר `NULL` והיא הוצגה בטבלה עם "—" במקום בתאריך הגביה האמיתי. פיצלתי את האגרגציה ל-2 תת-שאילתות נפרדות שעוברות ב-LEFT JOIN על הכרטסת:
+- `envSubquery` — ממשיכה לסנן לפי טווח התאריכים, ומחזירה רק `collection_count` ו-`total_amount` (התקופה צריכה להגביל את הסכומים — זו ההתנהגות המצופה).
+- `lastCollectionSubquery` — חדשה, **ללא** סינון לפי תאריך, מחזירה `MAX(collected_at)` לכל `card_id` עם `status = 'entered'`. זוהי "גביה אחרונה אבסולוטית".
+התוצאה: השדה `last_collection_date` ש־`/per-box` מחזיר תמיד מציג את הגביה האחרונה האמיתית של הכרטסת, גם כשהיא קודמת לתחום הדוח. הסינון של `from`/`to` עדיין משפיע על הסכום הכולל ועל מספר המעטפות, כפי שצריך — רק תאריך-הגביה-האחרונה משוחרר מההגבלה.
+
+**הערה:** הפרונט (`DochotPage.jsx` ב-`SummaryTab`) כבר היה מוכן — הוא קורא ישירות ל-`r.last_collection_date` ומפרמט אותו עם `formatDate()` (או "—" אם null). לכן לא נדרש שינוי frontend. גם ב-`/api/cards` השדה `last_collection_at` כבר היה מחושב ללא סינון תאריך (`GREATEST(MAX(envelopes.collected_at), MAX(events.created_at))`), כך שכרטסות במסך הכרטסות עצמו לא הושפעו מאי-פעם מהבאג הזה.
+
+**קבצים ששונו:**
+- `backend/src/routes/reportsExport.js` (פיצול תת-השאילתה ב-`/per-box` ל-`envSubquery` עם סינון תאריך + `lastCollectionSubquery` ללא סינון; הוספת LEFT JOIN שני; שינוי `e.last_collection_date` ל-`lc.last_collection_date` ב-SELECT הראשי)
+
+### 32. דוח לפי מספר קופה / דוח השוואה — חלונית בחירת כרטסת — 2026-05-06
+**מה נעשה:** בדוחות שמסוננים לפי מספר קופה, אם לקופה יש יותר מכרטסת אחת בהיסטוריה — נפתחת חלונית בחירה שמראה את כל הכרטסות (עם תווית כמו `1019A`/`1019B`, מיקום, סטטוס פעילה/סגורה, ותאריכי פתיחה/סגירה) ושואלת על איזו כרטסת להפיק את הדוח.
+
+- **רכיב חדש (`CardChoiceModal.jsx`):** מודאל מותאם שמקבל `ironNumber` + מערך `cards` + `onSelect`/`onClose`. השתמשתי ב-`computeCardLabels()` הקיים (`utils/cardLabel.js`) כדי לתת את התווית הקנונית לפי סדר פתיחה (oldest=A). תצוגה: רשימת כפתורים, מיון לתצוגה newest-first (לראות קודם את האחרונה), עם hover שמשנה רקע ל-`--accent-soft`. סגירה ב-Escape, ב-`✕`, או ב-backdrop click — אותו דפוס כמו שאר המודאלים בפרויקט (`Modal.jsx`/`ReopenCardModal.jsx`).
+- **`PerBoxTab` (לשונית "פר קופה"):** ב-`generate()` במקום לבחור אוטומטית `find(status==='active') || list[0]`, אם `list.length > 1` נשמר `pendingChoice = { box, cards }` ומוצג המודאל. אחרי בחירה — רץ `runReport(box, card, allCards)` שגם מחשב את התווית `cardLabel` (כדי להציג בכותרת הפאנל "קופה N · כרטסת B"). כשהכרטסת הנבחרת סגורה — מוצג pill קטן "סגורה" ליד התווית. עדכנתי גם את הטקסט "אין כרטסת פעילה" → "אין כרטסת" כי עכשיו הכרטסת הנבחרת יכולה להיות סגורה.
+- **`CompareTab` (לשונית "השוואה"):** הוספתי שני שדות חדשים ל-`defaultCol()`: `cardId` ו-`cardLabel`. `updateColumn()` מאפס אותם כשמשנים את `ironNumber` (כך שלא נתקעים על בחירה ישנה אחרי החלפת מספר קופה). `generateForColumn()`: אם `col.ironNumber` מוגדר ו-`col.cardId` עדיין null — קודם קורא ל-`boxesApi.getAll({ search })` למצוא את הקופה, אחר כך `cardsApi.getAll({ box_id })`, ואם יש >1 כרטסות שומר `pendingChoice = { columnId, ironNumber, cards }` ומציג את אותו `CardChoiceModal`. אחרי בחירה הסשן ממשיך עם `fetchCompareData()` שמסנן ב-`r.card_id === cardId` במקום ב-`r.iron_number`. הוספתי תצוגה קטנה מתחת ל-input "קופה ספציפית" שמראה "כרטסת נבחרה: 1019B" עם כפתור "החלף" שמאפס את הבחירה (טריק קטן: קריאה ל-`updateColumn(id, 'ironNumber', col.ironNumber)` — אותו ערך, אבל ה-watcher ב-`updateColumn` מאפס `cardId`/`cardLabel` כי `key === 'ironNumber'`).
+- **שיקול עיצובי:** בחרתי לא להציג את המודאל רק על בסיס ה-rows שמחזיר `per-box` (גם אחרי משימה 30 הם כוללים `card_id`), כי במקרה ש-period filter מצמצם את ה-rows ל-0 לקופה ההיסטורית, היינו מפספסים אותה. במקום זה הבחירה נעשית מתוך מקור האמת — `cardsApi.getAll({ box_id })` — שמחזיר את **כל** הכרטסות של הקופה, גם אם אין להן מעטפות בכלל.
+
+**מספר טסטים:** Build של frontend-admin עובר ללא שגיאות (84 modules — נוסף קובץ `CardChoiceModal.jsx`, 1.21s).
+
+**קבצים ששונו:**
+- `frontend-admin/src/components/CardChoiceModal.jsx` (חדש)
+- `frontend-admin/src/pages/DochotPage.jsx` (import של המודאל; ב-`PerBoxTab` נוספו state `cardLabel`+`pendingChoice`, פיצול ל-`generate()`/`runReport()`, handlers `handleCardChosen`/`handleCardChoiceCancel`, תצוגת תווית בכותרת הפאנל, ורנדור המודאל; ב-`CompareTab` נוספו שדות `cardId`/`cardLabel` ל-`defaultCol()`, state `pendingChoice`, איפוס בחירה ב-`updateColumn` כשמשנים `ironNumber`, פיצול ל-`generateForColumn()`/`fetchCompareData()`, handlers `handleColumnCardChosen`/`handleColumnCardCancel`, תצוגת "כרטסת נבחרה" + כפתור "החלף", ורנדור המודאל)
+
+---
+
+### 30. דוחות — לחיצה על מספר קופה פותחת את הכרטסת — 2026-05-06
+**מה נעשה:** במסכי הדוחות, מספר הקופה בטבלה הפך לקליקבילי — לחיצה עליו פותחת את הכרטסת הפעילה של אותה קופה (`/cards/:id`).
+
+- **בק-אנד (`reportsExport.js`):** הוספתי לשאילתת `GET /per-box` את העמודות `c.id AS card_id` ו-`b.id AS box_id` ב-`SELECT`, כדי שה-frontend יוכל לנווט ישירות לכרטסת בלי קריאה נוספת לשרת. אין שינוי בעמודות שמיוצאות ל-CSV (משתמש סופי).
+- **פרונט (`DochotPage.jsx`):**
+  - הוספתי `import { useNavigate } from 'react-router-dom'` ובכל אחד מ-`SummaryTab` ו-`PerBoxTab` קראתי `const navigate = useNavigate()`.
+  - **לשונית "סיכום כללי"** — בעמודת "קופה" של הטבלה, אם יש `card_id` בשורה (יהיה תמיד עכשיו אחרי השינוי בבק-אנד) המספר נעטף ב-`<strong className="clickable">` עם `style={{ color: 'var(--accent)', cursor: 'pointer' }}` ו-`onClick={() => navigate('/cards/' + r.card_id)}` ו-`title="פתיחת הכרטסת"`. זה אותו דפוס בדיוק כמו ב-`AlertsPage.jsx` (שורות 289-293) וב-`BoxesPage.jsx` (שורות 285-291) — עקביות חזותית עם שאר המערכת.
+  - **לשונית "פר קופה"** — מספר הקופה בכותרת הפאנל ("קופה N") הפך גם הוא קליקבילי (כשיש `cardInfo`) — מנווט ל-`/cards/${cardInfo.id}`. הוספתי גם state אם אין כרטסת פעילה: המספר מוצג רגיל בלי לינק.
+  - **לשונית "השוואה"** — לא דרשה שינוי, היא מציגה רק סטטיסטיקות מצטברות (סה"כ, ממוצע, מעטפות) ולא רשימת קופות פרטנית.
+
+**קבצים ששונו:**
+- `backend/src/routes/reportsExport.js` (שורות 99-101 — הוספת `c.id AS card_id` ו-`b.id AS box_id` ל-SELECT)
+- `frontend-admin/src/pages/DochotPage.jsx` (שורה 2 — import, שורה 57 — `useNavigate` ב-SummaryTab, שורה 264-275 — תא קליקבילי, שורה 306 — `useNavigate` ב-PerBoxTab, שורות 397-407 — מספר קופה קליקבילי בכותרת)
+
+---
+
+### 29. טאב התראות — סינון + ייצוא לאקסל — 2026-05-06
+**מה נעשה:** המשתמשת זיהתה שהמשימה כבר הושלמה בפועל (כנראה בסשן קודם) למרות שהייתה מסומנת בביצוע. אימות בקוד הראה שכל הפיצ'רים קיימים ב-`AlertsPage.jsx`:
+- **פאנל 1 (קופות ללא גביה)** — שורת סינון עם חיפוש חופשי (מספר קופה / שם מותאם / עיר / גובה), select לעיר, select לגובה, select לסף התראה (אישי/גלובלי/הכל), וכפתור `↺ איפוס`. כל הסינונים מתבצעים ב-`useMemo` (`filteredItems`) על המצב המקומי, בלי קריאות שרת נוספות. ה-dropdown-ים נבנים דינמית מהפריטים הקיימים (`ncCities`, `ncCollectors`).
+- **פאנל 2 (דיווחים פתוחים)** — שורת סינון עם חיפוש (מספר קופה / סוג / תיאור / מדווח) + select לסוג דיווח + איפוס. סינון ב-`filteredReports` על אותו עיקרון.
+- **שורת סיכום** מעל כל טבלה: `סה"כ X מתוך Y` (Y מוצג רק כשיש סינון פעיל).
+- **ייצוא לאקסל** לכל פאנל בנפרד דרך `exportCsv()` הקיים (`utils/exportCsv`) עם `csvFilename()` שמייצר שם קובץ עם תאריך. הכפתור disabled כשהרשימה המסוננת ריקה. עמודות פאנל 1: קופה, שם מותאם, כרטסת (עם label), עיר, גובה, גביה אחרונה (כולל מקרה "מעולם לא — נפתח X"), ימים, סף התראה (אישי/גלובלי). עמודות פאנל 2: קופה, סוג, תיאור, מדווח, תאריך פתיחה, ימים פתוח.
+- **מצב empty** — הודעת "לא נמצאו ... התואמות את הסינון" כשהסינון מצמצם לאפס פריטים אבל הרשימה המקורית לא ריקה.
+
+**קבצים ששונו:** ללא שינוי בסשן הזה — הקוד כבר היה במקום (`frontend-admin/src/pages/AlertsPage.jsx`, שורות 45-53 state, 95-116 dropdowns, 119-150 filtering, 187-249 פאנל 1 UI + ייצוא, 344-387 פאנל 2 UI + ייצוא). רק עדכון `TASKS.md`.
+
+---
 
 ### 28. דוחות השוואה — עמודות זו לצד זו במקום אנכי — 2026-05-05
 **מה נעשה:** ב-`DochotPage.jsx` (לשונית "השוואה") ה-JSX היה בנוי נכון מבחינה סמנטית — `<div className="compare-cols">` עוטף `<div className="compare-col">` לכל עמודה ועוד `<div className="add-compare-col">` בסוף — אבל **אף אחת מ-classes האלה לא הייתה מוגדרת ב-`index.css`**. בלי flex/grid כל `<div>` קיבל `display: block` כברירת מחדל, וכל פרמטר וכל עמודה תפסו 100% רוחב ונערמו לאורך אנכית במקום זה לצד זה.

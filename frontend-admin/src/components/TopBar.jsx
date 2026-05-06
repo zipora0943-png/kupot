@@ -8,7 +8,7 @@ const ROLE_LABELS = {
   cashroom: 'חדר כסף',
 }
 
-export default function TopBar() {
+export default function TopBar({ onRefresh }) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
 
@@ -25,6 +25,15 @@ export default function TopBar() {
             <span className="name">{user.name}</span>
             <span>·</span>
             <span>{ROLE_LABELS[user.role] || user.role}</span>
+            {onRefresh && (
+              <button
+                className="refresh-btn"
+                onClick={onRefresh}
+                title="רענן נתונים — טעינה מחדש של כל המסכים"
+              >
+                <span className="refresh-icon">↻</span> רענן נתונים
+              </button>
+            )}
             <button className="logout-btn" onClick={handleLogout}>
               יציאה
             </button>

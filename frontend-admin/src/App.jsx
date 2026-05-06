@@ -1,22 +1,33 @@
 import React from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
-import { AuthProvider } from './context/AuthContext'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { AuthProvider, useAuth } from './context/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
-import CardsPage from './pages/CardsPage'
 import CardDetailPage from './pages/CardDetailPage'
-import BoxesPage from './pages/BoxesPage'
-import EnvelopesPage from './pages/EnvelopesPage'
-import TasksPage from './pages/TasksPage'
-import ReportsPage from './pages/ReportsPage'
-import AlertsPage from './pages/AlertsPage'
-import UsersPage from './pages/UsersPage'
-import SettingsPage from './pages/SettingsPage'
-import DochotPage from './pages/DochotPage'
-import CashroomAdminPage from './pages/CashroomAdminPage'
-import PlaceholderPage from './pages/PlaceholderPage'
+import { defaultPathForRole } from './utils/defaultPath'
 
+// Task 36: cashroom users land on the cashroom view; everyone else → /cards.
+function HomeRedirect() {
+  const { user } = useAuth()
+  return <Navigate to={defaultPathForRole(user?.role)} replace />
+}
+
+// Task 36: cashroom users are locked to /cashroom-admin. Any other URL — typed
+// directly, deep-linked, or reached after a page reload — bounces them back.
+function CashroomLockGuard({ children }) {
+  const { user } = useAuth()
+  const location = useLocation()
+  if (user?.role === 'cashroom' && location.pathname !== '/cashroom-admin') {
+    return <Navigate to="/cashroom-admin" replace />
+  }
+  return children
+}
+
+// All sidebar screens (CardsPage, BoxesPage, …, SettingsPage) are mounted via
+// <KeepAliveScreens /> inside Layout so their state survives navigation.
+// Routes here only cover fresh-mount cases: index redirect, /cards/:id, and the
+// catch-all redirect for stray URLs.
 function App() {
   return (
     <AuthProvider>
@@ -28,26 +39,17 @@ function App() {
         <Route
           element={
             <ProtectedRoute>
-              <Layout />
+              <CashroomLockGuard>
+                <Layout />
+              </CashroomLockGuard>
             </ProtectedRoute>
           }
         >
-          <Route index element={<Navigate to="/cards" replace />} />
-          <Route path="/cards"           element={<CardsPage />} />
-          <Route path="/cards/:id"       element={<CardDetailPage />} />
-          <Route path="/boxes"           element={<BoxesPage />} />
-          <Route path="/envelopes"       element={<EnvelopesPage />} />
-          <Route path="/tasks"           element={<TasksPage />} />
-          <Route path="/reports"         element={<ReportsPage />} />
-          <Route path="/alerts"          element={<AlertsPage />} />
-          <Route path="/dochot"          element={<DochotPage />} />
-          <Route path="/cashroom-admin"  element={<CashroomAdminPage />} />
-          <Route path="/users"           element={<UsersPage />} />
-          <Route path="/settings"        element={<SettingsPage />} />
+          <Route index element={<HomeRedirect />} />
+          <Route path="/cards/:id" element={<CardDetailPage />} />
+          {/* Sidebar screens are matched inside Layout via KeepAliveScreens. */}
+          <Route path="*" element={null} />
         </Route>
-
-        {/* Catch-all */}
-        <Route path="*" element={<Navigate to="/cards" replace />} />
       </Routes>
     </AuthProvider>
   )

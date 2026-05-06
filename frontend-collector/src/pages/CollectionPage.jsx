@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { cards as cardsApi, envelopes as envelopesApi } from '../api/endpoints'
+import { cards as cardsApi } from '../api/endpoints'
 import { computeCardLabels } from '../utils/cardLabel'
 
 function formatDate(s) {
@@ -8,16 +8,6 @@ function formatDate(s) {
   const d = new Date(s)
   if (Number.isNaN(d.getTime())) return '—'
   return d.toLocaleDateString('he-IL', { year: 'numeric', month: '2-digit', day: '2-digit' })
-}
-
-function formatDateTime(s) {
-  if (!s) return ''
-  const d = new Date(s)
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleString('he-IL', {
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit',
-  })
 }
 
 function formatAddress(c) {
@@ -41,9 +31,6 @@ export default function CollectionPage() {
   const [lookupError, setLookupError] = useState(null)
 
   const [toast, setToast] = useState(null)
-
-  const [history, setHistory] = useState([])
-  const [historyLoading, setHistoryLoading] = useState(false)
 
   useEffect(() => {
     const t = location.state?.toast
@@ -70,58 +57,43 @@ export default function CollectionPage() {
     return () => { cancelled = true }
   }, [cardId])
 
-  useEffect(() => {
-    if (!cardId) {
-      setHistory([])
-      return
-    }
-    let cancelled = false
-    setHistoryLoading(true)
-    envelopesApi.getAll({ card_id: Number(cardId), limit: 5 })
-      .then((rows) => {
-        if (cancelled) return
-        setHistory(Array.isArray(rows) ? rows : [])
-      })
-      .catch(() => { if (!cancelled) setHistory([]) })
-      .finally(() => { if (!cancelled) setHistoryLoading(false) })
-    return () => { cancelled = true }
-  }, [cardId, location.key])
-
   const cardLabel = useMemo(() => {
     if (!card) return ''
     const labels = computeCardLabels([card])
     return labels.get(card.id) || String(card.iron_number ?? '')
   }, [card])
 
-  async function handleLookup(e) {
+  async function lookupAndGo(targetPath, e) {
     e?.preventDefault?.()
     const num = boxNumberInput.trim()
     if (!num) return
     setLookupError(null)
     setLookupLoading(true)
     try {
-      const rows = await cardsApi.getAll({ iron_number: num, status: 'active' })
-      const list = Array.isArray(rows) ? rows : []
-      const found = list[0]
-      if (!found) {
-        setLookupError('לא נמצאה כרטסת פעילה לקופה זו')
-        return
-      }
-      navigate(`/collection/${found.id}`)
+      const found = await cardsApi.lookupByIron(num)
+      navigate(targetPath(found.id))
     } catch (err) {
-      setLookupError(err.message || 'שגיאה באחזור הקופה')
+      const code = err?.data?.error
+      if (code === 'box_not_found')      setLookupError('מספר קופה שגוי')
+      else if (code === 'not_assigned')  setLookupError('קופה זו אינה משויכת אליך')
+      else if (code === 'card_closed')   setLookupError('כרטסת הקופה סגורה')
+      else                                setLookupError(err.message || 'שגיאה באחזור הקופה')
     } finally {
       setLookupLoading(false)
     }
   }
 
   if (!cardId) {
+    const disabled = lookupLoading || !boxNumberInput.trim()
     return (
       <div>
         <div className="collection-card">
           <h2>אחזור קופה</h2>
-          <div className="sub">הזן מספר קופה כדי להתחיל גביה</div>
-          <form onSubmit={handleLookup} className="collection-info">
+          <div className="sub">הזן מספר קופה ובחר פעולה</div>
+          <form
+            onSubmit={(e) => lookupAndGo((id) => `/scan/${id}`, e)}
+            className="collection-info"
+          >
             <div className="field">
               <label>מספר קופה</label>
               <input
@@ -129,7 +101,7 @@ export default function CollectionPage() {
                 inputMode="numeric"
                 value={boxNumberInput}
                 onChange={(e) => setBoxNumberInput(e.target.value)}
-                placeholder="לדוגמה: 1019"
+                placeholder="לדוגמה: 1001"
                 disabled={lookupLoading}
                 autoFocus
               />
@@ -137,14 +109,31 @@ export default function CollectionPage() {
             {lookupError && (
               <div className="alert red" style={{ marginTop: 8 }}>{lookupError}</div>
             )}
-            <button
-              type="submit"
-              className="btn-block"
-              disabled={lookupLoading || !boxNumberInput.trim()}
-              style={{ marginTop: 12 }}
-            >
-              {lookupLoading ? 'מחפש...' : 'אחזר'}
-            </button>
+            <div className="collection-actions" style={{ marginTop: 12 }}>
+              <button
+                type="submit"
+                className="btn-block"
+                disabled={disabled}
+              >
+                {lookupLoading ? 'מחפש...' : '💰 בצע גביה'}
+              </button>
+              <button
+                type="button"
+                className="btn-block secondary"
+                disabled={disabled}
+                onClick={(e) => lookupAndGo((id) => `/report/${id}`, e)}
+              >
+                📝 צור דיווח
+              </button>
+              <button
+                type="button"
+                className="btn-block secondary"
+                disabled={disabled}
+                onClick={(e) => lookupAndGo((id) => `/collection/${id}`, e)}
+              >
+                📋 הצג פרטים
+              </button>
+            </div>
           </form>
         </div>
       </div>
@@ -202,22 +191,6 @@ export default function CollectionPage() {
             📝 צור דיווח
           </button>
         </div>
-      </div>
-
-      <div className="envelopes-history">
-        <h3>5 מעטפות אחרונות</h3>
-        {historyLoading ? (
-          <div className="loading" style={{ padding: 16 }}>טוען...</div>
-        ) : history.length === 0 ? (
-          <div className="empty" style={{ padding: 16 }}>אין מעטפות עדיין</div>
-        ) : (
-          history.map((env) => (
-            <div key={env.id} className="envelope-row">
-              <span className="num">#{env.envelope_number}</span>
-              <span className="meta">{formatDateTime(env.created_at)}</span>
-            </div>
-          ))
-        )}
       </div>
 
       {toast && <div className="toast success">{toast}</div>}

@@ -4,6 +4,8 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole }  = require('../middleware/roles');
 
 router.use(authenticate);
+// Task 36: cashroom users have no access to settings — only the cashroom workflow.
+router.use(requireRole('admin', 'collector'));
 
 // ─── Whitelist of allowed setting keys + their type validators.
 // Adding a new setting requires updating this map.

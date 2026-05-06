@@ -102,6 +102,30 @@ router.get('/pending', requireRole('admin', 'cashroom'), async (req, res, next) 
   } catch (err) { next(err); }
 });
 
+// GET /api/envelopes/entered-recent  — Task 37: recent entered envelopes for the
+// cashroom view, ordered by entered_at DESC. `?limit=N` (default 20, max 100).
+router.get('/entered-recent', requireRole('admin', 'cashroom'), async (req, res, next) => {
+  let limit = Number(req.query.limit);
+  if (!Number.isInteger(limit) || limit <= 0) limit = 20;
+  if (limit > 100) limit = 100;
+  try {
+    const { rows } = await pool.query(
+      `SELECT e.*, b.iron_number, c.city, c.neighborhood, c.street, c.custom_name,
+              uc.name AS collector_name, ue.name AS entered_by_name
+         FROM envelopes e
+         JOIN cards c ON c.id = e.card_id
+         JOIN boxes b ON b.id = c.box_id
+         LEFT JOIN users uc ON uc.id = e.collected_by
+         LEFT JOIN users ue ON ue.id = e.entered_by
+        WHERE e.status = 'entered'
+        ORDER BY e.entered_at DESC NULLS LAST
+        LIMIT $1`,
+      [limit]
+    );
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
 // GET /api/envelopes/by-number/:number  — cashroom barcode scan flow
 router.get('/by-number/:number', requireRole('admin', 'cashroom'), async (req, res, next) => {
   const number = String(req.params.number || '').trim();
@@ -237,7 +261,7 @@ router.patch('/:id/amount', requireRole('admin', 'cashroom'), async (req, res, n
     await client.query('BEGIN');
 
     const { rows: current } = await client.query(
-      `SELECT id, card_id, amount, status FROM envelopes WHERE id = $1 FOR UPDATE`,
+      `SELECT id, card_id, amount, status, entered_at FROM envelopes WHERE id = $1 FOR UPDATE`,
       [id]
     );
     if (!current[0]) {
@@ -248,6 +272,20 @@ router.patch('/:id/amount', requireRole('admin', 'cashroom'), async (req, res, n
     if (env.status !== 'entered') {
       await client.query('ROLLBACK');
       return res.status(409).json({ error: 'Envelope must be entered before its amount can be edited' });
+    }
+    // Task 37: cashroom users may only edit envelopes on the same day they were entered.
+    // Admins remain unrestricted.
+    if (req.user.role === 'cashroom') {
+      const enteredAt = env.entered_at ? new Date(env.entered_at) : null;
+      const now = new Date();
+      const sameDay = enteredAt
+        && enteredAt.getFullYear() === now.getFullYear()
+        && enteredAt.getMonth() === now.getMonth()
+        && enteredAt.getDate() === now.getDate();
+      if (!sameDay) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'ניתן לתקן מעטפה רק ביום ההזנה שלה' });
+      }
     }
 
     const oldAmount = env.amount == null ? null : Number(env.amount);
