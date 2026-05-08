@@ -1,7 +1,7 @@
 // ===== API endpoints =====
 // Grouped by resource. Each function returns a promise.
 
-import { api } from './client';
+import { api, API_BASE } from './client';
 
 // ---- UPLOADS ----
 // The shared `api` wrapper forces JSON; multipart uploads need a raw fetch
@@ -12,7 +12,7 @@ export const uploads = {
     const fd = new FormData();
     fd.append('image', file);
     const token = localStorage.getItem('kupot_token');
-    const res = await fetch('/api/uploads/image', {
+    const res = await fetch(`${API_BASE}/uploads/image`, {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: fd,

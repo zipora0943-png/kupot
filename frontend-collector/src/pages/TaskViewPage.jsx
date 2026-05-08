@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { tasks as tasksApi } from '../api/endpoints'
 import TaskExecModal from '../components/TaskExecModal'
 import TaskExecDetailsModal from '../components/TaskExecDetailsModal'
+import { assetUrl } from '../utils/assetUrl'
 
 function formatDate(s) {
   if (!s) return '—'
@@ -167,9 +168,9 @@ export default function TaskViewPage() {
         {task.image_path && (
           <div className="field" style={{ marginTop: 12 }}>
             <label>תמונת המשימה</label>
-            <a href={task.image_path} target="_blank" rel="noopener noreferrer">
+            <a href={assetUrl(task.image_path)} target="_blank" rel="noopener noreferrer">
               <img
-                src={task.image_path}
+                src={assetUrl(task.image_path)}
                 alt="תמונת המשימה"
                 style={{
                   maxWidth: '100%',
@@ -199,9 +200,9 @@ export default function TaskViewPage() {
         {isFinal && task.execution_image && (
           <div className="field" style={{ marginTop: 12 }}>
             <label>תמונת אישור ביצוע</label>
-            <a href={task.execution_image} target="_blank" rel="noopener noreferrer">
+            <a href={assetUrl(task.execution_image)} target="_blank" rel="noopener noreferrer">
               <img
-                src={task.execution_image}
+                src={assetUrl(task.execution_image)}
                 alt="תמונת ביצוע"
                 style={{
                   maxWidth: '100%',

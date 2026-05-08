@@ -9,6 +9,7 @@ import {
   cards as cardsApi,
   uploads as uploadsApi,
 } from '../api/endpoints'
+import { assetUrl } from '../utils/assetUrl'
 
 /**
  * Create or edit a task.
@@ -346,9 +347,9 @@ export default function TaskModal({ open, task, defaults, onClose, onSaved }) {
           </div>
         ) : isEdit && existingImage && !removeImage ? (
           <div style={{ marginBottom: 8 }}>
-            <a href={existingImage} target="_blank" rel="noopener noreferrer">
+            <a href={assetUrl(existingImage)} target="_blank" rel="noopener noreferrer">
               <img
-                src={existingImage}
+                src={assetUrl(existingImage)}
                 alt="תמונה מצורפת"
                 style={{
                   maxWidth: '100%', maxHeight: 200, borderRadius: 8,

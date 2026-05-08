@@ -1,5 +1,6 @@
 import React from 'react'
 import Modal from './Modal'
+import { assetUrl } from '../utils/assetUrl'
 
 function formatDateTime(iso) {
   if (!iso) return '—'
@@ -90,9 +91,9 @@ export default function TaskExecDetailsModal({ open, task, onClose }) {
             <label>תמונת המשימה</label>
             {task.image_path
               ? (
-                <a href={task.image_path} target="_blank" rel="noopener noreferrer">
+                <a href={assetUrl(task.image_path)} target="_blank" rel="noopener noreferrer">
                   <img
-                    src={task.image_path}
+                    src={assetUrl(task.image_path)}
                     alt="תמונת המשימה"
                     style={{
                       maxWidth: '100%',
@@ -111,9 +112,9 @@ export default function TaskExecDetailsModal({ open, task, onClose }) {
             <label>{isCancelled ? 'תמונת ביצוע' : 'תמונת אישור ביצוע'}</label>
             {task.execution_image
               ? (
-                <a href={task.execution_image} target="_blank" rel="noopener noreferrer">
+                <a href={assetUrl(task.execution_image)} target="_blank" rel="noopener noreferrer">
                   <img
-                    src={task.execution_image}
+                    src={assetUrl(task.execution_image)}
                     alt="תמונת ביצוע"
                     style={{
                       maxWidth: '100%',

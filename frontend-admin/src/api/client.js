@@ -1,7 +1,10 @@
 // ===== API client =====
 // Wraps fetch with: base URL, auto auth header, error handling, JSON parsing.
+//
+// VITE_API_BASE is read at build time (e.g. "http://178.105.96.70:3000/api").
+// In dev it falls back to "/api" so the Vite proxy can forward to the backend.
 
-const API_BASE = '/api';
+export const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
 // Token getter — reads from localStorage so it picks up changes after login
 function getToken() {

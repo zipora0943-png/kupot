@@ -5,6 +5,7 @@ import {
   taskTypes as taskTypesApi,
   users as usersApi,
 } from '../api/endpoints'
+import { assetUrl } from '../utils/assetUrl'
 
 const STATUS_OPTIONS = [
   { value: 'open',      label: 'פתוח'  },
@@ -254,9 +255,9 @@ export default function ReportModal({ open, report, onClose, onSaved }) {
           {report.image_path && (
             <div className="field" style={{ marginBottom: 14 }}>
               <label>תמונה מצורפת</label>
-              <a href={report.image_path} target="_blank" rel="noopener noreferrer">
+              <a href={assetUrl(report.image_path)} target="_blank" rel="noopener noreferrer">
                 <img
-                  src={report.image_path}
+                  src={assetUrl(report.image_path)}
                   alt="תמונת דיווח"
                   style={{
                     maxWidth: '100%', maxHeight: 200, borderRadius: 8,
