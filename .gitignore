@@ -28,7 +28,13 @@ yarn-debug.log*
 .idea/
 *.swp
 *.swo
-.claude/settings.local.json
+.claude/
+
+# ===== database backups (must never be in repo) =====
+*.sql.bak
+backup.sql
+*backup*.sql
+*.dump
 
 # ===== OS =====
 .DS_Store
