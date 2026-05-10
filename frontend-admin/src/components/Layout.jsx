@@ -3,7 +3,7 @@ import { Outlet, useLocation, matchPath, Navigate } from 'react-router-dom'
 import TopBar from './TopBar'
 import Sidebar from './Sidebar'
 import KeepAliveScreens, { isKeepAlivePath } from './KeepAliveScreens'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '@shared/context/AuthContext'
 import { defaultPathForRole } from '../utils/defaultPath'
 
 /**

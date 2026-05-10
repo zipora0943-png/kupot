@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import Modal from './Modal'
+import Modal from '@shared/components/Modal'
 import BoxNumberAutocomplete from './BoxNumberAutocomplete'
 import {
   tasks as tasksApi,

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useLocation, matchPath } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '@shared/context/AuthContext'
 
 // Sidebar groups — exactly per kupot_wireframe_v10.html admin sidebar.
 // Each item may declare `roles: [...]` to restrict visibility (default: all roles).

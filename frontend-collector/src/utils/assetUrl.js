@@ -1,7 +1,7 @@
 // Resolve a backend-relative path (e.g. "/uploads/abc.jpg") to a full URL.
 // See frontend-admin/src/utils/assetUrl.js for full rationale.
 
-import { API_BASE } from '../api/client';
+import { API_BASE } from '@shared/api/client';
 
 function backendOrigin() {
   if (!API_BASE) return '';

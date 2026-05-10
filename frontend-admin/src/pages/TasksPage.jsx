@@ -6,12 +6,12 @@ import {
   reports as reportsApi,
   taskTypes as taskTypesApi,
 } from '../api/endpoints'
-import { computeCardLabels } from '../utils/cardLabel'
+import { computeCardLabels } from '@shared/utils/cardLabel'
 import TaskExecModal from '../components/TaskExecModal'
 import TaskExecDetailsModal from '../components/TaskExecDetailsModal'
 import TaskModal from '../components/TaskModal'
 import CancelTaskModal from '../components/CancelTaskModal'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '@shared/context/AuthContext'
 import { exportCsv, csvFilename } from '../utils/exportCsv'
 import { useSortable, SortableTh } from '../utils/sortable.jsx'
 

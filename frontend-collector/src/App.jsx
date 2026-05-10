@@ -1,7 +1,7 @@
 import React from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import LoginPage from './pages/LoginPage'
-import ProtectedRoute from './components/ProtectedRoute'
+import ProtectedRoute from '@shared/components/ProtectedRoute'
 import MobileLayout from './components/MobileLayout'
 import BoxesPage from './pages/BoxesPage'
 import CollectionPage from './pages/CollectionPage'
@@ -10,7 +10,7 @@ import ReportFormPage from './pages/ReportFormPage'
 import TasksAlertsPage from './pages/TasksAlertsPage'
 import TaskViewPage from './pages/TaskViewPage'
 import CashroomAdminPage from './pages/CashroomAdminPage'
-import { useAuth } from './context/AuthContext'
+import { useAuth } from '@shared/context/AuthContext'
 import { defaultPathForRole } from './utils/defaultPath'
 
 // Cashroom users are locked to /cashroom-admin (their only screen). Non-cashroom

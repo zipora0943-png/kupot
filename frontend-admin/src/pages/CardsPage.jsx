@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { cards as cardsApi, alerts as alertsApi, reports as reportsApi } from '../api/endpoints'
-import { computeCardLabels } from '../utils/cardLabel'
+import { computeCardLabels } from '@shared/utils/cardLabel'
 import { exportCards } from '../utils/exportToCsv'
 import { useSortable, SortableTh } from '../utils/sortable.jsx'
 

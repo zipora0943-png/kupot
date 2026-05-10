@@ -5,10 +5,10 @@ import {
   alerts as alertsApi,
   reports as reportsApi,
 } from '../api/endpoints'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '@shared/context/AuthContext'
 import TaskModal from '../components/TaskModal'
 import ReportModal from '../components/ReportModal'
-import CloseReportModal from '../components/CloseReportModal'
+import CloseReportModal from '@shared/components/CloseReportModal'
 
 function formatDate(s) {
   if (!s) return '—'

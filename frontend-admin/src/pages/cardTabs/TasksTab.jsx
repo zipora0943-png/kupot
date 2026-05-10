@@ -3,7 +3,7 @@ import { tasks as tasksApi } from '../../api/endpoints'
 import TaskModal from '../../components/TaskModal'
 import TaskExecDetailsModal from '../../components/TaskExecDetailsModal'
 import CancelTaskModal from '../../components/CancelTaskModal'
-import { useAuth } from '../../context/AuthContext'
+import { useAuth } from '@shared/context/AuthContext'
 import { exportCsv, csvFilename } from '../../utils/exportCsv'
 
 function formatDate(iso) {

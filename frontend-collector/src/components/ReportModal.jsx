@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import Modal from './Modal'
+import Modal from '@shared/components/Modal'
 import {
   reports as reportsApi,
   taskTypes as taskTypesApi,

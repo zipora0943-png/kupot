@@ -7,7 +7,7 @@ import {
   boxes as boxesApi,
   boxTypes as boxTypesApi,
 } from '../api/endpoints'
-import { computeCardLabels } from '../utils/cardLabel'
+import { computeCardLabels } from '@shared/utils/cardLabel'
 import { exportCsv, csvFilename } from '../utils/exportCsv'
 import MonthYearPicker from '../components/MonthYearPicker'
 import CardChoiceModal from '../components/CardChoiceModal'

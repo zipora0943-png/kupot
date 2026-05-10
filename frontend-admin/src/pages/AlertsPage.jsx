@@ -5,10 +5,10 @@ import {
   reports as reportsApi,
   cards as cardsApi,
 } from '../api/endpoints'
-import { computeCardLabels } from '../utils/cardLabel'
+import { computeCardLabels } from '@shared/utils/cardLabel'
 import ReportModal from '../components/ReportModal'
-import CloseReportModal from '../components/CloseReportModal'
-import { useAuth } from '../context/AuthContext'
+import CloseReportModal from '@shared/components/CloseReportModal'
+import { useAuth } from '@shared/context/AuthContext'
 import { exportCsv, csvFilename } from '../utils/exportCsv'
 import { useSortable, SortableTh } from '../utils/sortable.jsx'
 

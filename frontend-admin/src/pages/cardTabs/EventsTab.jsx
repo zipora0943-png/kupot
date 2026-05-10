@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { events as eventsApi } from '../../api/endpoints'
-import { useAuth } from '../../context/AuthContext'
+import { useAuth } from '@shared/context/AuthContext'
 import ManualEventModal from '../../components/ManualEventModal'
 import { exportCsv, csvFilename } from '../../utils/exportCsv'
 

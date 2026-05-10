@@ -275,10 +275,17 @@ frontend-collector/  Field-collector mobile-style app (Vite + React 19 + Capacit
                      Prod: `npm run build` → dist/  (served via vite preview :5001)
 ```
 
-**Code reuse:** Several files are byte-identical between the two frontends
-(`api/client.js`, `context/AuthContext.jsx`, `components/ProtectedRoute.jsx`,
-`components/Modal.jsx`, `components/CloseReportModal.jsx`, `utils/cardLabel.js`).
-Edits must be applied to both copies until the shared layer is extracted.
+**Shared code:** Files used by both frontends live in [`frontend-shared/src/`](./frontend-shared/src/)
+and are imported via Vite aliases:
+- `@shared/...` → `frontend-shared/src/...` (cross-frontend code)
+- `@app-api/...` → `<this-frontend>/src/api/...` (per-frontend; lets shared modules import the local `endpoints`)
+
+Currently shared: `api/client.js`, `context/AuthContext.jsx`, `components/ProtectedRoute.jsx`,
+`components/Modal.jsx`, `components/CloseReportModal.jsx`, `utils/cardLabel.js`.
+
+`endpoints.js` stays per-frontend because the collector needs an extra `lookupByIron` route
+the admin doesn't. When adding a new shared file, drop it under `frontend-shared/src/` and
+import it from each frontend with `@shared/...`.
 
 **API base URL:** Read from `VITE_API_BASE` at build time (`.env.production` per app).
 In dev it falls back to `/api` so the Vite proxy forwards to the local backend.

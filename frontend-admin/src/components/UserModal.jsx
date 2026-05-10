@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import Modal from './Modal'
+import Modal from '@shared/components/Modal'
 import LocationCombobox from './LocationCombobox'
 import { users as usersApi } from '../api/endpoints'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '@shared/context/AuthContext'
 
 const ROLE_OPTIONS = [
   { value: 'admin',     label: 'מנהל' },

@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { reports as reportsApi } from '../api/endpoints'
+import { reports as reportsApi } from '@app-api/endpoints'
 
 export default function CloseReportModal({ report, onClose, onClosed }) {
   const [reason, setReason] = useState('')

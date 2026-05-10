@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { cards as cardsApi } from '../api/endpoints'
-import { computeCardLabels } from '../utils/cardLabel'
+import { computeCardLabels } from '@shared/utils/cardLabel'
 
 function formatDate(s) {
   if (!s) return '—'

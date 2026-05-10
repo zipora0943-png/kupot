@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import Modal from './Modal'
+import Modal from '@shared/components/Modal'
 import { boxes as boxesApi, boxTypes as boxTypesApi } from '../api/endpoints'
 
 /**

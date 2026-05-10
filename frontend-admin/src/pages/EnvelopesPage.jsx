@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { envelopes as envelopesApi, cards as cardsApi } from '../api/endpoints'
-import { computeCardLabels } from '../utils/cardLabel'
+import { computeCardLabels } from '@shared/utils/cardLabel'
 import CashroomModal from '../components/CashroomModal'
 import { exportEnvelopes } from '../utils/exportToCsv'
 

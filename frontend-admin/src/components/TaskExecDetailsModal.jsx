@@ -1,5 +1,5 @@
 import React from 'react'
-import Modal from './Modal'
+import Modal from '@shared/components/Modal'
 import { assetUrl } from '../utils/assetUrl'
 
 function formatDateTime(iso) {

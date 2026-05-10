@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from 'react'
-import { computeCardLabels } from '../utils/cardLabel'
+import { computeCardLabels } from '@shared/utils/cardLabel'
 
 function fmtDate(iso) {
   if (!iso) return ''

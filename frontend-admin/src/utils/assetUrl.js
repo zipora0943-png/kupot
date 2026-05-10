@@ -9,7 +9,7 @@
 // "/api" to get the backend origin. If VITE_API_BASE is unset (dev), return the
 // path unchanged so the Vite proxy handles it.
 
-import { API_BASE } from '../api/client';
+import { API_BASE } from '@shared/api/client';
 
 function backendOrigin() {
   if (!API_BASE) return '';

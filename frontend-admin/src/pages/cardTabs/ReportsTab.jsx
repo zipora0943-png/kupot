@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { reports as reportsApi } from '../../api/endpoints'
-import { useAuth } from '../../context/AuthContext'
+import { useAuth } from '@shared/context/AuthContext'
 import ManualReportModal from '../../components/ManualReportModal'
-import CloseReportModal from '../../components/CloseReportModal'
+import CloseReportModal from '@shared/components/CloseReportModal'
 import ReportModal from '../../components/ReportModal'
 import { exportCsv, csvFilename } from '../../utils/exportCsv'
 

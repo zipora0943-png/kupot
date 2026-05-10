@@ -1,7 +1,7 @@
 // ===== API endpoints =====
 // Grouped by resource. Each function returns a promise.
 
-import { api, API_BASE } from './client';
+import { api, API_BASE } from '@shared/api/client';
 
 // ---- UPLOADS ----
 // The shared `api` wrapper forces JSON; multipart uploads need a raw fetch
