@@ -260,16 +260,50 @@ See [`backend/.env.example`](./backend/.env.example) for all vars. Key ones:
 
 ---
 
-## Frontend Development (Future Stages)
+## Frontend Apps
 
-Structure (to be built):
 ```
-frontend-admin/           Admin panel (Stage 2)
-frontend-cashroom/        Cashroom interface (Stage 3)
-mobile/                   Collector app in React Native (Stage 4)
+frontend-admin/      Admin web panel (Vite + React 18 + react-router-dom)
+                     Used by admin and cashroom roles.
+                     Dev: `npm run dev` (vite, port 5173, proxies /api → :3000)
+                     Prod: `npm run build` → dist/  (served via vite preview :5000)
+
+frontend-collector/  Field-collector mobile-style app (Vite + React 19 + Capacitor)
+                     Wraps to Android APK via @capacitor/android. Also runs in browser.
+                     Barcode scanning via @zxing/browser.
+                     Dev: vite port 5174, proxies /api → :3000
+                     Prod: `npm run build` → dist/  (served via vite preview :5001)
 ```
+
+**Code reuse:** Several files are byte-identical between the two frontends
+(`api/client.js`, `context/AuthContext.jsx`, `components/ProtectedRoute.jsx`,
+`components/Modal.jsx`, `components/CloseReportModal.jsx`, `utils/cardLabel.js`).
+Edits must be applied to both copies until the shared layer is extracted.
+
+**API base URL:** Read from `VITE_API_BASE` at build time (`.env.production` per app).
+In dev it falls back to `/api` so the Vite proxy forwards to the local backend.
 
 **UI Spec:** All interfaces must match [`kupot_wireframe_v10.html`](./kupot_wireframe_v10.html) exactly.
+
+---
+
+## זרימות עסקיות עיקריות
+
+### גביה (collector)
+1. גובה בוחר קופה → מזין מספר מעטפה (סריקת ברקוד או הזנה ידנית).
+2. אופציונלי: מדפיס מדבקה.
+3. אישור → נוצר אירוע גביה (`COLLECTION`) על הכרטסת הפעילה, מעטפה נכנסת בסטטוס `pending`.
+
+### הזנת סכום (cashroom)
+1. סריקה / הזנה ידנית של מספר מעטפה.
+2. מוצגים פרטי הקופה + הכרטסת.
+3. הזנת סכום → אישור → המעטפה עוברת ל-`entered`.
+
+### דיווח → משימה
+1. גובה מדווח על בעיה (`reports`).
+2. מנהל רואה את הדיווח ב-`AlertsPage` / `DochotPage`.
+3. המרה למשימה (`POST /api/reports/:id/convert-to-task`) — תוכן הדיווח מועתק אוטומטית.
+4. בחירה אם לסגור את הדיווח המקורי או להשאירו פתוח לצורך מעקב.
 
 ---
 
@@ -317,6 +351,6 @@ RUN_DB_TESTS=true npm test
 
 ## Context References
 
-- **Business logic & workflows:** [`CONTEXT.md`](./CONTEXT.md)
 - **UI design:** [`kupot_wireframe_v10.html`](./kupot_wireframe_v10.html)
-- **Original brief:** [`PROMPT_STAGE1.md`](./PROMPT_STAGE1.md)
+- **Deployment:** [`DEPLOY.md`](./DEPLOY.md)
+- **Active task list:** [`TASKS.md`](./TASKS.md), [`TASKS_COLLECTOR.md`](./TASKS_COLLECTOR.md)

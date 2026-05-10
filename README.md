@@ -6,32 +6,41 @@
 
 ```
 kupot-project/
-├── backend/                  Node.js + Express + PostgreSQL
-├── kupot_wireframe_v10.html  ויירפריים מאושר ל-UI
-├── CONTEXT.md                הקשר עסקי, ארכיטקטורה, לוגיקה קריטית
-└── PROMPT_STAGE1.md          הפרומפט המקורי לבניית שלב 1
+├── backend/                 Node.js + Express + PostgreSQL
+├── frontend-admin/          Vite + React 18 — ממשק מנהל ו-cashroom
+├── frontend-collector/      Vite + React 19 + Capacitor — אפליקציית גובה
+├── ecosystem.config.js      pm2 — הרצת 3 השירותים יחד
+├── kupot_wireframe_v10.html ויירפריים מאושר ל-UI
+├── CLAUDE.md                ארכיטקטורה, schema, routes, לוגיקה עסקית, אבטחה
+├── DEPLOY.md                הוראות הפעלה לשרת
+└── TASKS.md / TASKS_COLLECTOR.md   רשימות משימות
 ```
 
-עתידיים:
-- `frontend-admin/` — ממשק מנהל (Web)
-- `frontend-cashroom/` — ממשק חדר כסף (Web)
-- `mobile/` — אפליקציית גובה (React Native, Android)
+## הפעלה מהירה — פיתוח מקומי
 
-## שלבי פיתוח
+### Backend
+```bash
+cd backend
+cp .env.example .env       # ערוך לפי הצורך
+npm install
+psql -U postgres -c "CREATE DATABASE kupot_db;"
+npm run db:init            # סכמה
+npm run db:seed            # נתוני דמו (משתמשים: admin / collector1-5 / cashroom — סיסמה password123)
+npm run dev                # nodemon על port 3000
+```
 
-| שלב | תיאור | סטטוס |
-|---|---|---|
-| 1 | Backend + DB + APIs + Tests | ✅ הושלם |
-| 2 | ממשק מנהל — Web | ⏳ בתכנון |
-| 3 | ממשק חדר כסף — Web | ⏳ ממתין |
-| 4 | ממשק גובה — React Native | ⏳ ממתין |
-| 5 | פיצ'רים משלימים, הקשחת אבטחה | ⏳ ממתין |
+### Frontends
+```bash
+cd frontend-admin && npm install && npm run dev      # http://localhost:5173
+cd frontend-collector && npm install && npm run dev  # http://localhost:5174
+```
+שני הפרונטים מוגדרים עם proxy ל-`http://localhost:3000` בפיתוח.
 
-## הוראות הפעלה — Backend
+## הפעלה לפרודקשן
 
-ראה [`backend/README.md`](backend/README.md).
+ראה [`DEPLOY.md`](DEPLOY.md).
 
 ## תיעוד נוסף
 
-- [`CONTEXT.md`](CONTEXT.md) — לוגיקה עסקית, מודל נתונים, זרימות עיקריות.
-- [`kupot_wireframe_v10.html`](kupot_wireframe_v10.html) — ה-UI המאושר.
+- [`CLAUDE.md`](CLAUDE.md) — הרחבה על ארכיטקטורה, schema, routes, לוגיקה עסקית, בדיקות, אבטחה.
+- [`kupot_wireframe_v10.html`](kupot_wireframe_v10.html) — ה-UI המאושר. כל שינוי ויזואלי חייב להתאים לוויירפריים.
