@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   reports as reportsApi,
   reportTypes as reportTypesApi,
@@ -9,12 +9,16 @@ import {
 export default function ReportFormPage() {
   const { cardId } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const reason = searchParams.get('reason')
 
   const [types, setTypes] = useState([])
   const [typesLoading, setTypesLoading] = useState(true)
 
   const [reportTypeId, setReportTypeId] = useState('')
-  const [description, setDescription] = useState('')
+  const [description, setDescription] = useState(
+    reason === 'address' ? 'כתובת שגויה: ' : ''
+  )
 
   const [imageFile, setImageFile] = useState(null)
   const [imagePreview, setImagePreview] = useState(null)

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { cards as cardsApi } from '../api/endpoints'
 import { computeCardLabels } from '@shared/utils/cardLabel'
+import Modal from '@shared/components/Modal'
 
 function formatDate(s) {
   if (!s) return '—'
@@ -29,6 +30,7 @@ export default function CollectionPage() {
   const [boxNumberInput, setBoxNumberInput] = useState('')
   const [lookupLoading, setLookupLoading] = useState(false)
   const [lookupError, setLookupError] = useState(null)
+  const [confirmCard, setConfirmCard] = useState(null)
 
   const [toast, setToast] = useState(null)
 
@@ -83,15 +85,41 @@ export default function CollectionPage() {
     }
   }
 
+  async function lookupAndConfirm(e) {
+    e?.preventDefault?.()
+    const num = boxNumberInput.trim()
+    if (!num) return
+    setLookupError(null)
+    setLookupLoading(true)
+    try {
+      const found = await cardsApi.lookupByIron(num)
+      const full = await cardsApi.get(found.id).catch(() => found)
+      setConfirmCard(full || found)
+    } catch (err) {
+      const code = err?.data?.error
+      if (code === 'box_not_found')      setLookupError('מספר קופה שגוי')
+      else if (code === 'not_assigned')  setLookupError('קופה זו אינה משויכת אליך')
+      else if (code === 'card_closed')   setLookupError('כרטסת הקופה סגורה')
+      else                                setLookupError(err.message || 'שגיאה באחזור הקופה')
+    } finally {
+      setLookupLoading(false)
+    }
+  }
+
   if (!cardId) {
     const disabled = lookupLoading || !boxNumberInput.trim()
+    const confirmAddress = confirmCard ? formatAddress(confirmCard) : ''
+    const confirmLabels = confirmCard ? computeCardLabels([confirmCard]) : null
+    const confirmLabel = confirmCard
+      ? (confirmLabels?.get(confirmCard.id) || String(confirmCard.iron_number ?? ''))
+      : ''
     return (
       <div>
         <div className="collection-card">
           <h2>אחזור קופה</h2>
           <div className="sub">הזן מספר קופה ובחר פעולה</div>
           <form
-            onSubmit={(e) => lookupAndGo((id) => `/scan/${id}`, e)}
+            onSubmit={lookupAndConfirm}
             className="collection-info"
           >
             <div className="field">
@@ -136,6 +164,62 @@ export default function CollectionPage() {
             </div>
           </form>
         </div>
+
+        <Modal
+          open={!!confirmCard}
+          title="אישור כתובת הקופה"
+          onClose={() => setConfirmCard(null)}
+        >
+          {confirmCard && (
+            <div className="collection-info">
+              <div className="sub" style={{ marginBottom: 10 }}>
+                ודאי שזו הקופה הנכונה לפני יצירת הגביה.
+              </div>
+              <div className="kv">
+                <span className="k">מספר קופה</span>
+                <span className="v">{confirmCard.iron_number ?? confirmLabel}</span>
+              </div>
+              <div className="kv">
+                <span className="k">שם</span>
+                <span className="v">{confirmCard.custom_name || '—'}</span>
+              </div>
+              <div className="kv">
+                <span className="k">כתובת</span>
+                <span className="v">{confirmAddress}</span>
+              </div>
+              {confirmCard.location_notes && (
+                <div className="kv">
+                  <span className="k">הערות מיקום</span>
+                  <span className="v">{confirmCard.location_notes}</span>
+                </div>
+              )}
+              <div className="collection-actions" style={{ marginTop: 14 }}>
+                <button
+                  type="button"
+                  className="btn-block"
+                  onClick={() => {
+                    const id = confirmCard.id
+                    setConfirmCard(null)
+                    navigate(`/scan/${id}`)
+                  }}
+                >
+                  ✓ אשר והמשך לגביה
+                </button>
+                <button
+                  type="button"
+                  className="btn-block secondary"
+                  onClick={() => {
+                    const id = confirmCard.id
+                    setConfirmCard(null)
+                    navigate(`/report/${id}?reason=address`)
+                  }}
+                >
+                  📝 צור דיווח כתובת
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
       </div>
     )
   }

@@ -126,6 +126,25 @@ router.get('/entered-recent', requireRole('admin', 'cashroom'), async (req, res,
   } catch (err) { next(err); }
 });
 
+// GET /api/envelopes/today-total  — Task 41: sum + count of envelopes whose
+// status flipped to 'entered' today (server local time). Single source of truth
+// for the cashroom "הוזן היום" stat — replaces a stale browser-side counter
+// that didn't survive refresh, didn't reflect other devices, and didn't update
+// when an existing same-day envelope was edited.
+router.get('/today-total', requireRole('admin', 'cashroom'), async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT COALESCE(SUM(amount), 0)::float AS total,
+              COUNT(*)::int                    AS count
+         FROM envelopes
+        WHERE status = 'entered'
+          AND entered_at >= date_trunc('day', NOW())
+          AND entered_at <  date_trunc('day', NOW()) + INTERVAL '1 day'`
+    );
+    res.json(rows[0] || { total: 0, count: 0 });
+  } catch (err) { next(err); }
+});
+
 // GET /api/envelopes/by-number/:number  — cashroom barcode scan flow
 router.get('/by-number/:number', requireRole('admin', 'cashroom'), async (req, res, next) => {
   const number = String(req.params.number || '').trim();

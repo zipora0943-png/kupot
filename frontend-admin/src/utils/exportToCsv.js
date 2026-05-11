@@ -91,6 +91,55 @@ export function exportEnvelopes(envelopes, filename = 'מעטפות') {
   ])
 }
 
+// Export boxes to CSV — column set varies by which tab is active.
+// ctx provides { labels, lastClosedByBox, activeCardByBox } from BoxesPage.
+export function exportBoxes(boxes, tab, ctx, filename = 'קופות') {
+  const { labels, lastClosedByBox, activeCardByBox } = ctx
+  let headers = []
+  let rows = []
+
+  if (tab === 'active') {
+    headers = ['מספר קופה', 'סוג', 'כרטסת פעילה', 'עיר', 'שכונה', 'רחוב', 'בנין']
+    rows = boxes.map(b => {
+      const active = activeCardByBox.get(b.id)
+      return {
+        'מספר קופה':    b.iron_number || '',
+        'סוג':          b.box_type_name || '',
+        'כרטסת פעילה': active ? (labels.get(active.id) || `#${active.id}`) : '',
+        'עיר':          active?.city || '',
+        'שכונה':        active?.neighborhood || '',
+        'רחוב':         active?.street || '',
+        'בנין':         active?.building || '',
+      }
+    })
+  } else if (tab === 'unusable') {
+    headers = ['מספר קופה', 'סוג', 'כרטסת אחרונה', 'הערות']
+    rows = boxes.map(b => {
+      const last = lastClosedByBox.get(b.id)
+      return {
+        'מספר קופה':     b.iron_number || '',
+        'סוג':           b.box_type_name || '',
+        'כרטסת אחרונה': last ? (labels.get(last.id) || `#${last.id}`) : '',
+        'הערות':         b.notes || '',
+      }
+    })
+  } else {
+    // no_card (default) — uninstalled + inactive
+    headers = ['מספר קופה', 'סוג', 'כרטסת אחרונה', 'תאריך סגירת כרטסת']
+    rows = boxes.map(b => {
+      const last = lastClosedByBox.get(b.id)
+      return {
+        'מספר קופה':          b.iron_number || '',
+        'סוג':                b.box_type_name || '',
+        'כרטסת אחרונה':      last ? (labels.get(last.id) || `#${last.id}`) : '',
+        'תאריך סגירת כרטסת': last?.closed_at ? new Date(last.closed_at).toLocaleDateString('he-IL') : '',
+      }
+    })
+  }
+
+  exportToCsv(filename, rows, headers)
+}
+
 // Export reports to CSV
 export function exportReports(reports, filename = 'דיווחים') {
   const rows = reports.map(r => ({

@@ -28,8 +28,25 @@
 
 ## ⏳ ממתינות
 
-### 35. גובה — סליידר מצומצם והרשאות מוגבלות בתוך הכרטסת
-כשמשתמש מסוג "גובה" נכנס, בסליידר השמאלי יוצגו לו רק: **כרטסת, משימות, התראות, דיווחים**. בתוך הכרטסת: לא יוכל לסגור כרטסת, לא יראה את טאב המעטפות, ובטאב האירועים יראה רק אירועים שמשויכים אליו.
+### 42. Force-push ל-GitHub אחרי ניקוי היסטוריית `backup.sql` (ידני על ידי המשתמשת)
+ההיסטוריה המקומית נוקתה ב-`git filter-branch` כדי להסיר את `backup.sql` (שחשף bcrypt hashes של כל המשתמשים). יש לבצע את ה-push ידנית: `git push --force-with-lease origin main`. **לא לבצע אוטומטית** — המשתמשת מבצעת פעולות הרסניות בעצמה. גיבוי mirror שמור ב-`e:\kupot-project\_kupot-backup-mirror.git` כ-rollback path.
+
+### 43. החלפת סיסמאות דמו אחרי ה-force-push
+מאחר ש-bcrypt hashes של כל המשתמשים נחשפו בהיסטוריית git, יש להחליף סיסמאות אחרי שה-force-push יצא: לעדכן `DEMO_PASSWORD` ב-`backend/.env` לערך חדש, ואז להריץ `node backend/scripts/seedUsers.js` שייצור מחדש את ה-hashes. לוודא login עובד עם הסיסמה החדשה.
+
+### 44. מחיקת ה-mirror של ה-backup אחרי אימות שה-force-push עבר
+אחרי שיתאמת ב-GitHub שההיסטוריה נוקתה (חיפוש "backup.sql" ב-commits לא מחזיר תוצאות), למחוק את הגיבוי המקומי: `Remove-Item -Recurse -Force e:\kupot-project\_kupot-backup-mirror.git`. עד אז להשאיר כ-rollback path.
+
+### 45. סבב 4 — מעבר ל-HTTPS דרך Cloudflare Tunnel (ממתין לדומיין)
+מעבר מהדיפלוי הנוכחי (`vite preview` על פורטים 5000/5001 חשופים HTTP) לארכיטקטורה: nginx → backend, ו-cloudflared מנתב את הדומיין פנימה. השלבים:
+1. ליצור `nginx/kupot.conf` (site config עם הגדרת /api → :3000, frontends → static files)
+2. ליצור `cloudflared/config.yml.example` עם hostname mapping
+3. ב-2 ה-`.env.production` (admin, collector) להגדיר `VITE_API_BASE=/api` (יחסי)
+4. להצמיד backend ל-`127.0.0.1` בלבד (לא לקבל חיבורים חיצוניים ישירים)
+5. להוריד את `kupot-admin` ו-`kupot-collector` מ-`ecosystem.config.js` (לא צריך `vite preview` יותר — nginx יגיש static)
+6. לשכתב את `DEPLOY.md` לפי הזרימה החדשה.
+
+**ממתין:** המשתמשת בודקת רישום דומיין (נכון ל-2026-05-10). לא להתחיל בלי דומיין.
 
 ---
 
@@ -46,6 +63,82 @@ _(אין משימה בביצוע)_
 **מה נעשה:** סיכום קצר
 **קבצים ששונו:** רשימה
 -->
+
+### 41. סכום "הוזן היום" — סינכרון מול הבק — 2026-05-11
+**מה נעשה:** בעמוד חדר כסף הסטטיסטיקות "הוזנו היום" ו"סה"כ הוזן היום" חושבו עד עכשיו לפי state מקומי של הדפדפן (`enteredToday` ו-`totalToday` עם `useMemo`). זה גרר שלושה באגים:
+
+1. **רענון הדף איפס לאפס** — `enteredToday` הוא state ב-React, נמחק בכל mount מחדש.
+2. **הזנה ממכשיר/דפדפן אחר לא נספרה** — אין סנכרון בין סשנים.
+3. **עריכת סכום של מעטפה קיימת לא עדכנה את הסכום** — ב-`handleEnvSaved` הקוד היה `if (prev.some(e => e.id === updated.id)) return prev` כלומר התעלם מעריכה.
+
+הפתרון: source-of-truth יחיד בשרת.
+
+- **Backend — `GET /api/envelopes/today-total`** (`backend/src/routes/envelopes.js`): endpoint חדש מוגן ב-`requireRole('admin', 'cashroom')` שמחזיר `{ total, count }`. השאילתה: `SUM(amount)` + `COUNT(*)` של מעטפות עם `status='entered'` ו-`entered_at` בטווח `[date_trunc('day', NOW()), date_trunc('day', NOW()) + 1 day)`. בחירת `date_trunc` במקום `CURRENT_DATE` כי `entered_at` הוא TIMESTAMP — `date_trunc` ביחד עם `NOW()` עובד מול שני הסוגים (TIMESTAMP / TIMESTAMPTZ). הוצב לפני `/:id` כדי לא להתנגש בנתיב הדינמי. נוסף לפני `by-number` בקובץ.
+
+- **Endpoints client** — נוסף `envelopes.todayTotal()` ב-`frontend-admin/src/api/endpoints.js`.
+
+- **`CashroomAdminPage.jsx`** —
+  - הוסר `enteredToday` state ו-`totalToday` ה-`useMemo`.
+  - הוסר ה-import של `useMemo` (לא נדרש יותר).
+  - נוסף `todayStats` state עם `{ total, count }` ופונקציה `loadTodayStats()` שקוראת ל-`envelopesApi.todayTotal()` ושמה את התוצאה. כשלון רשתי לא דורס את הערך הקודם (best-effort).
+  - `loadTodayStats()` נקראת ב-mount ובסוף `handleEnvSaved` (אחרי כל הזנה/עריכה).
+  - שני הכרטיסים בסטטיסטיקה משתמשים עכשיו ב-`todayStats.count` ו-`formatMoney(todayStats.total)`.
+
+**שיקול עיצובי:** השרת הוא הסמכות היחידה לסכום היומי. הקליינט מבצע fetch קטן וזול (`SUM/COUNT` מסונן ב-`entered_at`) בכל אינטראקציה משמעותית — לא יקר חישובית אבל מבטיח עקביות בין דפדפנים, רענונים, וגם אם משתמשת אחרת הזינה במכשיר אחר. הפונקציה `isToday` נשארה ב-קובץ כי היא עדיין משמשת לבדיקת ניתנות לעריכה ברשימת "מעטפות אחרונות" (`editable = isToday(e.entered_at)`).
+
+**קבצים ששונו:**
+- `backend/src/routes/envelopes.js` — endpoint חדש `/today-total`.
+- `frontend-admin/src/api/endpoints.js` — `envelopes.todayTotal`.
+- `frontend-admin/src/pages/CashroomAdminPage.jsx` — החלפת state מקומי בקריאה לשרת.
+
+---
+
+### 40. תאריך ביצוע במשימות — טבלה + ייצוא — 2026-05-11
+**מה נעשה:** הייצוא לאקסל ב-`TasksPage.jsx` כבר כלל את `executed_at` כעמודה "בוצע" (שורה 210). היה חסר בתצוגת הטבלה עצמה. נוסף:
+
+- **עמודה חדשה "תאריך ביצוע" בטבלה** — אחרי "סטטוס", לפני "משויך". מציגה `executed_at` בפורמט עברי קצר (`toLocaleDateString('he-IL')`). למשימות שעדיין לא בוצעו (`status='open'` או `in_progress`) מוצג `—` באפור.
+- **Sort accessor חדש `executed`** — ממיין לפי `Date(executed_at)` עולה/יורד; ערכי `null` ימוינו לסוף (Date-comparison של null נחשב 0 ב-`useSortable`).
+- **ה-API כבר מחזיר `executed_at`** — `backend/src/routes/tasks.js:35` משתמש ב-`SELECT t.*`, כך שהשדה זמין כבר ב-payload. אין צורך בשינוי בק-אנד.
+- **בייצוא** — ה-CSV ממשיך להציג את אותה עמודה כפי שעשה קודם, אבל עכשיו המשתמש רואה אותה גם בטבלה ולא רק בייצוא.
+
+**קבצים ששונו:**
+- `frontend-admin/src/pages/TasksPage.jsx` — הוספת `executed` ב-`sortAccessors`, `<SortableTh sortKey="executed">`, ו-`<td>` שמציג את הערך.
+
+---
+
+### 39. ייצוא לאקסל בעמוד "כרטסות" ובעמוד "קופות" — 2026-05-11
+**מה נעשה:** עמוד "כרטסות" כבר היה עם ייצוא לאקסל (`exportCards()` ב-`utils/exportToCsv.js`, כפתור ב-`CardsPage.jsx:199-203`) — מייצא את `filtered` (כלומר מה שמוצג אחרי סינון לפי חיפוש/סטטוס/עיר/גובה/טאב), בקובץ `כרטסות_DD.MM.YYYY.csv` עם BOM ל-UTF-8 (כך עברית מוצגת תקין באקסל).
+
+עמוד "קופות" (BoxesPage) לא היה עם ייצוא. נוסף:
+
+- **`exportBoxes(boxes, tab, ctx, filename)`** ב-`utils/exportToCsv.js` — פונקציה שמייצרת רשימת עמודות ושורות לפי הטאב הפעיל:
+  - **no_card** (ללא כרטסת פעילה): מספר קופה, סוג, כרטסת אחרונה, תאריך סגירת כרטסת.
+  - **active** (כרטסות פעילות): מספר קופה, סוג, כרטסת פעילה, עיר, שכונה, רחוב, בנין.
+  - **unusable** (לא שמישות): מספר קופה, סוג, כרטסת אחרונה, הערות.
+- **כפתור "📥 יצוא לאקסל"** נוסף ב-`BoxesPage.jsx` בשורת המסננים, לצד "↺ איפוס". מקבל `filtered` + `activeTab` + מפות עזר (`labels`, `lastClosedByBox`, `activeCardByBox`) ושם קובץ דינמי (`קופות_<טאב>_DD.MM.YYYY`). מנוטרל כשאין נתונים לייצוא.
+
+**שיקול עיצובי:** הסטים של העמודות שונים בין הטאבים כדי שהייצוא יהיה רלוונטי — אין טעם לייצא "עיר/שכונה/רחוב" לטאב של קופות ללא כרטסת. שם הקובץ כולל את שם הטאב כדי להבדיל בקלות בין ייצואים שונים.
+
+**קבצים ששונו:**
+- `frontend-admin/src/utils/exportToCsv.js` — הוספת `exportBoxes()`.
+- `frontend-admin/src/pages/BoxesPage.jsx` — import של `exportBoxes` + כפתור ייצוא בשורת המסננים.
+
+---
+
+### 35. גובה — סליידר מצומצם והרשאות מוגבלות בתוך הכרטסת — 2026-05-11
+**מה נעשה:** המשימה בוצעה בעבודה קודמת אך לא סומנה כהושלמה. אימות בקוד מאשר שכל ארבעת החלקים פעילים:
+
+- **סליידר מצומצם לגובה:** `Sidebar.jsx` כבר מסנן פריטים לפי `roles` בכל item. עבור role=`collector` נשארים רק: כרטסות, משימות, דיווחים, התראות — כי `/boxes`, `/envelopes`, `/dochot`, `/cashroom-admin`, `/users`, `/settings` מסומנים `roles: ['admin']` (או `['admin','cashroom']`).
+- **טאב מעטפות נסתר:** ב-`CardDetailPage.jsx` (שורות 42-51) `isCollector` מסנן את `ALL_TABS` ומשמיט `envelopes`. ברירת המחדל ל-`activeTab` גם היא `events` במקום `envelopes` עבור גובה.
+- **אין כפתורי סגירת/פתיחת כרטסת:** שורות 223 ו-229 ב-`CardDetailPage.jsx` עוטפות את הכפתורים ב-`!isCollector`.
+- **סינון אירועים לפי גובה:** ב-`EventsTab.jsx` (שורות 48-50) רשימת האירועים מסוננת ל-`Number(e.user_id) === Number(user?.id)` כשהמשתמש הוא collector.
+
+**קבצים ששונו (בעבודה קודמת):**
+- `frontend-admin/src/components/Sidebar.jsx`
+- `frontend-admin/src/pages/CardDetailPage.jsx`
+- `frontend-admin/src/pages/cardTabs/EventsTab.jsx`
+
+---
 
 ### 38. כרטסות — כרטיס "לא רוקנו" יציג את כמות התראות אי-גביה — 2026-05-07
 **מה נעשה:** בעמוד "כרטסות" (`CardsPage.jsx`) כרטיס הסטטיסטיקה "לא רוקנו" השתמש ב-`alertsApi.getAll()` שפונה ל-`GET /api/alerts` — אנדפוינט שלא קיים בבק-אנד (קובץ `routes/alerts.js` חושף רק `/no-collection`). כתוצאה מכך הקריאה נכשלה (`.catch(() => {})` בלע אותה בשקט) והמספר נותר תמיד 0. החלפתי את הקריאה ל-`alertsApi.noCollection()` שמחזיר `{ global_threshold, count, items: [] }`, וכעת `alertCount` נטען מ-`d.count` (עם fallback ל-`d.items.length`). כך הכותרת בכרטסת "לא רוקנו" מציגה כראוי את מספר ההתראות בפועל מאחורי כרטסות שלא רוקנו בזמן שהוגדר ב-`alert_days_global` (או הסף האישי של הכרטסת).

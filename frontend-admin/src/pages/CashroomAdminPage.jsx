@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { envelopes as envelopesApi } from '../api/endpoints'
 import CashroomModal from '../components/CashroomModal'
 
@@ -40,8 +40,21 @@ export default function CashroomAdminPage() {
   // modal
   const [openEnv, setOpenEnv] = useState(null)
 
-  // track today's entered envelopes (since this page started) — survives backend pending filter
-  const [enteredToday, setEnteredToday] = useState([])
+  // Task 41: today's entered total comes from the server (single source of
+  // truth). Survives refresh, reflects edits, and is consistent across devices.
+  const [todayStats, setTodayStats] = useState({ total: 0, count: 0 })
+
+  async function loadTodayStats() {
+    try {
+      const d = await envelopesApi.todayTotal()
+      setTodayStats({
+        total: Number(d?.total) || 0,
+        count: Number(d?.count) || 0,
+      })
+    } catch {
+      // best-effort; leave previous value on transient failures
+    }
+  }
 
   // Task 37: recent entered envelopes (most-recent first) shown at the bottom
   // of the page; cashroom may edit only those entered today.
@@ -78,6 +91,7 @@ export default function CashroomAdminPage() {
     }
     load()
     loadRecent()
+    loadTodayStats()
     return () => { cancelled = true }
   }, [])
 
@@ -90,16 +104,12 @@ export default function CashroomAdminPage() {
     if (!updated) return
     // remove from pending list (no-op if it wasn't pending)
     setPending(prev => prev.filter(e => e.id !== updated.id))
-    // record for today's stat (only if entered today)
-    if (updated.status === 'entered' && isToday(updated.entered_at || new Date().toISOString())) {
-      setEnteredToday(prev => {
-        if (prev.some(e => e.id === updated.id)) return prev
-        return [...prev, updated]
-      })
-    }
     // Task 37: keep the recent list in sync — refetch so ordering / joined
     // fields (iron_number, city, etc.) come back from the server.
     loadRecent()
+    // Task 41: refresh today's total from the server so edits (not just new
+    // entries) are reflected correctly.
+    loadTodayStats()
   }
 
   async function handleScan(e) {
@@ -123,11 +133,6 @@ export default function CashroomAdminPage() {
     }
   }
 
-  const totalToday = useMemo(
-    () => enteredToday.reduce((sum, e) => sum + (Number(e.amount) || 0), 0),
-    [enteredToday]
-  )
-
   return (
     <div className="screen">
       <div className="page-header">
@@ -144,11 +149,11 @@ export default function CashroomAdminPage() {
           <div className="lbl">ממתינות להזנה</div>
         </div>
         <div className="stat-card">
-          <div className="val">{enteredToday.length}</div>
+          <div className="val">{todayStats.count}</div>
           <div className="lbl">הוזנו היום</div>
         </div>
         <div className="stat-card">
-          <div className="val">{formatMoney(totalToday) || '₪0'}</div>
+          <div className="val">{formatMoney(todayStats.total) || '₪0'}</div>
           <div className="lbl">סה"כ הוזן היום</div>
         </div>
       </div>

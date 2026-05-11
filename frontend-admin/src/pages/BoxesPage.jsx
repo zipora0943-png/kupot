@@ -4,6 +4,7 @@ import { boxes as boxesApi, cards as cardsApi, boxTypes as boxTypesApi } from '.
 import { computeCardLabels } from '@shared/utils/cardLabel'
 import TaskModal from '../components/TaskModal'
 import BoxModal from '../components/BoxModal'
+import { exportBoxes } from '../utils/exportToCsv'
 
 // 'no_card' merges legacy 'uninstalled' + 'inactive' (admin treats them as one).
 const STATUS_TABS = [
@@ -232,6 +233,16 @@ export default function BoxesPage() {
             </select>
           </div>
           <button className="btn sm" onClick={resetFilters}>↺ איפוס</button>
+          <button
+            className="btn sm"
+            onClick={() => exportBoxes(
+              filtered,
+              activeTab,
+              { labels, lastClosedByBox, activeCardByBox },
+              `קופות_${STATUS_TABS.find(t => t.key === activeTab)?.label || ''}_${new Date().toLocaleDateString('he-IL')}`
+            )}
+            disabled={filtered.length === 0}
+          >📥 יצוא לאקסל</button>
           <div style={{ marginRight: 'auto', fontSize: 13, color: 'var(--text2)', alignSelf: 'center' }}>
             סה"כ: <strong style={{ color: 'var(--text)' }}>{filtered.length}</strong>
           </div>

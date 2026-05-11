@@ -181,6 +181,7 @@ export default function TasksPage() {
     iron:     (t) => t.iron_number,
     card:     (t) => t.card_id ? (labels.get(t.card_id) || '') : '',
     status:   (t) => STATUS_LABELS[t.status]?.label || t.status,
+    executed: (t) => t.executed_at ? new Date(t.executed_at) : null,
     assigned: (t) => t.assigned_name,
     source:   (t) => reportByTaskId.get(t.id) ? 1 : 0,
   }), [labels, reportByTaskId])
@@ -299,6 +300,7 @@ export default function TasksPage() {
                   <SortableTh sortKey="iron"     sort={sort} onToggle={toggle}>קופה</SortableTh>
                   <SortableTh sortKey="card"     sort={sort} onToggle={toggle}>כרטסת</SortableTh>
                   <SortableTh sortKey="status"   sort={sort} onToggle={toggle}>סטטוס</SortableTh>
+                  <SortableTh sortKey="executed" sort={sort} onToggle={toggle}>תאריך ביצוע</SortableTh>
                   <SortableTh sortKey="assigned" sort={sort} onToggle={toggle}>משויך</SortableTh>
                   <SortableTh sortKey="source"   sort={sort} onToggle={toggle}>מקור</SortableTh>
                   <th>פעולות</th>
@@ -333,6 +335,11 @@ export default function TasksPage() {
                           className={'pill ' + st.pill}
                           title={t.status === 'cancelled' && t.cancellation_reason ? `סיבת ביטול: ${t.cancellation_reason}` : undefined}
                         >{st.label}</span>
+                      </td>
+                      <td>
+                        {t.executed_at
+                          ? new Date(t.executed_at).toLocaleDateString('he-IL')
+                          : <span style={{ color: 'var(--text3)' }}>—</span>}
                       </td>
                       <td>{t.assigned_name || <span style={{ color: 'var(--text3)' }}>לא משויך</span>}</td>
                       <td>

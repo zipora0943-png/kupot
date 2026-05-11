@@ -88,6 +88,8 @@ export const envelopes = {
   getPending: ()         => api.get('/envelopes/pending'),
   // Task 37: most-recent entered envelopes (for cashroom recent-envelopes panel)
   getRecentEntered: (limit) => api.get('/envelopes/entered-recent', limit ? { limit } : undefined),
+  // Task 41: total + count of envelopes entered today (single source of truth).
+  todayTotal: ()         => api.get('/envelopes/today-total'),
   byNumber: (number)     => api.get(`/envelopes/by-number/${encodeURIComponent(number)}`),
 };
 
