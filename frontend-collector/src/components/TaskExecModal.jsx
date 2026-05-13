@@ -10,7 +10,7 @@ import { tasks as tasksApi, uploads as uploadsApi } from '../api/endpoints'
  *  !opens_card  &&  closes_card → removal
  *  !opens_card  && !closes_card → generic (TASK_DONE event)
  */
-export default function TaskExecModal({ open, task, onClose, onSuccess }) {
+export default function TaskExecModal({ open, task, onClose, onSuccess, onReportNotExecuted }) {
   const [executionNotes, setExecutionNotes] = useState('')
   const [newCity,         setNewCity]         = useState('')
   const [newNeighborhood, setNewNeighborhood] = useState('')
@@ -136,6 +136,14 @@ export default function TaskExecModal({ open, task, onClose, onSuccess }) {
               onClick={onClose}
               disabled={submitting}
             >ביטול</button>
+            {onReportNotExecuted && (
+              <button
+                className="btn danger"
+                type="button"
+                onClick={() => onReportNotExecuted(task)}
+                disabled={submitting}
+              >❌ לא בוצעה</button>
+            )}
             <button
               className="btn success"
               type="button"

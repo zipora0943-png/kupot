@@ -111,6 +111,9 @@ export const tasks = {
   markDoneNoLifecycle: (id, data) => api.post(`/tasks/${id}/mark-done-no-lifecycle`, data),
   // Admin-only: cancel a non-final task. Logs a `task_cancelled` event when card_id exists.
   cancel: (id, reason)   => api.post(`/tasks/${id}/cancel`, { reason: reason || null }),
+  // Collector-only on the backend; declared here so shared code (and admin views
+  // that show stats) can reference the route. Logs a `task_not_executed` event.
+  reportNotExecuted: (id, reason) => api.post(`/tasks/${id}/not-executed`, { reason }),
   remove: (id)           => api.delete(`/tasks/${id}`),
   // Helper: get tasks for a specific card.
   // Backend supports box_id but not card_id, so we filter client-side.

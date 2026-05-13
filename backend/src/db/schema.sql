@@ -163,7 +163,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   card_id           INTEGER REFERENCES cards(id) ON DELETE RESTRICT,
   task_type_id      INTEGER NOT NULL REFERENCES task_types(id) ON DELETE RESTRICT,
   status            VARCHAR(20) NOT NULL DEFAULT 'open'
-                      CHECK (status IN ('open','in_progress','done','cancelled')),
+                      CHECK (status IN ('open','in_progress','done','cancelled','not_executed')),
   assigned_to       INTEGER REFERENCES users(id) ON DELETE RESTRICT,
   created_by        INTEGER REFERENCES users(id) ON DELETE RESTRICT,
   notes             TEXT,
@@ -171,7 +171,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   execution_notes   TEXT,
   execution_image   TEXT,
   executed_at       TIMESTAMPTZ,
-  cancellation_reason TEXT,
+  cancellation_reason  TEXT,
+  not_executed_reason  TEXT,
   -- for installation tasks
   new_city          VARCHAR(100),
   new_neighborhood  VARCHAR(100),
@@ -247,3 +248,10 @@ ALTER TABLE tasks ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
 -- reports.closure_reason: optional admin-supplied reason captured when a
 -- report is closed via POST /api/reports/:id/close (without converting to task).
 ALTER TABLE reports ADD COLUMN IF NOT EXISTS closure_reason TEXT;
+
+-- Task 46: collectors can close a task as 'not_executed' with a free-text reason.
+-- Refresh the status CHECK constraint and add the reason column (idempotent).
+ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check;
+ALTER TABLE tasks ADD  CONSTRAINT tasks_status_check
+  CHECK (status IN ('open','in_progress','done','cancelled','not_executed'));
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS not_executed_reason TEXT;

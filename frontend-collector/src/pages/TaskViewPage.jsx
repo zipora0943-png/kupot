@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { tasks as tasksApi } from '../api/endpoints'
 import TaskExecModal from '../components/TaskExecModal'
 import TaskExecDetailsModal from '../components/TaskExecDetailsModal'
+import TaskNotExecutedModal from '../components/TaskNotExecutedModal'
 import { assetUrl } from '../utils/assetUrl'
 
 function formatDate(s) {
@@ -27,6 +28,7 @@ const STATUS_LABEL = {
   in_progress: 'בביצוע',
   done: 'בוצעה',
   cancelled: 'בוטלה',
+  not_executed: 'לא בוצעה',
 }
 
 export default function TaskViewPage() {
@@ -39,6 +41,7 @@ export default function TaskViewPage() {
 
   const [execOpen, setExecOpen] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [notExecOpen, setNotExecOpen] = useState(false)
 
   useEffect(() => {
     if (!taskId) return
@@ -85,11 +88,17 @@ export default function TaskViewPage() {
     navigate('/tasks-alerts', { state: { tab: 'tasks' } })
   }
 
+  function handleNotExecSuccess(updated) {
+    if (updated) setTask(prev => ({ ...prev, ...updated }))
+    setNotExecOpen(false)
+    navigate('/tasks-alerts', { state: { tab: 'tasks' } })
+  }
+
   if (loading) return <div className="loading">טוען...</div>
   if (error) return <div className="alert red">{error}</div>
   if (!task) return <div className="empty">לא נמצאה משימה</div>
 
-  const isFinal = task.status === 'done' || task.status === 'cancelled'
+  const isFinal = task.status === 'done' || task.status === 'cancelled' || task.status === 'not_executed'
   const title = `${task.icon || '📋'} ${task.type_name || 'משימה'}`
   const needsLocation = flavor === 'transfer' || flavor === 'installation'
 
@@ -159,7 +168,11 @@ export default function TaskViewPage() {
           )}
           {isFinal && task.executed_at && (
             <div className="kv">
-              <span className="k">{task.status === 'cancelled' ? 'בוטלה ב-' : 'בוצעה ב-'}</span>
+              <span className="k">
+                {task.status === 'cancelled'    ? 'בוטלה ב-' :
+                 task.status === 'not_executed' ? 'דווחה כלא בוצעה ב-' :
+                                                  'בוצעה ב-'}
+              </span>
               <span className="v">{formatDateTime(task.executed_at)}</span>
             </div>
           )}
@@ -229,6 +242,19 @@ export default function TaskViewPage() {
           </div>
         )}
 
+        {isFinal && task.status === 'not_executed' && task.not_executed_reason && (
+          <div className="field" style={{ marginTop: 12 }}>
+            <label>סיבת אי-ביצוע</label>
+            <div style={{
+              whiteSpace: 'pre-wrap',
+              padding: 10,
+              border: '1px solid var(--red, #ef4444)',
+              borderRadius: 8,
+              background: 'var(--red-soft, #fef2f2)',
+            }}>{task.not_executed_reason}</div>
+          </div>
+        )}
+
         <div className="collection-actions">
           {!isFinal && (
             <button
@@ -236,6 +262,13 @@ export default function TaskViewPage() {
               className="btn-block"
               onClick={() => setExecOpen(true)}
             >✅ אישור ביצוע</button>
+          )}
+          {!isFinal && (
+            <button
+              type="button"
+              className="btn-block danger"
+              onClick={() => setNotExecOpen(true)}
+            >❌ לא בוצעה</button>
           )}
           {isFinal && (
             <button
@@ -257,6 +290,14 @@ export default function TaskViewPage() {
         task={task}
         onClose={() => setExecOpen(false)}
         onSuccess={handleExecSuccess}
+        onReportNotExecuted={() => { setExecOpen(false); setNotExecOpen(true) }}
+      />
+
+      <TaskNotExecutedModal
+        open={notExecOpen}
+        task={task}
+        onClose={() => setNotExecOpen(false)}
+        onSuccess={handleNotExecSuccess}
       />
 
       <TaskExecDetailsModal

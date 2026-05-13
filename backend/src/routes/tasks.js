@@ -2,13 +2,13 @@ const router = require('express').Router();
 const pool   = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
 const { requireRole }  = require('../middleware/roles');
-const { completeTask, markTaskDoneNoLifecycle, EVENT } = require('../logic/cardLogic');
+const { completeTask, markTaskDoneNoLifecycle, reportTaskNotExecuted, EVENT } = require('../logic/cardLogic');
 
 router.use(authenticate);
 // Task 36: cashroom users have no access to tasks — only the cashroom workflow.
 router.use(requireRole('admin', 'collector'));
 
-const VALID_STATUSES = ['open', 'in_progress', 'done', 'cancelled'];
+const VALID_STATUSES = ['open', 'in_progress', 'done', 'cancelled', 'not_executed'];
 
 // ─── helpers ──────────────────────────────────────────────────────
 async function fetchTaskWithType(taskId) {
@@ -337,6 +337,37 @@ router.post('/:id/cancel', requireRole('admin'), async (req, res, next) => {
     next(err);
   } finally {
     client.release();
+  }
+});
+
+// POST /api/tasks/:id/not-executed — close a task as "not executed" with a reason
+// Allowed for: admin, OR the collector assigned to the task.
+// Sets status='not_executed' + reason; logs an event on the task's card
+// (or the box's active card) without touching card lifecycle.
+router.post('/:id/not-executed', requireRole('admin', 'collector'), async (req, res, next) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+
+  const { reason } = req.body || {};
+  if (typeof reason !== 'string' || !reason.trim()) {
+    return res.status(400).json({ error: 'יש להזין סיבה לאי-ביצוע' });
+  }
+
+  try {
+    const task = await fetchTaskWithType(id);
+    if (!task) return res.status(404).json({ error: 'Not found' });
+    if (req.user.role === 'collector' && task.assigned_to !== req.user.id) {
+      return res.status(403).json({ error: 'Task not assigned to this collector' });
+    }
+
+    const result = await reportTaskNotExecuted(id, reason, req.user.id);
+    res.json(result);
+  } catch (err) {
+    if (/^Task not found$/.test(err.message))         return res.status(404).json({ error: err.message });
+    if (/already (completed|reported)/.test(err.message)) return res.status(409).json({ error: err.message });
+    if (/cancelled/.test(err.message))                return res.status(409).json({ error: err.message });
+    if (/reason is required/.test(err.message))       return res.status(400).json({ error: err.message });
+    next(err);
   }
 });
 

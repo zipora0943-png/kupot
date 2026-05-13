@@ -465,6 +465,10 @@ tr:last-child td { border-bottom: none; }
   background: var(--surface); color: var(--text);
   border: 1px solid var(--border2); box-shadow: none;
 }
+.btn-block.danger {
+  background: var(--red, #ef4444); color: #fff;
+  box-shadow: 0 4px 10px rgba(239, 68, 68, 0.25);
+}
 
 .envelopes-history {
   background: var(--surface); border: 1px solid var(--border);

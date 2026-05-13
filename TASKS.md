@@ -64,6 +64,57 @@ _(אין משימה בביצוע)_
 **קבצים ששונו:** רשימה
 -->
 
+### 46. סגירת משימה ע"י דיווח "לא בוצעה" (collector) — 2026-05-13
+**מה נעשה:** הוספת זרימה שלמה לסגירת משימה כ"לא בוצעה" ע"י הגובה המשויך, עם סיבה חופשית. הסטטוס החדש `not_executed` נוסף ל-CHECK של `tasks.status`, ועמודה `not_executed_reason TEXT`. אירוע חדש `task_not_executed` נרשם על הכרטסת הקשורה למשימה (best-effort: `task.card_id`, ובהיעדרו — הכרטסת הפעילה של הקופה). **שום פעולה על מחזור חיים של כרטסת/קופה** — גם למשימות `opens_card`/`closes_card` רק האירוע נרשם, ללא פתיחה/סגירה של כרטסת.
+
+**Backend:**
+- `backend/src/db/schema.sql` — CHECK חדש לטבלת `tasks` (`not_executed` נוסף), עמודה `not_executed_reason`, migration block בתחתית להפעלה מחדש בטוחה על DB קיים.
+- `backend/src/logic/cardLogic.js` — פונקציה `reportTaskNotExecuted(taskId, reason, userId)` בעטיפת transaction (`SELECT … FOR UPDATE`, חוסם state final, UPDATE לסטטוס + reason + executed_at, INSERT event ב-`task_not_executed` רק אם נמצאה כרטסת). EVENT enum הורחב.
+- `backend/src/routes/tasks.js` — endpoint `POST /api/tasks/:id/not-executed` מוגן ב-`requireRole('collector')`, בודק שהמשימה משויכת ל-user, ושהסיבה לא ריקה אחרי trim. `VALID_STATUSES` הורחב.
+- `backend/tests/integration/cardLogic.test.js` — 5 בדיקות חדשות: opens_card לא פותח כרטסת, closes_card לא סוגר, חסימת state final (done/cancelled/already-reported), דחיית סיבה ריקה, רישום אירוע על הכרטסת הפעילה.
+
+**Frontend-collector:**
+- `frontend-collector/src/api/endpoints.js` — `tasks.reportNotExecuted(id, reason)`.
+- `frontend-collector/src/components/TaskNotExecutedModal.jsx` — מודאל חדש עם textarea חובה ואישור (`btn danger`).
+- `frontend-collector/src/pages/TaskViewPage.jsx` — כפתור משני "❌ לא בוצעה" ליד "אישור ביצוע", הוספת `not_executed` ל-`STATUS_LABEL`, ל-`isFinal`, ולהצגת `not_executed_reason` במסך הסופי. ניווט חזרה ל-tasks-alerts אחרי הצלחה.
+- `frontend-collector/src/components/TaskExecDetailsModal.jsx` — כותרת/קופי מותאמים ל-not_executed, הצגת `not_executed_reason` במצב read-only.
+- `frontend-collector/src/index.css` — מחלקת `.btn-block.danger` חדשה (אדום).
+
+**Frontend-admin:**
+- `frontend-admin/src/api/endpoints.js` — `tasks.reportNotExecuted` (למרות שאינו זמין ל-admin בבק — נשאר עקבי לחשיפת ה-API מהקליינט).
+- `frontend-admin/src/pages/TasksPage.jsx` — `not_executed` ב-`STATUS_LABELS` עם pill `purple`, באפשרויות הסינון, ב-`isDone`, ב-tooltip של הסטטוס (`סיבת אי-ביצוע: …`), ובייצוא CSV (גם `cancellation_reason` שהיה חסר).
+- `frontend-admin/src/pages/cardTabs/TasksTab.jsx` — אותן התאמות במסך טאב המשימות של כרטסת.
+- `frontend-admin/src/components/TaskExecDetailsModal.jsx` — כותרת/קופי + הצגת `not_executed_reason`.
+
+**שיקול עיצובי:**
+- הסטטוס `not_executed` נבחר במקום שימוש חוזר ב-`cancelled` כדי לאפשר הפרדה אמיתית בדיווחים: ביטול הוא פעולת admin על משימה שכבר לא רלוונטית; "לא בוצעה" הוא דיווח של הגובה בשטח שלא הצליח, ויש לתת על כך גלוי בייצוא ו-tooltip נפרד.
+- אירוע על הכרטסת נרשם רק אם קיימת כרטסת — למשימות `opens_card` שאף פעם לא נפתחה להן כרטסת אין לאן לרשום, וזה בסדר (הדיווח עדיין נשמר על המשימה עצמה).
+- כפתור "לא בוצעה" משמש כפעולה הפוכה ל"אישור ביצוע" באותו מסך, כך שזרימת המשתמש זהה: גובה רואה משימה משויכת → לוחץ אחד משני הכפתורים → מודאל קצר → חזרה לרשימה.
+
+**migration לפרודקשן:** הפקודות בסוף `schema.sql` הן idempotent (`ADD COLUMN IF NOT EXISTS`, `DROP CONSTRAINT IF EXISTS` + `ADD CONSTRAINT`), אז `npm run db:init` יעדכן DB קיים בלי איבוד נתונים.
+
+**בדיקה ידנית נדרשת בפרודקשן (לא הרצתי כאן):**
+1. `cd backend && npm run db:init` להחלת ה-migration.
+2. כניסה כ-collector → משימה משויכת → "❌ לא בוצעה" → סיבה → אישור → לוודא ש-status בטבלה הוא `not_executed`, יש שורה ב-`events.type=task_not_executed`, והכרטסת/קופה לא השתנו.
+3. כניסה כ-admin → לוודא badge "לא בוצעה" סגול + tooltip עם הסיבה, וייצוא CSV מכיל את העמודה.
+
+**קבצים ששונו (13):**
+- `backend/src/db/schema.sql`
+- `backend/src/logic/cardLogic.js`
+- `backend/src/routes/tasks.js`
+- `backend/tests/integration/cardLogic.test.js`
+- `frontend-collector/src/api/endpoints.js`
+- `frontend-collector/src/components/TaskNotExecutedModal.jsx` (חדש)
+- `frontend-collector/src/components/TaskExecDetailsModal.jsx`
+- `frontend-collector/src/pages/TaskViewPage.jsx`
+- `frontend-collector/src/index.css`
+- `frontend-admin/src/api/endpoints.js`
+- `frontend-admin/src/pages/TasksPage.jsx`
+- `frontend-admin/src/pages/cardTabs/TasksTab.jsx`
+- `frontend-admin/src/components/TaskExecDetailsModal.jsx`
+
+---
+
 ### 41. סכום "הוזן היום" — סינכרון מול הבק — 2026-05-11
 **מה נעשה:** בעמוד חדר כסף הסטטיסטיקות "הוזנו היום" ו"סה"כ הוזן היום" חושבו עד עכשיו לפי state מקומי של הדפדפן (`enteredToday` ו-`totalToday` עם `useMemo`). זה גרר שלושה באגים:
 

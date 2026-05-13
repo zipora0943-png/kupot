@@ -113,6 +113,9 @@ export const tasks = {
   markDoneNoLifecycle: (id, data) => api.post(`/tasks/${id}/mark-done-no-lifecycle`, data),
   // Admin-only: cancel a non-final task. Logs a `task_cancelled` event when card_id exists.
   cancel: (id, reason)   => api.post(`/tasks/${id}/cancel`, { reason: reason || null }),
+  // Collector-only: report that the task could not be executed (mandatory reason).
+  // No card lifecycle changes; logs a `task_not_executed` event on the relevant card.
+  reportNotExecuted: (id, reason) => api.post(`/tasks/${id}/not-executed`, { reason }),
   remove: (id)           => api.delete(`/tasks/${id}`),
   // Helper: get tasks for a specific card.
   // Backend supports box_id but not card_id, so we filter client-side.
@@ -184,4 +187,10 @@ export const boxTypes = {
   create: (data)         => api.post('/settings/box-types', data),
   update: (id, data)     => api.put(`/settings/box-types/${id}`, data),
   remove: (id)           => api.delete(`/settings/box-types/${id}`),
+};
+
+// ---- VERSION ----
+// Public read (no auth) — used by the in-app update checker.
+export const version = {
+  getCollector: () => api.get('/version/collector'),
 };

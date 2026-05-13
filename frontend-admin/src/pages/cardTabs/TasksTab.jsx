@@ -3,6 +3,7 @@ import { tasks as tasksApi } from '../../api/endpoints'
 import TaskModal from '../../components/TaskModal'
 import TaskExecDetailsModal from '../../components/TaskExecDetailsModal'
 import CancelTaskModal from '../../components/CancelTaskModal'
+import TaskNotExecutedModal from '../../components/TaskNotExecutedModal'
 import { useAuth } from '@shared/context/AuthContext'
 import { exportCsv, csvFilename } from '../../utils/exportCsv'
 
@@ -13,10 +14,11 @@ function formatDate(iso) {
 }
 
 const STATUS = {
-  open:        { label: 'פתוח',    cls: 'yellow' },
-  in_progress: { label: 'בביצוע',  cls: 'blue'   },
-  done:        { label: 'הושלם',   cls: 'green'  },
-  cancelled:   { label: 'בוטל',    cls: 'gray'   },
+  open:         { label: 'פתוח',     cls: 'yellow' },
+  in_progress:  { label: 'בביצוע',   cls: 'blue'   },
+  done:         { label: 'הושלם',    cls: 'green'  },
+  cancelled:    { label: 'בוטל',     cls: 'gray'   },
+  not_executed: { label: 'לא בוצעה', cls: 'purple' },
 }
 
 export default function TasksTab({ cardId, boxId }) {
@@ -31,6 +33,7 @@ export default function TasksTab({ cardId, boxId }) {
   const [editTask,   setEditTask]   = useState(null)
   const [detailsTask, setDetailsTask] = useState(null)
   const [cancelTask, setCancelTask] = useState(null)
+  const [notExecTask, setNotExecTask] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -44,7 +47,7 @@ export default function TasksTab({ cardId, boxId }) {
   }, [cardId, boxId, reloadKey])
 
   function openTask(t) {
-    const isFinal = t.status === 'done' || t.status === 'cancelled'
+    const isFinal = t.status === 'done' || t.status === 'cancelled' || t.status === 'not_executed'
     if (isFinal) setDetailsTask(t)
     else setEditTask(t)
   }
@@ -71,6 +74,7 @@ export default function TasksTab({ cardId, boxId }) {
               { key: 'notes',          label: 'הערות' },
               { key: 'execution_notes', label: 'הערות ביצוע' },
               { key: 'cancellation_reason', label: 'סיבת ביטול' },
+              { key: 'not_executed_reason', label: 'סיבת אי-ביצוע' },
               { key: 'executed_at',    label: 'בוצע בתאריך', format: (v) => v ? new Date(v).toLocaleDateString('he-IL') : '' },
             ],
             csvFilename(`card_${cardId}_tasks`)
@@ -109,7 +113,7 @@ export default function TasksTab({ cardId, boxId }) {
             <tbody>
               {list.map(t => {
                 const st = STATUS[t.status] || { label: t.status, cls: 'gray' }
-                const isFinal = t.status === 'done' || t.status === 'cancelled'
+                const isFinal = t.status === 'done' || t.status === 'cancelled' || t.status === 'not_executed'
                 return (
                   <tr
                     key={t.id}
@@ -129,7 +133,13 @@ export default function TasksTab({ cardId, boxId }) {
                     <td>
                       <span
                         className={'pill ' + st.cls}
-                        title={t.status === 'cancelled' && t.cancellation_reason ? `סיבת ביטול: ${t.cancellation_reason}` : undefined}
+                        title={
+                          t.status === 'cancelled' && t.cancellation_reason
+                            ? `סיבת ביטול: ${t.cancellation_reason}`
+                          : t.status === 'not_executed' && t.not_executed_reason
+                            ? `סיבת אי-ביצוע: ${t.not_executed_reason}`
+                            : undefined
+                        }
                       >{st.label}</span>
                     </td>
                     <td>{t.assigned_name || <span style={{ color: 'var(--text3)' }}>לא משויך</span>}</td>
@@ -138,11 +148,18 @@ export default function TasksTab({ cardId, boxId }) {
                     {isAdmin && (
                       <td className="actions" style={{ flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
                         {!isFinal && (
-                          <button
-                            className="btn sm danger"
-                            onClick={(e) => { e.stopPropagation(); setCancelTask(t) }}
-                            title="העבר את המשימה לסטטוס בוטל"
-                          >🚫 בטל</button>
+                          <>
+                            <button
+                              className="btn sm danger"
+                              onClick={(e) => { e.stopPropagation(); setNotExecTask(t) }}
+                              title="סגור את המשימה כלא בוצעה"
+                            >❌ לא בוצעה</button>
+                            <button
+                              className="btn sm danger"
+                              onClick={(e) => { e.stopPropagation(); setCancelTask(t) }}
+                              title="העבר את המשימה לסטטוס בוטל"
+                            >🚫 בטל</button>
+                          </>
                         )}
                       </td>
                     )}
@@ -181,6 +198,13 @@ export default function TasksTab({ cardId, boxId }) {
           onCancelled={() => setReloadKey(k => k + 1)}
         />
       )}
+
+      <TaskNotExecutedModal
+        open={!!notExecTask}
+        task={notExecTask}
+        onClose={() => setNotExecTask(null)}
+        onSuccess={() => setReloadKey(k => k + 1)}
+      />
     </>
   )
 }

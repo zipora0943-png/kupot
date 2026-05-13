@@ -17,17 +17,21 @@ function formatDateTime(iso) {
  *
  * Props:
  *   open    — boolean
- *   task    — completed task row (status='done' or 'cancelled');
+ *   task    — completed task row (status='done' / 'cancelled' / 'not_executed');
  *             reads execution_notes, execution_image, executed_at, type_name, icon, iron_number
  *   onClose — () => void
  */
 export default function TaskExecDetailsModal({ open, task, onClose }) {
-  const isCancelled = task?.status === 'cancelled'
+  const isCancelled   = task?.status === 'cancelled'
+  const isNotExecuted = task?.status === 'not_executed'
+  const title = isCancelled   ? 'פרטי ביטול'
+              : isNotExecuted ? 'פרטי אי-ביצוע'
+                              : 'פרטי ביצוע'
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={isCancelled ? 'פרטי ביטול' : 'פרטי ביצוע'}
+      title={title}
       footer={
         <>
           <div style={{ fontSize: 12, color: 'var(--text3)' }}>
@@ -52,7 +56,10 @@ export default function TaskExecDetailsModal({ open, task, onClose }) {
               {task.icon ? `${task.icon} ` : ''}{task.type_name || '—'}
             </div>
             <div style={{ color: 'var(--text2)' }}>
-              {isCancelled ? 'בוטלה ב-' : 'בוצע ב-'}{formatDateTime(task.executed_at)}
+              {isCancelled   ? 'בוטלה ב-'
+               : isNotExecuted ? 'דווחה כלא בוצעה ב-'
+                               : 'בוצע ב-'}
+              {formatDateTime(task.executed_at)}
               {task.assigned_name ? <> · ע"י <strong style={{ color: 'var(--text)' }}>{task.assigned_name}</strong></> : null}
             </div>
           </div>
@@ -69,6 +76,22 @@ export default function TaskExecDetailsModal({ open, task, onClose }) {
                     background: 'var(--red-soft, #fef2f2)',
                     minHeight: 60,
                   }}>{task.cancellation_reason}</div>
+                : <div style={{ color: 'var(--text3)', fontStyle: 'italic' }}>לא צוינה סיבה</div>}
+            </div>
+          )}
+
+          {isNotExecuted && (
+            <div className="field" style={{ marginBottom: 12 }}>
+              <label>סיבת אי-ביצוע</label>
+              {task.not_executed_reason
+                ? <div style={{
+                    whiteSpace: 'pre-wrap',
+                    padding: 10,
+                    border: '1px solid var(--red, #ef4444)',
+                    borderRadius: 8,
+                    background: 'var(--red-soft, #fef2f2)',
+                    minHeight: 60,
+                  }}>{task.not_executed_reason}</div>
                 : <div style={{ color: 'var(--text3)', fontStyle: 'italic' }}>לא צוינה סיבה</div>}
             </div>
           )}

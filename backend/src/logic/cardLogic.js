@@ -13,6 +13,7 @@ const EVENT = {
   REOPEN:         'reopen',
   AMOUNT_CHANGED: 'amount_changed',
   TASK_CANCELLED: 'task_cancelled',
+  TASK_NOT_EXECUTED: 'task_not_executed',
   REPORT_CLOSED:  'report_closed',
   OTHER:          'other',
 };
@@ -260,6 +261,69 @@ async function completeTask(taskId, executionData, userId) {
   }
 }
 
+// ── Collector report: close a task as "not executed".
+// Used when the assigned collector cannot perform the task (e.g. box already
+// removed, address wrong, no permission to enter). Never touches the card
+// lifecycle — even for opens_card/closes_card task types we only log the
+// event on the existing active card (best effort) without opening/closing.
+async function reportTaskNotExecuted(taskId, reason, userId) {
+  const trimmedReason = typeof reason === 'string' ? reason.trim() : '';
+  if (!trimmedReason) throw new Error('reason is required');
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: taskRows } = await client.query(
+      `SELECT t.*, tt.name AS type_name
+         FROM tasks t
+         JOIN task_types tt ON tt.id = t.task_type_id
+        WHERE t.id = $1
+        FOR UPDATE`,
+      [taskId]
+    );
+    if (!taskRows[0]) throw new Error('Task not found');
+    const task = taskRows[0];
+
+    if (task.status === 'done')         throw new Error('Task already completed');
+    if (task.status === 'cancelled')    throw new Error('Task is cancelled');
+    if (task.status === 'not_executed') throw new Error('Task already reported as not executed');
+
+    const { rows: updated } = await client.query(
+      `UPDATE tasks
+          SET status='not_executed',
+              not_executed_reason=$2,
+              executed_at=NOW()
+        WHERE id=$1
+        RETURNING *`,
+      [taskId, trimmedReason]
+    );
+
+    // Best-effort event on the relevant card: prefer the task's bound card_id;
+    // otherwise the box's currently-active card (if any). For opens_card tasks
+    // with no active card, no event is logged — the report still stands.
+    let cardId = task.card_id;
+    if (!cardId) {
+      const active = await getActiveCard(task.box_id, client);
+      if (active) cardId = active.id;
+    }
+    if (cardId) {
+      await client.query(
+        `INSERT INTO events (card_id, event_type, description, user_id) VALUES ($1,$2,$3,$4)`,
+        [cardId, EVENT.TASK_NOT_EXECUTED, `לא בוצעה (${task.type_name}): ${trimmedReason}`, userId]
+      );
+    }
+
+    await client.query('COMMIT');
+    return { success: true, task: updated[0] };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // ── Admin override: mark task done WITHOUT triggering card lifecycle.
 // Used when admin wants to fix history (e.g. mark a forgotten task as done
 // without opening/closing cards or creating events).
@@ -286,6 +350,7 @@ module.exports = {
   closeActiveCardForBox,
   reopenCard,
   completeTask,
+  reportTaskNotExecuted,
   markTaskDoneNoLifecycle,
   EVENT,
 };

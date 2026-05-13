@@ -11,15 +11,17 @@ import TaskExecModal from '../components/TaskExecModal'
 import TaskExecDetailsModal from '../components/TaskExecDetailsModal'
 import TaskModal from '../components/TaskModal'
 import CancelTaskModal from '../components/CancelTaskModal'
+import TaskNotExecutedModal from '../components/TaskNotExecutedModal'
 import { useAuth } from '@shared/context/AuthContext'
 import { exportCsv, csvFilename } from '../utils/exportCsv'
 import { useSortable, SortableTh } from '../utils/sortable.jsx'
 
 const STATUS_LABELS = {
-  open:        { label: 'פתוח',   pill: 'yellow' },
-  in_progress: { label: 'בטיפול', pill: 'blue'   },
-  done:        { label: 'הושלם',  pill: 'green'  },
-  cancelled:   { label: 'בוטל',   pill: 'gray'   },
+  open:         { label: 'פתוח',     pill: 'yellow' },
+  in_progress:  { label: 'בטיפול',   pill: 'blue'   },
+  done:         { label: 'הושלם',    pill: 'green'  },
+  cancelled:    { label: 'בוטל',     pill: 'gray'   },
+  not_executed: { label: 'לא בוצעה', pill: 'purple' },
 }
 
 export default function TasksPage() {
@@ -54,6 +56,9 @@ export default function TasksPage() {
   // cancel modal
   const [cancelTask, setCancelTask] = useState(null)
 
+  // not-executed modal
+  const [notExecTask, setNotExecTask] = useState(null)
+
   function handleExecSuccess(updatedTask) {
     if (!updatedTask) return
     // patch the row in-place so the table reflects the new status / executed_at
@@ -61,6 +66,11 @@ export default function TasksPage() {
   }
 
   function handleCancelled(updatedTask) {
+    if (!updatedTask) return
+    setAllTasks(prev => prev.map(t => t.id === updatedTask.id ? { ...t, ...updatedTask } : t))
+  }
+
+  function handleNotExecuted(updatedTask) {
     if (!updatedTask) return
     setAllTasks(prev => prev.map(t => t.id === updatedTask.id ? { ...t, ...updatedTask } : t))
   }
@@ -211,6 +221,8 @@ export default function TasksPage() {
                 { key: 'executed_at',   label: 'בוצע',        format: (v) => v ? new Date(v).toLocaleDateString('he-IL') : '' },
                 { key: 'notes',         label: 'הערות' },
                 { key: 'execution_notes', label: 'הערות ביצוע' },
+              { key: 'cancellation_reason', label: 'סיבת ביטול' },
+              { key: 'not_executed_reason', label: 'סיבת אי-ביצוע' },
               ],
               csvFilename('tasks')
             )}
@@ -256,6 +268,7 @@ export default function TasksPage() {
               <option value="in_progress">בטיפול</option>
               <option value="done">הושלם</option>
               <option value="cancelled">בוטל</option>
+              <option value="not_executed">לא בוצעה</option>
             </select>
           </div>
           <div className="field">
@@ -313,7 +326,7 @@ export default function TasksPage() {
                     ? (labels.get(t.card_id) || `#${t.card_id}`)
                     : null
                   const sourceReport = reportByTaskId.get(t.id)
-                  const isDone = t.status === 'done' || t.status === 'cancelled'
+                  const isDone = t.status === 'done' || t.status === 'cancelled' || t.status === 'not_executed'
                   return (
                     <tr key={t.id}>
                       <td>
@@ -333,7 +346,13 @@ export default function TasksPage() {
                       <td>
                         <span
                           className={'pill ' + st.pill}
-                          title={t.status === 'cancelled' && t.cancellation_reason ? `סיבת ביטול: ${t.cancellation_reason}` : undefined}
+                          title={
+                            t.status === 'cancelled' && t.cancellation_reason
+                              ? `סיבת ביטול: ${t.cancellation_reason}`
+                            : t.status === 'not_executed' && t.not_executed_reason
+                              ? `סיבת אי-ביצוע: ${t.not_executed_reason}`
+                              : undefined
+                          }
                         >{st.label}</span>
                       </td>
                       <td>
@@ -363,6 +382,11 @@ export default function TasksPage() {
                               className="btn sm success"
                               onClick={() => setExecTask(t)}
                             >אישור ביצוע</button>
+                            <button
+                              className="btn sm danger"
+                              onClick={() => setNotExecTask(t)}
+                              title="סגור את המשימה כלא בוצעה"
+                            >❌ לא בוצעה</button>
                             {isAdmin && (
                               <button
                                 className="btn sm danger"
@@ -387,6 +411,14 @@ export default function TasksPage() {
         task={execTask}
         onClose={() => setExecTask(null)}
         onSuccess={handleExecSuccess}
+        onReportNotExecuted={(t) => { setExecTask(null); setNotExecTask(t) }}
+      />
+
+      <TaskNotExecutedModal
+        open={!!notExecTask}
+        task={notExecTask}
+        onClose={() => setNotExecTask(null)}
+        onSuccess={handleNotExecuted}
       />
 
       <TaskExecDetailsModal

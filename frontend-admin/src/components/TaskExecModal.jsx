@@ -21,7 +21,7 @@ import { tasks as tasksApi, uploads as uploadsApi } from '../api/endpoints'
  *   onClose   — () => void
  *   onSuccess — (updatedTaskFromServer) => void   (called after successful completion)
  */
-export default function TaskExecModal({ open, task, onClose, onSuccess }) {
+export default function TaskExecModal({ open, task, onClose, onSuccess, onReportNotExecuted }) {
   const [executionNotes, setExecutionNotes] = useState('')
   const [newCity,         setNewCity]         = useState('')
   const [newNeighborhood, setNewNeighborhood] = useState('')
@@ -150,6 +150,14 @@ export default function TaskExecModal({ open, task, onClose, onSuccess }) {
               onClick={onClose}
               disabled={submitting}
             >ביטול</button>
+            {onReportNotExecuted && (
+              <button
+                className="btn danger"
+                type="button"
+                onClick={() => onReportNotExecuted(task)}
+                disabled={submitting}
+              >❌ לא בוצעה</button>
+            )}
             <button
               className="btn success"
               type="button"

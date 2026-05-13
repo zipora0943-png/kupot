@@ -6,7 +6,8 @@ const {
 } = require('./_helpers');
 
 const {
-  getActiveCard, openCard, closeCard, completeTask, markTaskDoneNoLifecycle, EVENT,
+  getActiveCard, openCard, closeCard, completeTask, markTaskDoneNoLifecycle,
+  reportTaskNotExecuted, EVENT,
 } = require('../../src/logic/cardLogic');
 
 describeDb('cardLogic', () => {
@@ -217,6 +218,98 @@ describeDb('cardLogic', () => {
         box_id: box, task_type_id: tt, assigned_to: adminId, status: 'cancelled',
       });
       await expect(completeTask(task, {}, adminId)).rejects.toThrow(/cancelled/i);
+    });
+  });
+
+  describe('reportTaskNotExecuted', () => {
+    test('marks open task not_executed, logs event on active card, leaves card open', async () => {
+      const box  = await insertBox({ iron_number: 'B1', status: 'active' });
+      const card = await openCard(box, { city: 'X' }, adminId);
+
+      const tt   = await getTaskTypeId('תיקון');
+      const task = await insertTask({
+        box_id: box, task_type_id: tt, assigned_to: collectorId,
+      });
+
+      const result = await reportTaskNotExecuted(task, '  לא נמצא במקום  ', collectorId);
+      expect(result.success).toBe(true);
+      expect(result.task.status).toBe('not_executed');
+      expect(result.task.not_executed_reason).toBe('לא נמצא במקום');
+      expect(result.task.executed_at).not.toBeNull();
+
+      // card stays active
+      const stillActive = await getActiveCard(box);
+      expect(stillActive.id).toBe(card.id);
+
+      // event on the card
+      const evs = await count(
+        `SELECT COUNT(*) FROM events WHERE card_id = $1 AND event_type = $2`,
+        [card.id, EVENT.TASK_NOT_EXECUTED]
+      );
+      expect(evs).toBe(1);
+    });
+
+    test('does NOT open/close card even for opens_card task type (installation)', async () => {
+      const box = await insertBox({ iron_number: 'B1', status: 'uninstalled' });
+      const tt  = await getTaskTypeId('התקנה');
+      const task = await insertTask({
+        box_id: box, task_type_id: tt, assigned_to: collectorId, new_city: 'A',
+      });
+
+      await reportTaskNotExecuted(task, 'הכתובת שגויה', collectorId);
+
+      // box stays uninstalled, no card was opened
+      expect((await getBox(box)).status).toBe('uninstalled');
+      expect(await getActiveCard(box)).toBeNull();
+    });
+
+    test('does NOT close card for closes_card task type (removal)', async () => {
+      const box  = await insertBox({ iron_number: 'B1', status: 'active' });
+      const card = await openCard(box, { city: 'X' }, adminId);
+
+      const tt   = await getTaskTypeId('הסרה');
+      const task = await insertTask({
+        box_id: box, task_type_id: tt, assigned_to: collectorId,
+      });
+      await reportTaskNotExecuted(task, 'לא הצלחתי להגיע', collectorId);
+
+      // card stays active, box stays active
+      const fresh = await getActiveCard(box);
+      expect(fresh.id).toBe(card.id);
+      expect((await getBox(box)).status).toBe('active');
+    });
+
+    test('rejects empty reason', async () => {
+      const box  = await insertBox({ iron_number: 'B1' });
+      const tt   = await getTaskTypeId('תיקון');
+      const task = await insertTask({ box_id: box, task_type_id: tt, assigned_to: collectorId });
+      await expect(reportTaskNotExecuted(task, '   ', collectorId))
+        .rejects.toThrow(/reason is required/i);
+      await expect(reportTaskNotExecuted(task, null, collectorId))
+        .rejects.toThrow(/reason is required/i);
+    });
+
+    test('refuses task that is already done / cancelled / not_executed', async () => {
+      const box = await insertBox({ iron_number: 'B1' });
+      const tt  = await getTaskTypeId('תיקון');
+
+      const done = await insertTask({
+        box_id: box, task_type_id: tt, assigned_to: collectorId, status: 'done',
+      });
+      await expect(reportTaskNotExecuted(done, 'r', collectorId))
+        .rejects.toThrow(/already completed/i);
+
+      const cancelled = await insertTask({
+        box_id: box, task_type_id: tt, assigned_to: collectorId, status: 'cancelled',
+      });
+      await expect(reportTaskNotExecuted(cancelled, 'r', collectorId))
+        .rejects.toThrow(/cancelled/i);
+
+      const reported = await insertTask({
+        box_id: box, task_type_id: tt, assigned_to: collectorId, status: 'not_executed',
+      });
+      await expect(reportTaskNotExecuted(reported, 'r', collectorId))
+        .rejects.toThrow(/already reported/i);
     });
   });
 
