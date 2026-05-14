@@ -255,3 +255,28 @@ ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check;
 ALTER TABLE tasks ADD  CONSTRAINT tasks_status_check
   CHECK (status IN ('open','in_progress','done','cancelled','not_executed'));
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS not_executed_reason TEXT;
+
+-- Task 58: server-side geocoding of card addresses (Google Maps Geocoding API).
+-- Coordinates are computed and stored in the backend on card create/update;
+-- the GPS verification endpoint (POST /api/cards/:id/verify-location) compares
+-- the device location against these coordinates.
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS latitude       DECIMAL(10,7);
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS longitude      DECIMAL(10,7);
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS geocoded_at    TIMESTAMPTZ;
+-- geocode_status values: NULL (never attempted), 'ok', 'not_found', 'error', 'disabled'.
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS geocode_status VARCHAR(20);
+
+-- Audit table — records collections that proceeded even though the collector's
+-- GPS position was outside the configured radius from the card address.
+CREATE TABLE IF NOT EXISTS location_overrides (
+  id              SERIAL PRIMARY KEY,
+  card_id         INTEGER NOT NULL REFERENCES cards(id) ON DELETE RESTRICT,
+  user_id         INTEGER REFERENCES users(id) ON DELETE RESTRICT,
+  distance_meters INTEGER,
+  reason          TEXT,
+  gps_lat         DECIMAL(10,7),
+  gps_lng         DECIMAL(10,7),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_location_overrides_card_id ON location_overrides(card_id);
+CREATE INDEX IF NOT EXISTS idx_location_overrides_user_id ON location_overrides(user_id);

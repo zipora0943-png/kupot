@@ -53,7 +53,7 @@ export default function ScanPage() {
         box_id: Number(boxId),
         envelope_number: pendingValue,
       })
-      navigate(`/collection/${cardId}`, {
+      navigate('/collection', {
         state: { toast: `שיוך מעטפה מס׳ ${pendingValue}` },
       })
     } catch (err) {

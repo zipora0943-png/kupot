@@ -18,6 +18,12 @@ coverage/
 # ===== uploads (user content) =====
 uploads/
 
+# ===== APK release artifacts (mutable runtime state) =====
+# The version manifest is rewritten on every release; APKs are uploaded
+# by `npm run release` and should never enter the repo.
+backend/public/downloads/*.apk
+backend/public/collector-version.json
+
 # ===== logs =====
 *.log
 npm-debug.log*

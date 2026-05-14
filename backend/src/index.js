@@ -39,6 +39,18 @@ const path = require('path');
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.resolve(process.cwd(), 'uploads');
 app.use('/uploads', express.static(UPLOAD_DIR, { fallthrough: false }));
 
+// ── Static serving of public downloads (APK builds, version manifest)
+//    Public — no auth required so devices can pull the APK directly.
+const PUBLIC_DIR = path.resolve(__dirname, '../public');
+app.use('/downloads', express.static(path.join(PUBLIC_DIR, 'downloads'), {
+  fallthrough: false,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.apk')) {
+      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+    }
+  },
+}));
+
 // ── Routes
 app.use('/api/auth/login',     loginLimiter); // applies before the auth router below
 app.use('/api/auth',           require('./routes/auth'));
@@ -53,6 +65,8 @@ app.use('/api/alerts',         require('./routes/alerts'));
 app.use('/api/reports-export', require('./routes/reportsExport'));
 app.use('/api/settings',       require('./routes/settings'));
 app.use('/api/uploads',        require('./routes/uploads'));
+app.use('/api/version',        require('./routes/version'));
+app.use('/api/location-overrides', require('./routes/locationOverrides'));
 
 // ── Health check
 app.get('/health', async (_req, res) => {

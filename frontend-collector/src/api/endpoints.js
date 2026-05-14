@@ -78,6 +78,17 @@ export const cards = {
   // .data.error is one of: 'box_not_found' | 'not_assigned' | 'card_closed'.
   lookupByIron: (ironNumber) =>
     api.get(`/cards/lookup-by-iron/${encodeURIComponent(ironNumber)}`),
+  // Task 58: server compares the device's GPS to the card's geocoded address.
+  // Body: { lat, lng }. Response: { within_radius, distance_meters, radius_meters, card_geocoded }.
+  verifyLocation: (id, lat, lng) =>
+    api.post(`/cards/${id}/verify-location`, { lat, lng }),
+};
+
+// ---- LOCATION OVERRIDES (task 58) ----
+// Audit record: a collector continued a collection even though their GPS was
+// outside the radius from the card's geocoded address.
+export const locationOverrides = {
+  create: (data) => api.post('/location-overrides', data),
 };
 
 // ---- ENVELOPES ----

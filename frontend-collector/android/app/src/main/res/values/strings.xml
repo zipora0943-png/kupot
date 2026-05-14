@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Kupot Collector</string>
+    <string name="title_activity_main">Kupot Collector</string>
+    <string name="package_name">com.kupot.collector</string>
+    <string name="custom_url_scheme">com.kupot.collector</string>
+</resources>

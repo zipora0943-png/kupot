@@ -8,6 +8,18 @@ const {
   buildLocationClause, temporaryAccessClause,
   RESOLVED_COLLECTORS_LATERAL,
 } = require('../logic/userAssignment');
+const { geocodeCard } = require('../services/geocoding');
+const { haversineMeters } = require('../services/distance');
+
+// Radius (meters) within which the collector is considered "at" the card location.
+const LOCATION_RADIUS_METERS = 25;
+
+// Fire-and-forget geocoding. We never await this from the request path because
+// we don't want a slow/failing Google response to delay the API response.
+function scheduleGeocode(cardId) {
+  if (!Number.isInteger(cardId)) return;
+  Promise.resolve().then(() => geocodeCard(cardId)).catch(() => {});
+}
 
 // Overlay each row's collector_id / collector_name with the resolved set of
 // collectors from the LATERAL subquery (multi-assignment, "כפילויות"). All
@@ -251,6 +263,7 @@ router.post('/', requireRole('admin'), async (req, res, next) => {
       EVENT.INSTALLATION,
     );
     await client.query('COMMIT');
+    scheduleGeocode(card.id);
     res.status(201).json(card);
   } catch (err) {
     await client.query('ROLLBACK');
@@ -276,12 +289,15 @@ router.put('/:id', requireRole('admin'), async (req, res, next) => {
     'custom_name', 'alert_days_personal',
     'receipt_required', 'receipt_details',
   ];
+  const addressFields = new Set(['city', 'neighborhood', 'street', 'building']);
   const sets = [];
   const params = [];
+  let addressChanged = false;
   for (const key of allowed) {
     if (Object.prototype.hasOwnProperty.call(req.body || {}, key)) {
       params.push(req.body[key]);
       sets.push(`${key} = $${params.length}`);
+      if (addressFields.has(key)) addressChanged = true;
     }
   }
   if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
@@ -293,6 +309,7 @@ router.put('/:id', requireRole('admin'), async (req, res, next) => {
       params
     );
     if (!rows[0]) return res.status(404).json({ error: 'Not found' });
+    if (addressChanged) scheduleGeocode(rows[0].id);
     res.json(rows[0]);
   } catch (err) {
     if (err.code === '23503') return res.status(400).json({ error: 'Invalid foreign key (collector_id?)' });
@@ -371,6 +388,79 @@ router.get('/:id/history', async (req, res, next) => {
       [card[0].box_id]
     );
     res.json(rows.map(applyResolvedCollector));
+  } catch (err) { next(err); }
+});
+
+// POST /api/cards/:id/geocode  — admin: force re-geocode of a card's address.
+// Useful after a manual address fix when the auto-trigger missed (or to retry
+// after the GOOGLE_MAPS_API_KEY was added / Google API recovered).
+router.post('/:id/geocode', requireRole('admin'), async (req, res, next) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    const { rows } = await pool.query(`SELECT id FROM cards WHERE id = $1`, [id]);
+    if (!rows[0]) return res.status(404).json({ error: 'Not found' });
+    const result = await geocodeCard(id);
+    if (!result) return res.status(500).json({ error: 'Geocoding failed' });
+    res.json({
+      status: result.status,
+      latitude: result.lat,
+      longitude: result.lng,
+    });
+  } catch (err) { next(err); }
+});
+
+// POST /api/cards/:id/verify-location
+// Body: { lat: number, lng: number } — the device's current GPS coordinates.
+// Response: { within_radius, distance_meters, radius_meters, card_geocoded }
+//   - card_geocoded=false → card has no stored coords (caller should fall through).
+//   - within_radius=true  → distance <= LOCATION_RADIUS_METERS.
+// Note: latitude/longitude of the card are intentionally NOT returned, to avoid
+// leaking the box's exact location to the client.
+router.post('/:id/verify-location', async (req, res, next) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+  const { lat, lng } = req.body || {};
+  if (typeof lat !== 'number' || typeof lng !== 'number' ||
+      Number.isNaN(lat) || Number.isNaN(lng) ||
+      lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return res.status(400).json({ error: 'lat/lng required (numeric, valid range)' });
+  }
+
+  try {
+    if (req.user.role === 'collector' && !(await collectorCanSee(id, req.user.id))) {
+      return res.status(403).json({ error: 'Card not assigned to this collector' });
+    }
+    const { rows } = await pool.query(
+      `SELECT latitude, longitude, geocode_status FROM cards WHERE id = $1`,
+      [id],
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Not found' });
+
+    const card = rows[0];
+    const hasCoords =
+      card.geocode_status === 'ok' &&
+      card.latitude != null && card.longitude != null;
+    if (!hasCoords) {
+      return res.json({
+        card_geocoded: false,
+        within_radius: true,
+        distance_meters: null,
+        radius_meters: LOCATION_RADIUS_METERS,
+      });
+    }
+
+    const distance = haversineMeters(
+      Number(card.latitude), Number(card.longitude),
+      lat, lng,
+    );
+    const distanceRounded = Math.round(distance);
+    res.json({
+      card_geocoded: true,
+      within_radius: distance <= LOCATION_RADIUS_METERS,
+      distance_meters: distanceRounded,
+      radius_meters: LOCATION_RADIUS_METERS,
+    });
   } catch (err) { next(err); }
 });
 

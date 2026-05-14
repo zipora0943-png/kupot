@@ -10,6 +10,7 @@ import ReportFormPage from './pages/ReportFormPage'
 import TasksAlertsPage from './pages/TasksAlertsPage'
 import TaskViewPage from './pages/TaskViewPage'
 import CashroomAdminPage from './pages/CashroomAdminPage'
+import UpdateGate from './components/UpdateGate'
 import { useAuth } from '@shared/context/AuthContext'
 import { defaultPathForRole } from './utils/defaultPath'
 
@@ -34,8 +35,10 @@ function RoleGuard({ children }) {
 
 function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
+    <>
+      <UpdateGate />
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
 
       <Route
         path="/scan/:cardId"
@@ -68,8 +71,9 @@ function App() {
         <Route path="cashroom-admin" element={<CashroomAdminPage />} />
       </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   )
 }
 

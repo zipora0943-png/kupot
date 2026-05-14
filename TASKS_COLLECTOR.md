@@ -292,13 +292,13 @@
 
 ### שלב ו׳ — בנייה ל-APK (38–40)
 
-**משימה 38: בניית web ו-sync** — ⏳ ממתינה
+**משימה 38: בניית web ו-sync** — ✅ בוצע
 - `npm run build`
 - `npx cap add android` (אם עוד לא נוסף)
 - `npx cap sync android`
 - אימות: תיקיית `android/` מאוכלסת.
 
-**משימה 39: הרשאות והגדרות native** — ⏳ ממתינה
+**משימה 39: הרשאות והגדרות native** — ✅ בוצע
 - `android/app/src/main/AndroidManifest.xml`:
   - `<uses-permission android:name="android.permission.CAMERA"/>`
   - `<uses-permission android:name="android.permission.INTERNET"/>`
@@ -308,10 +308,11 @@
   - `server.cleartext: true` (אם הבקאנד ב-HTTP)
 - אימות: ההרשאות מופיעות.
 
-**משימה 40: בניית APK Debug** — ⏳ ממתינה
+**משימה 40: בניית APK Debug** — ✅ בוצע
 - `cd android && ./gradlew assembleDebug` (או `gradlew.bat` ב-Windows)
 - APK ב-`android/app/build/outputs/apk/debug/app-debug.apk`
 - אימות: התקנה במכשיר אנדרואיד אמיתי, login, סריקה.
+- **סטטוס 2026-05-12:** APK נבנה בהצלחה (4.18MB). סביבה הותקנה ב-`C:\android-dev\`: Microsoft OpenJDK 21 + Android SDK (cmdline-tools, platform-tools, platforms;android-36, build-tools;35.0.0 + 36.0.0). אימות התקנה במכשיר ממתין למשתמש.
 
 
 
@@ -478,6 +479,178 @@
   - בטאב "הכל" העבר `sectionTitle="📋 משימות"` ל-`TasksList` ו-`sectionTitle="⚠️ התראות"` ל-`AlertsList`. סקציית הדיווחים כבר כוללת כותרת.
   - בטאב "משימות" ובטאב "התראות" — אל תעביר `sectionTitle` (אין צורך בכותרת כי הטאב עצמו הוא הכותרת).
 - אימות: בטאב "הכל" מופיעות 3 כותרות סקציה (משימות / התראות / דיווחים פתוחים) עם הפרדה ויזואלית ברורה. בטאבים האחרים אין כותרות מיותרות.
+
+**משימה 57: אישור כתובת לפני גביה מתוך אחזור קופה** — ✅ בוצע
+- **בעיה:** כשגובה מאחזר קופה לפי מספר בטופס "אחזור קופה" ולוחץ ישירות על "💰 בצע גביה" (בלי לעבור דרך "📋 הצג פרטים"), הוא לא רואה את הכתובת ועלול ליצור גביה לקופה הלא נכונה.
+- **התיקון ב-[CollectionPage.jsx](frontend-collector/src/pages/CollectionPage.jsx):**
+  - "💰 בצע גביה" בטופס האחזור עוצר עכשיו במודאל אישור (`Modal` מ-`@shared/components`) שמציג: מספר קופה, שם, כתובת מלאה (עיר/שכונה/רחוב/בניין) והערות מיקום.
+  - שני כפתורים במודאל: **"✓ אשר והמשך לגביה"** → `/scan/:id`, **"📝 צור דיווח כתובת"** → `/report/:id?reason=address`.
+  - הזרימות האחרות לא נגעו: "📝 צור דיווח" ו-"📋 הצג פרטים" עובדים כרגיל; כניסה דרך פרטי הקופה ל-"בצע גביה" גם היא ללא מודאל (הכתובת כבר נראתה).
+- **התיקון ב-[ReportFormPage.jsx](frontend-collector/src/pages/ReportFormPage.jsx):**
+  - קורא `?reason=address` ומכין את התיאור עם `"כתובת שגויה: "` בשדה description.
+- אימות: אחזור קופה לפי מספר → "בצע גביה" פותח מודאל עם הכתובת; אישור ממשיך לסריקה; "צור דיווח כתובת" מגיע לטופס הדיווח עם תיאור התחלתי.
+
+**משימה 58: אימות מיקום GPS במקום אישור כתובת ידני (רדיוס 25 מטר)** — ✅ בוצע
+- **מטרה:** במקום שהגובה רק יראה את הכתובת ויאשר ידנית (משימה 57), האפליקציה תוודא אוטומטית שהגובה אכן נמצא פיזית במיקום של הקופה — באמצעות המרת הכתובת לקואורדינטות והשוואה למיקום ה-GPS של המכשיר.
+- **ארכיטקטורה — כל הלוגיקה בצד שרת:**
+  - הקליינט **לא** מדבר עם Google Maps ישירות, ולא מבצע חישובי מרחק.
+  - הקליינט: (1) קורא ל-GPS דרך Capacitor/Web API, (2) שולח `{lat, lng}` לשרת שלנו, (3) מקבל החלטה מהשרת.
+  - השרת: מבצע את כל הגאוקודינג, שומר קואורדינטות במסד, מחשב Haversine ומחזיר תשובה.
+  - יתרון: ה-`GOOGLE_MAPS_API_KEY` נשאר רק בשרת, אין חשיפה במכשירים.
+
+#### 58.א — שינויי DB ובאקאנד
+- **מיגרציה ב-[schema.sql](backend/src/db/schema.sql):** הוסף לטבלת `cards`:
+  - `latitude DECIMAL(10,7) NULL`
+  - `longitude DECIMAL(10,7) NULL`
+  - `geocoded_at TIMESTAMP NULL`
+  - `geocode_status TEXT NULL` (ערכים אפשריים: `ok`, `not_found`, `error`)
+- **הגדרת `GOOGLE_MAPS_API_KEY` ב-`.env`** (`backend/.env.example` לעדכון, ללא חשיפת המפתח האמיתי).
+  - **חשוב:** המפתח נשאר רק בשרת. הקליינט לעולם לא מקבל אותו, ולא מבצע קריאות ל-Google Maps.
+- **שירות גאוקודינג חדש ב-[backend/src/services/](backend/src/services/) (תיקייה חדשה אם לא קיימת):**
+  - `geocoding.js` עם פונקציה `geocodeAddress({ city, neighborhood, street, building })` שמחזירה `{ lat, lng, status }`.
+  - בונה query string מהשדות, קורא ל-Google Maps API מהשרת בלבד, מחזיר התוצאה הראשונה.
+- **שירות חישוב מרחק ב-[backend/src/services/distance.js](backend/src/services/distance.js):**
+  - `haversineMeters(lat1, lng1, lat2, lng2)` — מחזיר מרחק במטרים. רדיוס כדור הארץ = 6,371,000 מ'.
+- **טריגר אוטומטי לגאוקודינג:**
+  - בכל `POST /api/cards` ו-`PATCH /api/cards/:id` (כאשר אחד מ-`city/neighborhood/street/building` משתנה) — קרא לגאוקודינג ועדכן את העמודות החדשות.
+  - אם הגאוקודינג נכשל → `geocode_status='error'`, האפליקציה תטפל בכך גרייספול.
+- **endpoint עזר חדש:** `POST /api/cards/:id/geocode` — מאלץ גאוקודינג מחדש של קופה (לשימוש admin בלבד, במקרה של עדכון ידני).
+- **endpoint אימות מיקום (הליבה של המשימה):** `POST /api/cards/:id/verify-location`
+  - body: `{ lat: number, lng: number }` (קואורדינטות המכשיר מה-GPS)
+  - response: `{ within_radius: boolean, distance_meters: number, radius_meters: 25, card_geocoded: boolean }`
+    - `within_radius=true` אם המרחק ≤ 25 מ'
+    - `card_geocoded=false` אם לקופה אין קואורדינטות במסד (geocode_status !== 'ok') — במקרה זה הקליינט ידלג על האזהרה
+  - השרת קורא לקואורדינטות הקופה מ-DB, מחשב מרחק עם `haversineMeters`, ומחזיר את ההחלטה.
+- **שום שינוי ב-`GET /api/cards/:id` ביחס לקליינט:** השדות `latitude/longitude` **לא** נחשפים לקליינט (כדי לא להדליף מיקומים). הקליינט מקבל החלטה מ-`verify-location` בלבד.
+
+#### 58.ב — Capacitor: הרשאת מיקום
+- **התקנה:** `npm install @capacitor/geolocation` בתיקיית `frontend-collector`.
+- **`npx cap sync android`** אחרי ההתקנה.
+- **[AndroidManifest.xml](frontend-collector/android/app/src/main/AndroidManifest.xml):** הוסף:
+  - `<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>`
+  - `<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>`
+- **בדפדפן:** השתמש ב-`navigator.geolocation.getCurrentPosition()` (Web API) — `@capacitor/geolocation` נופל אוטומטית ל-Web fallback.
+
+#### 58.ג — לוגיקת אימות בקליינט ([CollectionPage.jsx](frontend-collector/src/pages/CollectionPage.jsx))
+- **הקליינט אחראי רק לקבלת GPS ולקריאה ל-API שלנו. אין חישובי מרחק, אין קריאות ל-Google Maps.**
+- **שינוי הזרימה במודאל אישור הגביה (שהתווסף במשימה 57):**
+  - כפתור "✓ אשר והמשך לגביה" → לפני ה-navigate ל-`/scan/:id`:
+    1. בקש מיקום מהמכשיר עם `Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 })`.
+    2. אם המשתמש דחה הרשאה / timeout / כל שגיאה אחרת → הצג הודעה: "לא ניתן לאמת מיקום. ניתן להמשיך, אבל מומלץ לאפשר מיקום." + 2 כפתורים: "המשך בכל זאת" / "ביטול".
+    3. אם התקבל מיקום → קרא ל-`POST /api/cards/:id/verify-location` עם `{lat, lng}` של המכשיר.
+    4. אם `within_radius=true` (השרת אישר) → המשך ישירות ל-`/scan/:id` (ללא הודעה).
+    5. אם `card_geocoded=false` (אין קואורדינטות לקופה במסד) → דלג על האימות, המשך לסריקה (fallback בטוח).
+    6. אם `within_radius=false` (השרת קבע שרחוק) → פתח **מודאל אזהרה** עם `distance_meters` מהתגובה (סעיף 58.ד).
+
+#### 58.ד — מודאל אזהרה + הזנת סיבה
+- **טקסט הכותרת:** "אתה רחוק מהכתובת הרשומה"
+- **גוף ההודעה:**
+  - "המיקום שלך: רחוק כ-{distance_meters} מ' מהכתובת הרשומה של הקופה."
+  - "כתובת רשומה: {city}, {street} {building}"
+- **שדה חובה:** `<textarea>` "סיבה להמשך גביה" (placeholder: "לדוגמה: ניסיון איתור הקופה, הגעה מוקדמת, GPS לא מדויק...")
+- **שני כפתורים:**
+  - **"המשך לגביה בכל זאת"** (פעיל רק כשהוזנה סיבה בעלת לפחות 5 תווים) — שולח את הסיבה ל-API (סעיף 58.ה) ואז `navigate('/scan/:id')`.
+  - **"ביטול"** — סוגר את המודאל, נשארים בטופס האחזור.
+
+#### 58.ה — שמירת הסיבה במסד
+- **endpoint חדש:** `POST /api/location-overrides` עם body: `{ card_id, distance_meters, reason, gps_lat, gps_lng }`.
+- **טבלה חדשה [schema.sql](backend/src/db/schema.sql):**
+  ```sql
+  CREATE TABLE location_overrides (
+    id SERIAL PRIMARY KEY,
+    card_id INTEGER REFERENCES cards(id),
+    user_id INTEGER REFERENCES users(id),
+    distance_meters INTEGER,
+    reason TEXT,
+    gps_lat DECIMAL(10,7),
+    gps_lng DECIMAL(10,7),
+    created_at TIMESTAMP DEFAULT NOW()
+  );
+  ```
+- מטרת הטבלה: רישום audit של מקרים שגובה אישר גביה למרות שהיה רחוק. ניתן יהיה לדווח עליהם ל-admin בעתיד (לא חלק ממשימה זו).
+
+#### אימות
+- כתובת חדשה נוצרת או מתעדכנת → `latitude`, `longitude`, `geocoded_at` מתמלאים אוטומטית במסד (קריאה לגוגל מתבצעת בשרת בלבד).
+- בדיקת רשת בקליינט (DevTools/Charles): **אין** קריאות ל-`maps.googleapis.com` מהמכשיר. כל הקריאות הן רק לשרת שלנו.
+- במכשיר אנדרואיד: בלחיצה על "אשר והמשך לגביה" — נפתחת הרשאה למיקום בפעם הראשונה.
+- גובה במיקום הקופה (≤ 25 מ') → השרת מחזיר `within_radius=true`, הקליינט ממשיך ישירות לסורק.
+- גובה רחוק (> 25 מ') → השרת מחזיר `within_radius=false` + `distance_meters`, מודאל אזהרה נפתח, חייב להזין סיבה, ואז ממשיך.
+- הסיבה נשמרת בטבלת `location_overrides` עם הקואורדינטות של המכשיר.
+- במצב שאין לקופה קואורדינטות במסד → השרת מחזיר `card_geocoded=false`, הזרימה הישנה ממשיכה ללא אימות (גרייספול).
+- במצב שהמשתמש דחה הרשאת מיקום בצד הלקוח → מוצגת הודעה ברורה, ויש אפשרות "המשך בכל זאת".
+
+**משימה 59: עדכון אוטומטי של גרסת האפליקציה כאשר עולה גרסה חדשה לשרת** — ✅ בוצע
+- **מטרה:** כאשר עולה לשרת גרסה חדשה של הקולקטור (APK / web build), האפליקציה במכשיר תזהה זאת אוטומטית ותציע / תבצע עדכון — בלי שהמשתמש יצטרך להסיר ולהתקין ידנית.
+- **רקע:** הקולקטור עטוף ב-Capacitor ומותקן כ-APK ידני (לא דרך Google Play), לכן אין מנגנון עדכון אוטומטי מובנה. רץ גם בדפדפן.
+
+#### 59.א — תשתית גרסאות בשרת
+- **`package.json` של `frontend-collector`** — `version` הוא מקור האמת. כל בנייה חדשה מחייבת bump (לדוגמה `1.0.1` → `1.0.2`).
+- **endpoint חדש [backend/src/routes/version.js](backend/src/routes/version.js):**
+  - `GET /api/version/collector` → מחזיר `{ version, apk_url, min_supported_version, released_at, release_notes }`.
+  - הנתונים נשמרים בקובץ סטטי על השרת (לדוגמה `backend/public/collector-version.json`) או בטבלת `settings` חדשה.
+- **תיקיית הורדות לשרת:** `backend/public/downloads/collector-{version}.apk` (או הגשה דרך nginx ישירות מ-`/var/www/kupot/downloads/`).
+- **תהליך release אוטומטי — סקריפט חדש [frontend-collector/scripts/release.js](frontend-collector/scripts/release.js):**
+  - מופעל ע"י `npm run release` בתיקיית `frontend-collector`.
+  - שלבים אוטומטיים:
+    1. `npm version patch` (או `minor`/`major` לפי flag) — מעדכן את `package.json`.
+    2. `npm run build` — בונה את ה-web.
+    3. `npx cap sync android` — מסנכרן ל-android.
+    4. `cd android && ./gradlew assembleRelease` — בונה APK חתום.
+    5. העלאה ל-production דרך `scp` או endpoint ייעודי `POST /api/version/collector/upload` (admin-only, multipart) שמקבל את ה-APK + מטא-דאטה ושומר אותו ב-`backend/public/downloads/`.
+    6. עדכון אוטומטי של `collector-version.json` עם הגרסה החדשה, `apk_url`, `released_at`, ו-`release_notes` (אם סופקו כ-flag).
+  - כל גרסה חדשה ב-`package.json` מפעילה אוטומטית את כל השרשרת — בלי שלבים ידניים נוספים.
+
+#### 59.ב — בדיקת גרסה בקליינט
+- **utility חדש [frontend-collector/src/utils/versionCheck.js](frontend-collector/src/utils/versionCheck.js):**
+  - `getCurrentVersion()` — קורא מ-`import.meta.env.VITE_APP_VERSION` (יוזרק ב-build מ-`package.json`) או מ-`Capacitor App.getInfo()` בנייטיב.
+  - `checkServerVersion()` — `GET /api/version/collector`, משווה עם המקומית, מחזיר `{ hasUpdate, isMandatory, latest, current }`.
+  - `isMandatory` = `current < min_supported_version` (semver compare).
+- **vite.config.js:** הוסף `define: { 'import.meta.env.VITE_APP_VERSION': JSON.stringify(pkg.version) }` כך שהגרסה ב-`package.json` נחשפת לקוד.
+
+#### 59.ג — לוגיקת עדכון לפי פלטפורמה
+- **Web (דפדפן):** אם `hasUpdate` — הצג באנר/modal "יש גרסה חדשה — רענן את הדף". כפתור "רענן" עושה `window.location.reload(true)`. אם `isMandatory` — חסום שימוש עד רענון.
+- **Android (Capacitor) — עדכון בתוך האפליקציה עצמה (ללא פתיחת דפדפן):**
+  - **התקנה:** `npm install @capawesome/capacitor-app-update` (תוסף שמטפל ב-APK update flow מחוץ ל-Play Store).
+  - **הרשאות נדרשות ב-[AndroidManifest.xml](frontend-collector/android/app/src/main/AndroidManifest.xml):**
+    - `<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>`
+    - `<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>` (לאחסון ה-APK שירד)
+  - **זרימה (הכל בתוך האפליקציה, ללא מעבר לדפדפן):**
+    1. הורדה ברקע של ה-APK מ-`apk_url` דרך `Filesystem` API של Capacitor → שמירה ב-`Cache` או `External` directory.
+    2. הצגת progress bar למשתמש בתוך ה-Modal של העדכון ("מוריד 3.2/4.1 MB...").
+    3. אחרי הורדה — קריאה ל-`AppUpdate.openAppStore()` או יותר נכון ל-`FileOpener`/intent ישיר עם `application/vnd.android.package-archive` שמפעיל את מסך ההתקנה של אנדרואיד **בתוך** ההקשר של האפליקציה.
+    4. הסכמת המשתמש להתקנה → אנדרואיד מבצע upgrade in-place (שומר על נתונים, JWT, הגדרות).
+    5. אחרי התקנה — האפליקציה נסגרת ונפתחת מחדש בגרסה החדשה.
+  - **לא** נפתח דפדפן ולא יוצאים מ-context של האפליקציה.
+
+#### 59.ד — תזמון בדיקה
+- בכניסה לאפליקציה (אחרי login מוצלח, ב-`AuthContext` או ב-`App.jsx`) — קריאה אחת ל-`checkServerVersion()`.
+- בנוסף, בדיקה תקופתית כל שעה (`setInterval`) כל עוד האפליקציה פתוחה.
+- אחסון `lastCheckedAt` ב-localStorage כדי לא להציג שוב את אותו עדכון שהמשתמש דחה (אלא אם הוא mandatory).
+
+#### 59.ה — UI
+- **UpdateBanner.jsx חדש** — באנר עליון דק בצבע `--accent`, טקסט "גרסה חדשה זמינה — {version}" + כפתור "עדכן עכשיו" + X לסגירה (רק אם לא mandatory).
+- **UpdateModal.jsx חדש** — מודאל מלא ל-`isMandatory=true`, ללא אפשרות סגירה, כפתור יחיד "התקן עכשיו".
+
+#### אימות
+- העלאת גרסה חדשה לשרת (עדכון `collector-version.json` ל-`1.0.2`) → אפליקציה מותקנת בגרסה `1.0.1` מציגה תוך דקה באנר עדכון.
+- לחיצה על "עדכן עכשיו" בדפדפן → דף מתרענן וטוען את ה-build החדש.
+- לחיצה על "עדכן עכשיו" במכשיר אנדרואיד → התקנה של APK חדש מהשרת.
+- הגדרת `min_supported_version=1.0.2` → אפליקציה בגרסה `1.0.1` מציגה modal חסימה ולא מאפשרת המשך שימוש עד עדכון.
+- ללא חיבור לאינטרנט / שרת לא זמין → לא מציג שום הודעה (silent fail, האפליקציה ממשיכה כרגיל).
+
+**משימה 60: חזרה למסך אחזור קופה אחרי גביה מוצלחת** — 🔄 בביצוע
+- **באג / שינוי UX:** היום אחרי שיוך מעטפה מוצלח ב-[ScanPage.jsx](frontend-collector/src/pages/ScanPage.jsx) האפליקציה חוזרת ל-`/collection/:cardId` (תצוגת אותה קופה ספציפית). הגובה רוצה לעבור מיד לקופה הבאה — להזין מספר חדש בטופס האחזור.
+- **התיקון ב-[ScanPage.jsx](frontend-collector/src/pages/ScanPage.jsx):**
+  - בפונקציה `confirmEnvelope` — אחרי `envelopesApi.create(...)` המוצלח, שנה את `navigate(\`/collection/\${cardId}\`, { state: { toast: ... } })` ל-`navigate('/collection', { state: { toast: ... } })`.
+  - ה-`handleClose` (כפתור X בסורק ללא שיוך מעטפה) **לא** משתנה — נשאר עם הזרימה הקיימת (`/collection/:cardId` אם הגיעו מתצוגת קופה, או `/collection` אם הגיעו מאחזור ידני).
+- **תצוגת toast במסך אחזור הקופה:** [CollectionPage.jsx:58-65](frontend-collector/src/pages/CollectionPage.jsx#L58-L65) כבר תומך ב-`location.state.toast` בשני המצבים (`cardId` או בלי), אז הודעת ההצלחה ("שיוך מעטפה מס׳ X") תוצג כתקין גם במסך האחזור.
+- **APK + גרסה חדשה:** bump גרסת `frontend-collector/package.json` והעלאה לשרת 178.105.96.70 דרך `npm run release` (משימה 59).
+- אימות:
+  - שיוך מעטפה מוצלח (סריקה או ידני) → מעבר ל-`/collection` (טופס אחזור) עם toast "שיוך מעטפה מס׳ X".
+  - לחיצה על X בסורק ללא סריקה → ההתנהגות הקיימת נשמרת (חוזר לקופה אם הגיעו ממנה, אחרת לאחזור).
+  - APK חדש זמין בשרת ומשתמשים בגרסה ישנה רואים הודעת עדכון.
+
+---
 
 ## ✅ הושלם
 (ריק)

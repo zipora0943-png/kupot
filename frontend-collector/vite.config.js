@@ -1,9 +1,11 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'node:path'
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const pkg = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf8'))
 
 // Dev server: vite (port 5174) — proxies /api + /uploads to local backend.
 // Production: `npm run build && npm run preview` — `preview` listens on 5001
@@ -15,6 +17,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 //   @app-api   → src/api               (per-frontend; lets shared modules import endpoints)
 export default defineConfig({
   plugins: [react()],
+  define: {
+    // Exposed to runtime as import.meta.env.VITE_APP_VERSION (e.g. "1.0.0").
+    // Bumped automatically by `npm run release`.
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(pkg.version),
+  },
   resolve: {
     alias: {
       '@shared':  path.resolve(__dirname, '../frontend-shared/src'),

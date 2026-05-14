@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-path name="my_images" path="." />
+    <cache-path name="my_cache_images" path="." />
+    <!-- Task 59: APK self-updater downloads to cache/updates and exposes them
+         via FileProvider so the system installer can read them. -->
+    <cache-path name="apk_updates" path="updates/" />
+</paths>
