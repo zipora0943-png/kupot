@@ -41,6 +41,11 @@ export default function TasksPage() {
   const [status,    setStatus]    = useState('')
   const [typeId,    setTypeId]    = useState('')
   const [assignee,  setAssignee]  = useState('')
+  const [month,     setMonth]     = useState('') // YYYY-MM, filters by executed_at
+
+  // Special pseudo-value for the type filter: "installations + transfer"
+  // (task types with opens_card = TRUE — i.e. התקנה and העברת מיקום).
+  const INSTALL_GROUP = '_install_group'
 
   // exec modal
   const [execTask, setExecTask] = useState(null)
@@ -164,12 +169,40 @@ export default function TasksPage() {
     return c
   }, [allTasks])
 
+  // Set of task_type IDs that count as "installations" — opens_card = TRUE.
+  // Covers התקנה (opens only) and העברת מיקום (opens + closes).
+  const installTypeIds = useMemo(() => {
+    const s = new Set()
+    for (const t of types) {
+      if (t.opens_card) s.add(t.id)
+    }
+    return s
+  }, [types])
+
   // apply filters
   const filtered = useMemo(() => {
     let list = allTasks
     if (status)   list = list.filter(t => t.status === status)
-    if (typeId)   list = list.filter(t => String(t.task_type_id) === String(typeId))
+    if (typeId) {
+      if (typeId === INSTALL_GROUP) {
+        list = list.filter(t => installTypeIds.has(t.task_type_id))
+      } else {
+        list = list.filter(t => String(t.task_type_id) === String(typeId))
+      }
+    }
     if (assignee) list = list.filter(t => String(t.assigned_to) === String(assignee))
+    if (month) {
+      // month is YYYY-MM — filter by executed_at falling inside that month.
+      // Tasks without executed_at are excluded when a month is selected.
+      list = list.filter(t => {
+        if (!t.executed_at) return false
+        const d = new Date(t.executed_at)
+        if (Number.isNaN(d.getTime())) return false
+        const y = d.getFullYear()
+        const m = String(d.getMonth() + 1).padStart(2, '0')
+        return `${y}-${m}` === month
+      })
+    }
     if (search) {
       const q = search.trim().toLowerCase()
       list = list.filter(t => {
@@ -180,10 +213,19 @@ export default function TasksPage() {
       })
     }
     return list
-  }, [allTasks, status, typeId, assignee, search, labels])
+  }, [allTasks, status, typeId, assignee, search, month, labels, installTypeIds])
+
+  // Breakdown of the filtered list by status — used in the summary row.
+  const filteredBreakdown = useMemo(() => {
+    const c = { open: 0, in_progress: 0, done: 0, cancelled: 0, not_executed: 0 }
+    for (const t of filtered) {
+      if (c[t.status] !== undefined) c[t.status]++
+    }
+    return c
+  }, [filtered])
 
   function resetFilters() {
-    setSearch(''); setStatus(''); setTypeId(''); setAssignee('')
+    setSearch(''); setStatus(''); setTypeId(''); setAssignee(''); setMonth('')
   }
 
   const sortAccessors = useMemo(() => ({
@@ -275,6 +317,7 @@ export default function TasksPage() {
             <label>סוג</label>
             <select value={typeId} onChange={(e) => setTypeId(e.target.value)}>
               <option value="">הכל</option>
+              <option value={INSTALL_GROUP}>התקנות (כולל העברה)</option>
               {types.map(t => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
@@ -288,6 +331,14 @@ export default function TasksPage() {
                 <option key={a.id} value={a.id}>{a.name}</option>
               ))}
             </select>
+          </div>
+          <div className="field">
+            <label>חודש ביצוע</label>
+            <input
+              type="month"
+              value={month}
+              onChange={(e) => setMonth(e.target.value)}
+            />
           </div>
           <button className="btn sm" onClick={resetFilters}>↺ איפוס</button>
         </div>
@@ -401,6 +452,25 @@ export default function TasksPage() {
                   )
                 })}
               </tbody>
+              <tfoot>
+                <tr className="summary-row">
+                  <td colSpan={8} style={{ textAlign: 'center', fontWeight: 600, background: 'var(--bg2, rgba(0,0,0,0.03))' }}>
+                    סה"כ: <strong>{filtered.length}</strong> משימות
+                    {' · '}
+                    הושלמו: <strong style={{ color: 'var(--green)' }}>{filteredBreakdown.done}</strong>
+                    {' · '}
+                    פתוחות: <strong style={{ color: 'var(--yellow)' }}>{filteredBreakdown.open}</strong>
+                    {' · '}
+                    בטיפול: <strong style={{ color: 'var(--accent)' }}>{filteredBreakdown.in_progress}</strong>
+                    {filteredBreakdown.not_executed > 0 && (
+                      <> {' · '} לא בוצעו: <strong style={{ color: 'var(--purple, #a855f7)' }}>{filteredBreakdown.not_executed}</strong></>
+                    )}
+                    {filteredBreakdown.cancelled > 0 && (
+                      <> {' · '} בוטלו: <strong style={{ color: 'var(--text2)' }}>{filteredBreakdown.cancelled}</strong></>
+                    )}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}
