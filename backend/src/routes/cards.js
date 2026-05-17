@@ -8,7 +8,7 @@ const {
   buildLocationClause, temporaryAccessClause,
   RESOLVED_COLLECTORS_LATERAL,
 } = require('../logic/userAssignment');
-const { geocodeCard } = require('../services/geocoding');
+const { geocodeCard, geocodeMissingCards } = require('../services/geocoding');
 const { haversineMeters } = require('../services/distance');
 
 // Radius (meters) within which the collector is considered "at" the card location.
@@ -125,6 +125,17 @@ router.get('/', async (req, res, next) => {
   try {
     const { rows } = await pool.query(q, p);
     res.json(rows.map(applyResolvedCollector));
+  } catch (err) { next(err); }
+});
+
+// POST /api/cards/geocode-missing  — admin: batch-geocode every card whose
+// geocode_status is NULL or anything other than 'ok'. Throttled internally
+// (~1 req/sec) to respect the Nominatim usage policy. Returns counters.
+// Registered before any '/:id/...' route so the literal path matches first.
+router.post('/geocode-missing', requireRole('admin'), async (req, res, next) => {
+  try {
+    const stats = await geocodeMissingCards();
+    res.json(stats);
   } catch (err) { next(err); }
 });
 
@@ -407,6 +418,63 @@ router.post('/:id/geocode', requireRole('admin'), async (req, res, next) => {
       latitude: result.lat,
       longitude: result.lng,
     });
+  } catch (err) { next(err); }
+});
+
+// POST /api/cards/:id/approve-geocode  — admin: mark the stored coordinates
+// as visually confirmed on the map. Resets to FALSE automatically whenever
+// the card is re-geocoded.
+//
+// Optional body: { lat, lng } — when supplied (after dragging the marker)
+// the coordinates are overwritten before approval. This lets the admin fix
+// small geocoder offsets or pin the location manually when the geocoder
+// returned `not_found` / `error`.
+router.post('/:id/approve-geocode', requireRole('admin'), async (req, res, next) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+
+  const { lat, lng } = req.body || {};
+  const hasManualCoords = (lat !== undefined && lat !== null) || (lng !== undefined && lng !== null);
+  if (hasManualCoords) {
+    if (typeof lat !== 'number' || typeof lng !== 'number' ||
+        Number.isNaN(lat) || Number.isNaN(lng) ||
+        lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      return res.status(400).json({ error: 'lat/lng must be numeric and within valid range' });
+    }
+  }
+
+  try {
+    let rows;
+    if (hasManualCoords) {
+      ({ rows } = await pool.query(
+        `UPDATE cards
+            SET latitude = $1,
+                longitude = $2,
+                geocoded_at = NOW(),
+                geocode_status = 'ok',
+                geocode_approved = TRUE,
+                geocode_approved_by = $3,
+                geocode_approved_at = NOW()
+          WHERE id = $4
+          RETURNING id, latitude, longitude, geocode_status,
+                    geocode_approved, geocode_approved_at`,
+        [lat, lng, req.user.id, id],
+      ));
+    } else {
+      ({ rows } = await pool.query(
+        `UPDATE cards
+            SET geocode_approved = TRUE,
+                geocode_approved_by = $1,
+                geocode_approved_at = NOW()
+          WHERE id = $2
+            AND geocode_status = 'ok'
+          RETURNING id, latitude, longitude, geocode_status,
+                    geocode_approved, geocode_approved_at`,
+        [req.user.id, id],
+      ));
+    }
+    if (!rows[0]) return res.status(409).json({ error: 'Card has no successful geocode to approve' });
+    res.json(rows[0]);
   } catch (err) { next(err); }
 });
 

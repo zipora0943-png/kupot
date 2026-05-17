@@ -266,6 +266,13 @@ ALTER TABLE cards ADD COLUMN IF NOT EXISTS geocoded_at    TIMESTAMPTZ;
 -- geocode_status values: NULL (never attempted), 'ok', 'not_found', 'error', 'disabled'.
 ALTER TABLE cards ADD COLUMN IF NOT EXISTS geocode_status VARCHAR(20);
 
+-- Geocode approval: after the backend geocodes an address, an admin visually
+-- confirms the marker location on a map and approves it. Re-geocoding resets
+-- approval to FALSE so the new location must be re-confirmed.
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS geocode_approved     BOOLEAN     NOT NULL DEFAULT FALSE;
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS geocode_approved_by  INTEGER     REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS geocode_approved_at  TIMESTAMPTZ;
+
 -- Audit table — records collections that proceeded even though the collector's
 -- GPS position was outside the configured radius from the card address.
 CREATE TABLE IF NOT EXISTS location_overrides (

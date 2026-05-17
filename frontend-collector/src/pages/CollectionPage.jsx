@@ -4,6 +4,7 @@ import { Geolocation } from '@capacitor/geolocation'
 import { cards as cardsApi, locationOverrides as overridesApi } from '../api/endpoints'
 import { computeCardLabels } from '@shared/utils/cardLabel'
 import Modal from '@shared/components/Modal'
+import MapView from '@shared/components/MapView'
 
 function formatDate(s) {
   if (!s) return '—'
@@ -464,6 +465,20 @@ export default function CollectionPage() {
             <span className="v">{formatDate(card.last_collection_at)}</span>
           </div>
         </div>
+
+        {/* Task 61: show the card location on a map so the collector can
+            visually confirm the address before scanning. */}
+        {card.geocode_status === 'ok' && card.latitude != null && card.longitude != null && (
+          <div style={{ margin: '14px 0' }}>
+            <MapView
+              lat={Number(card.latitude)}
+              lng={Number(card.longitude)}
+              height={200}
+              popupText={formatAddress(card)}
+              interactive={false}
+            />
+          </div>
+        )}
 
         <div className="collection-actions">
           <button

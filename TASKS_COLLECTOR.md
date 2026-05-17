@@ -533,14 +533,19 @@
 
 #### 58.ג — לוגיקת אימות בקליינט ([CollectionPage.jsx](frontend-collector/src/pages/CollectionPage.jsx))
 - **הקליינט אחראי רק לקבלת GPS ולקריאה ל-API שלנו. אין חישובי מרחק, אין קריאות ל-Google Maps.**
-- **שינוי הזרימה במודאל אישור הגביה (שהתווסף במשימה 57):**
-  - כפתור "✓ אשר והמשך לגביה" → לפני ה-navigate ל-`/scan/:id`:
-    1. בקש מיקום מהמכשיר עם `Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 })`.
-    2. אם המשתמש דחה הרשאה / timeout / כל שגיאה אחרת → הצג הודעה: "לא ניתן לאמת מיקום. ניתן להמשיך, אבל מומלץ לאפשר מיקום." + 2 כפתורים: "המשך בכל זאת" / "ביטול".
-    3. אם התקבל מיקום → קרא ל-`POST /api/cards/:id/verify-location` עם `{lat, lng}` של המכשיר.
-    4. אם `within_radius=true` (השרת אישר) → המשך ישירות ל-`/scan/:id` (ללא הודעה).
-    5. אם `card_geocoded=false` (אין קואורדינטות לקופה במסד) → דלג על האימות, המשך לסריקה (fallback בטוח).
-    6. אם `within_radius=false` (השרת קבע שרחוק) → פתח **מודאל אזהרה** עם `distance_meters` מהתגובה (סעיף 58.ד).
+- **GPS הוא הזרימה הראשית; מודאל אישור הכתובת (משימה 57) הפך לפולבק שמופיע רק כשאי-אפשר לאמת.**
+- **זרימת אחזור ידני (לחיצה על "💰 בצע גביה" בטופס אחזור הקופה):**
+  1. lookup לפי iron_number → בקש מיקום מהמכשיר עם `Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 })`.
+  2. אם התקבל מיקום → `POST /api/cards/:id/verify-location` עם `{lat, lng}`:
+     - `within_radius=true` → ניווט ישיר ל-`/scan/:id` (ללא שום מודאל).
+     - `within_radius=false` (יש קואורדינטות לקופה, רחוק מהרדיוס) → **מודאל אזהרה** עם הזנת סיבה (58.ד).
+     - `card_geocoded=false` (אין קואורדינטות לקופה) → **מודאל אישור כתובת** (פולבק): הצגת מספר/שם/כתובת/הערות עם 2 כפתורים: "✓ אשר והמשך לגביה" → `/scan/:id`, "📝 דיווח כתובת לא נכונה" → `/report/:id?reason=address`.
+  3. אם בקשת ה-GPS נכשלה (הרשאה נדחתה / timeout / שגיאת רשת לאימות) → אותו **מודאל אישור כתובת** מוצג כפולבק (אותם 2 כפתורים).
+- **זרימה מתצוגת קופה (לחיצה על "💰 בצע גביה" ב-`/collection/:cardId`):**
+  - אותו flow של GPS → verify-location.
+  - `within_radius=true` או `card_geocoded=false` → ניווט ישיר ל-`/scan/:id` (המשתמש כבר רואה את הכתובת על המסך).
+  - `within_radius=false` → מודאל אזהרה (58.ד).
+  - GPS נכשל → מודאל קטן "לא ניתן לאמת מיקום, להמשיך?" עם 2 כפתורים: "המשך בכל זאת" / "ביטול".
 
 #### 58.ד — מודאל אזהרה + הזנת סיבה
 - **טקסט הכותרת:** "אתה רחוק מהכתובת הרשומה"
@@ -649,6 +654,138 @@
   - שיוך מעטפה מוצלח (סריקה או ידני) → מעבר ל-`/collection` (טופס אחזור) עם toast "שיוך מעטפה מס׳ X".
   - לחיצה על X בסורק ללא סריקה → ההתנהגות הקיימת נשמרת (חוזר לקופה אם הגיעו ממנה, אחרת לאחזור).
   - APK חדש זמין בשרת ומשתמשים בגרסה ישנה רואים הודעת עדכון.
+
+**משימה 61: החלפת זרימת אימות הכתובת — תצוגת מפה לאישור + מעבר ל-OpenStreetMap** — ✅ בוצע
+- **רקע:** במשימה 58 הוטמע אימות GPS עם Google Maps. הזרימה הזו נשמרת — *השרת לא קורא לגוגל בכל בדיקת מיקום*, רק חישוב Haversine מקומי מול קואורדינטות שכבר במסד. הקריאה לשירות הגיאוקודינג מתבצעת **רק** בעת יצירת/עדכון כתובת.
+- **השינוי:** (א) להחליף את Google Maps ב-OpenStreetMap Nominatim כדי לחסוך מפתח API. (ב) לאפשר לאדמין לאמת ויזואלית את המיקום על מפה. (ג) להציג מפה גם לגובה ב-CollectionPage כדי לוודא שהמפה מעודכנת.
+
+#### 61.א — מעבר ל-Nominatim בצד שרת
+- **[backend/src/services/geocoding.js](backend/src/services/geocoding.js):** הקריאה ל-`https://maps.googleapis.com/maps/api/geocode/json` הוחלפה ב-`https://nominatim.openstreetmap.org/search`. החתימה (`geocodeAddress`, `geocodeCard`) נשמרת — אותו ערך החזרה `{status, lat, lng}`.
+- **תאימות למדיניות OSM:** חובת User-Agent (משתנה סביבה `NOMINATIM_USER_AGENT`, ברירת מחדל `KupotProject/1.0`), הגבלת בקשה אחת לשנייה (1100ms sleep בין קריאות בריצה קבוצתית).
+- **[backend/.env.example](backend/.env.example):** הוסר `GOOGLE_MAPS_API_KEY`. נוספו `NOMINATIM_USER_AGENT`, `NOMINATIM_DISABLED`.
+- **לא נדרש מפתח API.**
+
+#### 61.ב — עמודות אישור + endpoints
+- **מיגרציה ב-[schema.sql](backend/src/db/schema.sql):**
+  ```sql
+  ALTER TABLE cards ADD COLUMN IF NOT EXISTS geocode_approved     BOOLEAN     NOT NULL DEFAULT FALSE;
+  ALTER TABLE cards ADD COLUMN IF NOT EXISTS geocode_approved_by  INTEGER     REFERENCES users(id) ON DELETE SET NULL;
+  ALTER TABLE cards ADD COLUMN IF NOT EXISTS geocode_approved_at  TIMESTAMPTZ;
+  ```
+- **כל גיאוקודינג מאפס את שלושת השדות** (כך שכל תרגום מחדש מחייב אישור חוזר של האדמין).
+- **endpoint חדש:** `POST /api/cards/:id/approve-geocode` — admin only. מסמן את הקואורדינטות כמאושרות (חייב `geocode_status='ok'`).
+- **endpoint חדש:** `POST /api/cards/geocode-missing` — admin only. מריץ Nominatim לכל קופה פעילה שאין לה `geocode_status='ok'`. throttled ל-בקשה/שנייה. מחזיר `{attempted, ok, not_found, error}`.
+- **`POST /api/cards/:id/geocode` הקיים** ממשיך לעבוד — אדמין יכול לאלץ ריצה מחדש על קופה ספציפית.
+
+#### 61.ג — קומפוננטת מפה משותפת
+- **התקנה:** `leaflet` + `react-leaflet` בשני ה-frontends (`react-leaflet@4` ב-admin עם React 18, `react-leaflet@5` ב-collector עם React 19).
+- **קומפוננטה חדשה:** [frontend-shared/src/components/MapView.jsx](frontend-shared/src/components/MapView.jsx). מקבלת `lat`, `lng`, `zoom`, `height`, `popupText`, `interactive`. משתמשת ב-tile layer של OSM (ללא מפתח). אייקון ה-marker נטען מ-CDN של leaflet כדי לעקוף בעיות bundling.
+- **[vite.config.js](frontend-admin/vite.config.js) + [collector](frontend-collector/vite.config.js):** הוספת `'leaflet', 'react-leaflet'` ל-`dedupe` כדי שייפתרו מ-node_modules של ה-frontend גם כשנקראים מ-frontend-shared.
+
+#### 61.ד — אדמין: תצוגת מפה ואישור ב-CardDetailPage
+- **[CardDetailPage.jsx](frontend-admin/src/pages/CardDetailPage.jsx):** פאנל חדש "🗺️ מיקום הקופה על המפה" מעל ה-tabs.
+  - תג סטטוס: `✓ אושר` (ירוק) / `ממתין לאישור` (אפור).
+  - כאשר `geocode_status='ok'` — מציג מפה (height 300) + 2 כפתורים:
+    - `✅ אשר מיקום` — קורא ל-`approveGeocode` (מוסתר כשכבר אושר).
+    - `🔄 תרגם כתובת מחדש` — קורא ל-`geocode` ומאפס את האישור.
+  - כאשר אין `ok` — מציג alert עם הסיבה (`not_found`, `error`, `disabled`, או "טרם תורגם") + כפתור `🔄 תרגם כתובת`.
+- **[endpoints.js](frontend-admin/src/api/endpoints.js):** נוספו `cards.geocode(id)`, `cards.approveGeocode(id)`, `cards.geocodeMissing()`.
+
+#### 61.ה — אדמין: כפתור הרצה קבוצתית ב-SettingsPage
+- **[SettingsPage.jsx](frontend-admin/src/pages/SettingsPage.jsx):** פאנל חדש "מפה וגיאוקודינג" עם כפתור "🗺️ הרץ גיאוקודינג לקופות חסרות".
+- בעת הריצה: כפתור disabled עם טקסט "מתרגם כתובות...", ולאחר סיום הצגת alert ירוק עם הסטטיסטיקה (`attempted / ok / not_found / error`).
+
+#### 61.ו — קולקטור: תצוגת מפה ב-CollectionPage
+- **[CollectionPage.jsx](frontend-collector/src/pages/CollectionPage.jsx):** מתחת לפרטי הקופה (תאריך גביה אחרון) מוצגת מפה קטנה (height 200, `interactive=false`) עם marker והכתובת ב-popup.
+- מוצגת רק כש-`geocode_status='ok'` ויש קואורדינטות. אחרת — כלום (זהה למצב הקיים).
+
+#### אימות
+- `POST /api/cards/:id/geocode` כעת קורא ל-Nominatim ולא לגוגל; השדות `latitude`, `longitude`, `geocode_status` מתמלאים והשדות `geocode_approved*` מתאפסים.
+- ב-CardDetailPage של האדמין מופיעה מפה עם marker; לחיצה על "אשר מיקום" מסמנת את ה-pill כירוק; לחיצה על "תרגם מחדש" מאפסת ו-מבצעת ריצה חדשה.
+- ב-SettingsPage לחיצה על "הרץ גיאוקודינג לקופות חסרות" מתרגמת את כל הקופות שאין להן `ok` עם throttle של 1 בקשה/שנייה.
+- ב-CollectionPage של הגובה מוצגת מפה קטנה עם המיקום של הקופה מתחת לפרטים.
+- אימות ה-GPS לפני גביה (משימה 58) ממשיך לעבוד בדיוק כמו קודם — `POST /api/cards/:id/verify-location` עדיין מבצע Haversine מול הקואורדינטות במסד ללא קריאה לשירות חיצוני.
+
+**משימה 62: חזרה ל-Google Maps + הגבלת חיפוש לעיר + עריכה ידנית על המפה** — ✅ בוצע
+- **רקע:** במשימה 61 הוחלף ספק הגיאוקודינג ל-OpenStreetMap Nominatim. בפועל התגלו 2 בעיות: (א) Nominatim פחות מדויק בכתובות בעברית, ובמיוחד נוטה לבחור רחוב באותו שם בעיר שכנה כשהרחוב לא קיים בעיר שהוזנה; (ב) דרושה דרך לאדמין לתקן ידנית מיקום שגוי.
+- **השינויים:** (א) חזרה ל-Google Geocoding API עם פילטר קשיח לעיר. (ב) מפתח API מאוחסן רק בטבלת `settings` ומוזן דרך SettingsPage. (ג) marker ניתן לגרירה ב-CardDetailPage לכיוון עדין של המיקום.
+
+#### 62.א — Google Maps עם הגבלה לעיר ([backend/src/services/geocoding.js](backend/src/services/geocoding.js))
+- חזרה לקריאת `https://maps.googleapis.com/maps/api/geocode/json`.
+- **שכבת הגנה ראשונה — `components`:** הקריאה לגוגל נשלחת עם `components=country:IL|locality:{city}`. גוגל מבצע פילטר קשיח (לא bias) ולא מחזיר תוצאות מחוץ לעיר.
+- **שכבת הגנה שנייה — אימות בצד שרת:** `localityMatches()` בודק את `address_components` של התשובה ומוודא שיש שם `locality` / `sublocality` / `administrative_area_level_2` שמתאים לעיר שהוזנה (השוואה לאחר נורמליזציה — הסרת רווחים/מקפים/גרשיים, lower-case). אם לא — התוצאה נדחית ומוחזר `not_found`.
+- **דוגמה:** "יהודה הנשיא" / "רבי יהודה הנשיא" באותו שם בערים שונות — תמיד יבחר את הרחוב בעיר שהאדמין הקליד; אם הרחוב לא קיים בעיר הזו → `not_found` במקום קואורדינטות של עיר אחרת.
+- **`address` בלי שם העיר:** השדה `address` שנשלח לגוגל מכיל רק `building`, `street`, `neighborhood` — העיר באה דרך `components` בלבד, כדי שגוגל לא ייפותה לחזור לעיר אחרת.
+
+#### 62.ב — מפתח API ב-settings בלבד ([backend/src/routes/settings.js](backend/src/routes/settings.js))
+- הוסף ל-`SETTINGS_SCHEMA` מפתח חדש: `google_maps_api_key` (type `string`, `allowEmpty: true`, `sensitive: true`, default `''`).
+- `GET /api/settings` **לא מחזיר** את הערך של מפתחות עם `sensitive: true`. במקום זאת מוחזר flag בולאני `<key>_set` (למשל `google_maps_api_key_set: true`). PUT מחזיר אותה צורה לאחר השמירה.
+- `geocoding.js` קורא את המפתח דרך `getApiKey()` — שאילתת `SELECT value FROM settings WHERE key = 'google_maps_api_key'`. אין fallback ל-env. אם המפתח ריק → `status: 'disabled'`.
+- [backend/.env.example](backend/.env.example): הוסר כל מידע על Nominatim/GOOGLE_MAPS_API_KEY; הערה מפנה למסך ההגדרות.
+
+#### 62.ג — UI ב-SettingsPage ([frontend-admin/src/pages/SettingsPage.jsx](frontend-admin/src/pages/SettingsPage.jsx))
+- פאנל "מפה וגיאוקודינג" קיבל שדה חדש בראש: **מפתח Google Maps API**.
+  - תג סטטוס: `✓ הוגדר` / `לא הוגדר` (מבוסס על `google_maps_api_key_set` מה-API).
+  - `<input type="password" autoComplete="new-password">` כך שהדפדפן לא ישמור או יציג. ה-placeholder מציין `••••••••` כשהמפתח כבר הוגדר.
+  - כפתור "שמירת מפתח" (פעיל רק כשהוקלד ערך), וכפתור "הסר מפתח" (אדום, פעיל רק אם הוגדר מפתח).
+- כפתור "🗺️ הרץ גיאוקודינג לקופות חסרות" disabled עד שיש מפתח (`title` עם הסבר).
+
+#### 62.ד — Marker שניתן לגרירה ([frontend-shared/src/components/MapView.jsx](frontend-shared/src/components/MapView.jsx))
+- props חדשים: `draggable` (default `false`), `onMarkerDrag(lat, lng)`.
+- `eventHandlers.dragend` קורא ל-`marker.getLatLng()` ומעביר חזרה ל-parent דרך ה-callback.
+- שאר ה-props (כולל ב-CollectionPage של הקולקטור) ממשיכים לעבוד ללא שינוי.
+
+#### 62.ה — שמירת מיקום ידני ([backend/src/routes/cards.js](backend/src/routes/cards.js) + [CardDetailPage.jsx](frontend-admin/src/pages/CardDetailPage.jsx))
+- **`POST /api/cards/:id/approve-geocode`** קיבל הרחבה: body אופציונלי `{ lat, lng }`. כשמסופק, הקואורדינטות נדרסות, `geocode_status` נקבע ל-`'ok'`, ו-`geocode_approved`/`geocode_approved_by`/`geocode_approved_at` מתעדכנים — הכל ב-UPDATE אחד.
+- **לקוח האדמין:** `cards.approveGeocode(id, coords?)` שולח את הקואורדינטות רק אם הן מספרים תקינים.
+- **UI ב-CardDetailPage:**
+  - מתחת לכותרת המפה — הסבר קצר "ניתן לגרור את הסיכה למיקום מדויק יותר ולשמור".
+  - state חדש `dragCoords` (`null` כברירת מחדל). `onMarkerDrag` עדכנו.
+  - **כשמורה הסיכה נגררה:** הכפתורים משתנים ל-`💾 שמור מיקום חדש` + `ביטול גרירה` (כפתור "תרגם מחדש" מוסתר כדי שלא יבטל את העריכה).
+  - **כשלא נגררה:** רגיל — `✅ אשר מיקום` (אם לא אושר עדיין) + `🔄 תרגם כתובת מחדש`.
+  - בלחיצה על "שמור מיקום חדש" → `approveGeocode(id, dragCoords)`, ולאחר ההצלחה רענון הכרטסת ואיפוס `dragCoords`.
+
+#### אימות
+- ללא מפתח API ב-settings → כל קריאה ל-`POST /api/cards/:id/geocode` מחזירה `disabled` ו-UI מציג alert מתאים עם הפניה להגדרות.
+- הזנת מפתח ב-SettingsPage → `GET /api/settings` מחזיר `google_maps_api_key_set: true` (ולא את המפתח עצמו); תרגום כתובת מצליח.
+- כתובת כמו "רבי יהודה הנשיא, בני ברק" — גוגל מקבל `components=country:IL|locality:בני ברק` והתוצאה תמיד בבני ברק; כתובת כמו "יהודה הנשיא, רעננה" — תמיד ברעננה. אם הרחוב לא קיים בעיר → `not_found`.
+- גרירת הסיכה במפה → הכפתורים עוברים למצב שמירה; לחיצה על "שמור מיקום חדש" שומרת קואורדינטות חדשות ומסמנת כמאושר.
+- ב-CollectionPage של הגובה (תצוגת מפה non-interactive) — אין שינוי בהתנהגות.
+
+**משימה 63: החלפת תצוגת המפה מ-Leaflet/OSM ל-Google Maps** — ✅ בוצע
+- **רקע:** במשימות 61-62 ה-geocoding (תרגום כתובת → קואורדינטות) עבר ל-Google, אבל תצוגת המפה עצמה נשארה ב-Leaflet עם tiles של OpenStreetMap (חינמי, פשוט אבל "פחות מוכר" למשתמש הישראלי). המשימה הזו מעבירה גם את התצוגה ל-Google Maps כדי שיהיה אחיד.
+- **שיקול אבטחה מהותי:** מפתח Google Maps JS API חייב להיטען לדפדפן (אין דרך להסתיר אותו — `<script src=".../js?key=KEY">`). לכן חובה להגדיר ב-Google Cloud Console **HTTP referrer restriction** למפתח (מאפשר רק את הדומיינים של המערכת — `178.105.96.70/*`, `localhost/*`). גם אם המפתח ייחשף בקוד המקור של הדף, הוא לא יעבוד מאתר אחר.
+
+#### 63.א — endpoint חדש לחשיפת המפתח לדפדפן ([backend/src/routes/settings.js](backend/src/routes/settings.js))
+- `GET /api/settings/maps-key` — מחזיר `{ key: '...' }` בטקסט נקי. נדרשת אימות (`authenticate` middleware), אבל זמין לכל ה-roles (גם collector צריך להציג מפה ב-CollectionPage).
+- `GET /api/settings` הרגיל **ממשיך להחזיר את המפתח כ-flag בלבד** (`google_maps_api_key_set: true/false`) — כך שהאדמין יודע אם הוגדר בלי לחשוף את הערך פעמיים בדפי הגדרות.
+
+#### 63.ב — שכתוב MapView ל-Google Maps ([frontend-shared/src/components/MapView.jsx](frontend-shared/src/components/MapView.jsx))
+- **ספרייה חדשה:** `@vis.gl/react-google-maps` (חבילה רשמית של Google, תומכת React 18 ו-19) — מותקנה בשני ה-frontends.
+- **טעינת מפתח:** ב-mount הראשון של MapView נטען המפתח דרך `settingsApi.getMapsKey()`. התשובה מתקֲשׁת ב-module-level promise כך שלא נטענת שוב במונט שני.
+- **רכיב חדש:** `<APIProvider apiKey={apiKey} libraries={['marker']}>` עוטף את `<Map>`. השימוש ב-`AdvancedMarker` (חדש ב-Google Maps) דורש `mapId`. כברירת מחדל מועבר `'DEMO_MAP_ID'` שמורשה לפיתוח; ב-production מומלץ לייצר Map ID אמיתי ב-Google Cloud.
+- **גרירת marker:** דרך `onDragEnd` של `AdvancedMarker` — תומך גם ב-`e.latLng.lat()` הישן וגם ב-`e.latLng.lat` החדש.
+- **Recenter על שינוי props:** רכיב פנימי שמשתמש ב-`useMap` ומפעיל `map.panTo({lat, lng})` כשה-props משתנים.
+- **fallback gracefully:** אם אין מפתח — תיבת placeholder עם הודעה ברורה למשתמש להזין מפתח בהגדרות.
+- **draggable** + **interactive** + **popupText** (title) נשארו זהים ל-API הקודם — שום שינוי בקריאות מהקומפוננטות הצרכניות (CardDetailPage, CollectionPage).
+
+#### 63.ג — הסרת Leaflet
+- `npm uninstall leaflet react-leaflet` בשני ה-frontends.
+- [vite.config.js](frontend-admin/vite.config.js) + [collector](frontend-collector/vite.config.js): הוחלף `'leaflet', 'react-leaflet'` ב-`'@vis.gl/react-google-maps'` ב-`dedupe`.
+- **תוצאה:** ה-bundle של האדמין ירד מ-533KB ל-417KB (~100KB פחות, כי Google Maps API נטען חיצונית מ-googleapis.com במקום להיכלל ב-bundle).
+
+#### 63.ד — אזהרת אבטחה ב-SettingsPage ([SettingsPage.jsx](frontend-admin/src/pages/SettingsPage.jsx))
+- בלוק אזהרה כתום מתחת לשדה המפתח, מסביר:
+  - המפתח נטען גם לדפדפן (חובה ל-Google Maps JS).
+  - חובה להגדיר HTTP referrer restriction ב-Google Cloud Console.
+  - יש להפעיל בקונסולת Google: **Maps JavaScript API** + **Geocoding API**.
+
+#### אימות
+- ללא מפתח ב-settings → MapView מציג "לא ניתן להציג מפה — מפתח Google Maps API לא הוגדר בהגדרות.".
+- עם מפתח → המפה נטענת מ-Google (tiles, labels, controls).
+- גרירת marker ב-CardDetailPage → אותה התנהגות כמו במשימה 62 (`💾 שמור מיקום חדש`).
+- ב-CollectionPage של הקולקטור — מפה Google קטנה non-interactive עם marker.
+- ב-Network של DevTools: בקשות ל-`maps.googleapis.com` במקום `tile.openstreetmap.org`.
 
 ---
 

@@ -74,6 +74,18 @@ export const cards = {
   // Distinct location values for autocomplete combobox (task 26).
   // params: { level: 'city'|'neighborhood'|'street', city?, neighborhood? }
   locations: (params)    => api.get('/cards/locations', params),
+  // Task 61: force re-geocode of a single card.
+  geocode: (id)          => api.post(`/cards/${id}/geocode`),
+  // Task 61: admin marks the stored coordinates as visually approved on the map.
+  // Task 62: optional manual coords (after dragging the marker) — when supplied
+  // they overwrite the geocoder result and the status is forced to 'ok'.
+  approveGeocode: (id, coords) =>
+    api.post(`/cards/${id}/approve-geocode`,
+      coords && typeof coords.lat === 'number' && typeof coords.lng === 'number'
+        ? { lat: coords.lat, lng: coords.lng }
+        : undefined),
+  // Task 61: batch — re-geocode every card whose geocode_status is not 'ok'.
+  geocodeMissing: ()     => api.post('/cards/geocode-missing'),
 };
 
 // ---- ENVELOPES ----
@@ -163,6 +175,10 @@ export const settings = {
   updateAll: (patch)     => api.put('/settings', patch),
   // Convenience: update a single key
   update: (key, value)   => api.put('/settings', { [key]: value }),
+  // Task 63: returns the Google Maps API key in plaintext so the frontend
+  // can initialise the Maps JavaScript API. Restrict the key by HTTP referrer
+  // in Google Cloud Console.
+  getMapsKey: ()         => api.get('/settings/maps-key'),
 };
 
 // ---- TASK TYPES / REPORT TYPES / BOX TYPES ----

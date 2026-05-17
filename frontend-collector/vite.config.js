@@ -29,7 +29,7 @@ export default defineConfig({
     },
     // Force these to resolve to this app's node_modules even when imported
     // from frontend-shared (which has no node_modules of its own).
-    dedupe: ['react', 'react-dom', 'react-router-dom'],
+    dedupe: ['react', 'react-dom', 'react-router-dom', '@vis.gl/react-google-maps'],
   },
   server: {
     port: 5174,

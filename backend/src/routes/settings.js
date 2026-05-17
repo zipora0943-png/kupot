@@ -16,6 +16,15 @@ const SETTINGS_SCHEMA = {
     max: 3650,
     default: '30',
   },
+  // Task 62: Google Maps Geocoding API key. Stored only in the settings table
+  // (no .env fallback). Read by backend/src/services/geocoding.js at request
+  // time. Empty string disables geocoding.
+  google_maps_api_key: {
+    type: 'string',
+    allowEmpty: true,
+    default: '',
+    sensitive: true, // GET masks the value
+  },
 };
 
 function coerceAndValidate(key, rawValue) {
@@ -31,6 +40,7 @@ function coerceAndValidate(key, rawValue) {
   }
   if (schema.type === 'string') {
     if (typeof rawValue !== 'string') return { error: `${key} must be a string` };
+    if (!schema.allowEmpty && !rawValue.trim()) return { error: `${key} required` };
     return { value: rawValue };
   }
   if (schema.type === 'boolean') {
@@ -298,14 +308,36 @@ router.delete('/box-types/:id', requireRole('admin'), async (req, res, next) => 
 
 // ─── routes ───────────────────────────────────────────────────────
 
-// GET /api/settings  — returns all allowed settings (with defaults if missing)
+// GET /api/settings/maps-key  — returns the Google Maps API key in plaintext
+// so the frontend can load the Maps JavaScript API. Authenticated users only.
+// The key is expected to be protected by an HTTP-referrer restriction in
+// Google Cloud Console, so exposing it to the browser is safe.
+router.get('/maps-key', async (_req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT value FROM settings WHERE key = 'google_maps_api_key' LIMIT 1`
+    );
+    const key = rows[0]?.value;
+    res.json({ key: typeof key === 'string' && key.trim() ? key.trim() : '' });
+  } catch (err) { next(err); }
+});
+
+// GET /api/settings  — returns all allowed settings (with defaults if missing).
+// Sensitive fields are masked: their value is replaced with a boolean
+// `<key>_set` flag so the UI knows whether one is configured without
+// leaking the actual secret.
 router.get('/', async (_req, res, next) => {
   try {
     const { rows } = await pool.query(`SELECT key, value FROM settings`);
     const map = Object.fromEntries(rows.map(r => [r.key, r.value]));
     const out = {};
     for (const [k, schema] of Object.entries(SETTINGS_SCHEMA)) {
-      out[k] = map[k] !== undefined ? map[k] : (schema.default ?? null);
+      const v = map[k] !== undefined ? map[k] : (schema.default ?? null);
+      if (schema.sensitive) {
+        out[`${k}_set`] = !!(v && String(v).trim());
+      } else {
+        out[k] = v;
+      }
     }
     res.json(out);
   } catch (err) { next(err); }
@@ -344,7 +376,12 @@ router.put('/', requireRole('admin'), async (req, res, next) => {
     const map = Object.fromEntries(rows.map(r => [r.key, r.value]));
     const out = {};
     for (const [k, schema] of Object.entries(SETTINGS_SCHEMA)) {
-      out[k] = map[k] !== undefined ? map[k] : (schema.default ?? null);
+      const v = map[k] !== undefined ? map[k] : (schema.default ?? null);
+      if (schema.sensitive) {
+        out[`${k}_set`] = !!(v && String(v).trim());
+      } else {
+        out[k] = v;
+      }
     }
     res.json(out);
   } catch (err) {

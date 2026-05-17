@@ -10,6 +10,7 @@ import ReportsTab   from './cardTabs/ReportsTab'
 import CloseCardModal from '../components/CloseCardModal'
 import ReopenCardModal from '../components/ReopenCardModal'
 import LocationCombobox from '../components/LocationCombobox'
+import MapView from '@shared/components/MapView'
 
 const ALL_TABS = [
   { key: 'envelopes', label: '✉️ מעטפות' },
@@ -61,6 +62,13 @@ export default function CardDetailPage() {
 
   // Reopen card mode
   const [showReopenModal, setShowReopenModal] = useState(false)
+
+  // Geocode actions (task 61)
+  const [geocodeBusy, setGeocodeBusy]   = useState(false)
+  const [geocodeMsg,  setGeocodeMsg]    = useState(null)
+  // Manual marker drag (task 62) — when the admin drags the marker we keep
+  // the new coords here. null means "no manual override, use card.lat/lng".
+  const [dragCoords, setDragCoords]     = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -157,6 +165,60 @@ export default function CardDetailPage() {
       setShowCloseModal(false)
     } catch (err) {
       throw err
+    }
+  }
+
+  // ── Geocode actions (task 61) ─────────────────────────────────────
+  async function reloadCard() {
+    try {
+      const fresh = await cardsApi.get(id)
+      setCard(prev => ({ ...prev, ...fresh }))
+    } catch { /* non-fatal */ }
+  }
+
+  async function handleRegeocode() {
+    setGeocodeMsg(null)
+    setGeocodeBusy(true)
+    setDragCoords(null)
+    try {
+      await cardsApi.geocode(id)
+      await reloadCard()
+      setGeocodeMsg({ type: 'green', text: 'הכתובת תורגמה מחדש. בדוק את הסיכה במפה ואשר.' })
+    } catch (err) {
+      setGeocodeMsg({ type: 'red', text: err.message || 'שגיאה בגיאוקודינג' })
+    } finally {
+      setGeocodeBusy(false)
+    }
+  }
+
+  async function handleApproveGeocode() {
+    setGeocodeMsg(null)
+    setGeocodeBusy(true)
+    try {
+      await cardsApi.approveGeocode(id, dragCoords || undefined)
+      setDragCoords(null)
+      await reloadCard()
+      setGeocodeMsg({ type: 'green', text: 'המיקום אושר.' })
+    } catch (err) {
+      setGeocodeMsg({ type: 'red', text: err.message || 'שגיאה באישור המיקום' })
+    } finally {
+      setGeocodeBusy(false)
+    }
+  }
+
+  async function handleSaveDrag() {
+    if (!dragCoords) return
+    setGeocodeMsg(null)
+    setGeocodeBusy(true)
+    try {
+      await cardsApi.approveGeocode(id, dragCoords)
+      setDragCoords(null)
+      await reloadCard()
+      setGeocodeMsg({ type: 'green', text: 'המיקום החדש נשמר ואושר.' })
+    } catch (err) {
+      setGeocodeMsg({ type: 'red', text: err.message || 'שגיאה בשמירת המיקום' })
+    } finally {
+      setGeocodeBusy(false)
     }
   }
 
@@ -404,6 +466,100 @@ export default function CardDetailPage() {
           </>
         )}
       </div>}
+
+      {/* MAP — task 61: visual confirmation of the geocoded address */}
+      {!editing && !isCollector && (
+        <div className="panel" style={{ marginTop: 16 }}>
+          <div className="panel-title">
+            🗺️ מיקום הקופה על המפה
+            {card.geocode_status === 'ok' && card.geocode_approved && (
+              <span className="pill green" style={{ marginInlineStart: 8, padding: '2px 10px', fontSize: 11 }}>
+                ✓ אושר
+              </span>
+            )}
+            {card.geocode_status === 'ok' && !card.geocode_approved && (
+              <span className="pill" style={{ marginInlineStart: 8, padding: '2px 10px', fontSize: 11, background: 'var(--bg2, #f3f4f6)', color: 'var(--text2, #6b7280)' }}>
+                ממתין לאישור
+              </span>
+            )}
+          </div>
+
+          {geocodeMsg && (
+            <div className={'alert ' + geocodeMsg.type} style={{ marginBottom: 10 }}>
+              {geocodeMsg.text}
+            </div>
+          )}
+
+          {card.geocode_status === 'ok' && card.latitude != null && card.longitude != null ? (
+            <>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6 }}>
+                ניתן לגרור את הסיכה למיקום מדויק יותר ולשמור.
+              </div>
+              <MapView
+                lat={Number(dragCoords?.lat ?? card.latitude)}
+                lng={Number(dragCoords?.lng ?? card.longitude)}
+                height={300}
+                popupText={subtitle || titleLabel}
+                draggable={true}
+                onMarkerDrag={(lat, lng) => setDragCoords({ lat, lng })}
+              />
+              <div className="actions" style={{ marginTop: 12 }}>
+                {dragCoords ? (
+                  <>
+                    <button
+                      className="btn success sm"
+                      onClick={handleSaveDrag}
+                      disabled={geocodeBusy}
+                    >
+                      💾 שמור מיקום חדש
+                    </button>
+                    <button
+                      className="btn sm"
+                      onClick={() => setDragCoords(null)}
+                      disabled={geocodeBusy}
+                    >
+                      ביטול גרירה
+                    </button>
+                  </>
+                ) : !card.geocode_approved ? (
+                  <button
+                    className="btn success sm"
+                    onClick={handleApproveGeocode}
+                    disabled={geocodeBusy}
+                  >
+                    ✅ אשר מיקום
+                  </button>
+                ) : null}
+                {!dragCoords && (
+                  <button
+                    className="btn sm"
+                    onClick={handleRegeocode}
+                    disabled={geocodeBusy}
+                  >
+                    🔄 תרגם כתובת מחדש
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="alert info" style={{ marginBottom: 10 }}>
+                {card.geocode_status === 'not_found' && 'הכתובת לא נמצאה במאגר המפות (גוגל לא מצא את הרחוב בעיר הזו).'}
+                {card.geocode_status === 'error'     && 'שגיאה בתרגום הכתובת. ודא שמפתח Google Maps API מוגדר בהגדרות.'}
+                {card.geocode_status === 'disabled'  && 'שירות הגיאוקודינג מושבת — מפתח Google Maps API לא הוגדר בהגדרות.'}
+                {!card.geocode_status               && 'הכתובת עדיין לא תורגמה לקואורדינטות.'}
+              </div>
+              <button
+                className="btn sm"
+                onClick={handleRegeocode}
+                disabled={geocodeBusy}
+              >
+                🔄 תרגם כתובת
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* TABS */}
       <div className="tabs" style={{ marginTop: 20 }}>

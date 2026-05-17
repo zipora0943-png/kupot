@@ -176,6 +176,10 @@ export const settings = {
   updateAll: (patch)     => api.put('/settings', patch),
   // Convenience: update a single key
   update: (key, value)   => api.put('/settings', { [key]: value }),
+  // Task 63: returns the Google Maps API key in plaintext so the frontend
+  // can initialise the Maps JavaScript API. Restrict the key by HTTP referrer
+  // in Google Cloud Console.
+  getMapsKey: ()         => api.get('/settings/maps-key'),
 };
 
 // ---- TASK TYPES / REPORT TYPES / BOX TYPES ----

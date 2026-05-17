@@ -4,6 +4,7 @@ import {
   taskTypes as taskTypesApi,
   reportTypes as reportTypesApi,
   boxTypes as boxTypesApi,
+  cards as cardsApi,
 } from '../api/endpoints'
 import TaskTypeModal from '../components/TaskTypeModal'
 import ReportTypeModal from '../components/ReportTypeModal'
@@ -58,6 +59,16 @@ export default function SettingsPage() {
   const [savingGlobal, setSavingGlobal] = useState(false)
   const [globalMsg, setGlobalMsg] = useState(null)
 
+  // Geocoding (task 61)
+  const [geocodingRunning, setGeocodingRunning] = useState(false)
+  const [geocodingResult, setGeocodingResult]   = useState(null) // { attempted, ok, not_found, error } or { error }
+
+  // Google Maps API key (task 62) — sensitive, stored in settings table only.
+  const [apiKeySet, setApiKeySet]   = useState(false)   // does the server have a key?
+  const [apiKeyInput, setApiKeyInput] = useState('')    // new value the admin is typing
+  const [apiKeySaving, setApiKeySaving] = useState(false)
+  const [apiKeyMsg, setApiKeyMsg] = useState(null)
+
   // Type lists (null = loading, [] = empty)
   const [taskList, setTaskList] = useState(null)
   const [reportList, setReportList] = useState(null)
@@ -92,6 +103,7 @@ export default function SettingsPage() {
       const v = s?.alert_days_global ?? '30'
       setAlertDays(String(v))
       setOrigAlertDays(String(v))
+      setApiKeySet(!!s?.google_maps_api_key_set)
     }).catch(() => {})
 
     taskTypesApi.getAll().then(d => !cancelled && setTaskList(Array.isArray(d) ? d : [])).catch(() => !cancelled && setTaskList([]))
@@ -120,6 +132,51 @@ export default function SettingsPage() {
       setGlobalMsg({ type: 'red', text: err.message || 'שגיאה בשמירה' })
     } finally {
       setSavingGlobal(false)
+    }
+  }
+
+  async function saveApiKey() {
+    setApiKeyMsg(null)
+    setApiKeySaving(true)
+    try {
+      const res = await settingsApi.update('google_maps_api_key', apiKeyInput)
+      setApiKeySet(!!res?.google_maps_api_key_set)
+      setApiKeyInput('')
+      setApiKeyMsg({ type: 'green', text: apiKeyInput ? 'המפתח נשמר.' : 'המפתח הוסר.' })
+      setTimeout(() => setApiKeyMsg(null), 3000)
+    } catch (err) {
+      setApiKeyMsg({ type: 'red', text: err.message || 'שגיאה בשמירת המפתח' })
+    } finally {
+      setApiKeySaving(false)
+    }
+  }
+
+  async function clearApiKey() {
+    setApiKeyMsg(null)
+    setApiKeySaving(true)
+    try {
+      const res = await settingsApi.update('google_maps_api_key', '')
+      setApiKeySet(!!res?.google_maps_api_key_set)
+      setApiKeyMsg({ type: 'green', text: 'המפתח הוסר.' })
+      setTimeout(() => setApiKeyMsg(null), 3000)
+    } catch (err) {
+      setApiKeyMsg({ type: 'red', text: err.message || 'שגיאה בהסרת המפתח' })
+    } finally {
+      setApiKeySaving(false)
+    }
+  }
+
+  async function runGeocodeMissing() {
+    if (geocodingRunning) return
+    setGeocodingResult(null)
+    setGeocodingRunning(true)
+    try {
+      const stats = await cardsApi.geocodeMissing()
+      setGeocodingResult(stats)
+    } catch (err) {
+      setGeocodingResult({ error: err.message || 'שגיאה בהרצת הגיאוקודינג' })
+    } finally {
+      setGeocodingRunning(false)
     }
   }
 
@@ -216,6 +273,86 @@ export default function SettingsPage() {
             style={{ marginTop: 12 }}
             onClick={() => openModal('box')}
           >+ הוספה</button>
+        </div>
+
+        {/* === GEOCODING / MAP === */}
+        <div className="panel">
+          <div className="panel-title">מפה וגיאוקודינג</div>
+
+          {/* Google Maps API key (task 62) — sensitive, never echoed back. */}
+          <div className="field" style={{ marginBottom: 14 }}>
+            <label>
+              מפתח Google Maps API
+              {apiKeySet
+                ? <span className="pill green" style={{ marginInlineStart: 8, padding: '2px 8px', fontSize: 11 }}>✓ הוגדר</span>
+                : <span className="pill" style={{ marginInlineStart: 8, padding: '2px 8px', fontSize: 11, background: 'var(--bg2, #f3f4f6)', color: 'var(--text2, #6b7280)' }}>לא הוגדר</span>}
+            </label>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6 }}>
+              נדרש להפעלת תרגום כתובות ולהצגת המפה. הקוד מגביל את החיפוש לעיר שנבחרה
+              בכרטסת כדי שגוגל לא יבחר רחוב בעיר שכנה. יש להפעיל ב-Google Cloud:
+              Maps JavaScript API + Geocoding API.
+            </div>
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={apiKeyInput}
+              onChange={(e) => setApiKeyInput(e.target.value)}
+              placeholder={apiKeySet ? '••••••••  (הזן ערך חדש כדי להחליף)' : 'הזן את מפתח ה-API'}
+              disabled={apiKeySaving}
+            />
+            {apiKeyMsg && (
+              <div className={'alert ' + apiKeyMsg.type} style={{ marginTop: 8 }}>
+                {apiKeyMsg.text}
+              </div>
+            )}
+            <div className="actions" style={{ marginTop: 8 }}>
+              <button
+                className="btn primary sm"
+                onClick={saveApiKey}
+                disabled={apiKeySaving || !apiKeyInput.trim()}
+              >
+                {apiKeySaving ? 'שומר...' : 'שמירת מפתח'}
+              </button>
+              {apiKeySet && (
+                <button
+                  className="btn sm danger"
+                  onClick={clearApiKey}
+                  disabled={apiKeySaving}
+                  style={{ marginInlineStart: 8 }}
+                >
+                  הסר מפתח
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 12 }}>
+            מתרגם כתובות של קופות פעילות לקואורדינטות (לתצוגה על המפה ולאימות GPS של גובים).
+            החיפוש מוגבל לעיר שהוזנה בכרטסת — אם הרחוב לא קיים בעיר הזו, התוצאה נדחית
+            במקום להחזיר רחוב מעיר שכנה.
+          </div>
+
+          {geocodingResult && !geocodingResult.error && (
+            <div className="alert green" style={{ marginBottom: 10 }}>
+              הסתיים. נסיונות: {geocodingResult.attempted} | הצליחו: {geocodingResult.ok} |
+              לא נמצאו: {geocodingResult.not_found} | שגיאות: {geocodingResult.error}
+              {geocodingResult.disabled ? ` | מושבת: ${geocodingResult.disabled}` : ''}
+            </div>
+          )}
+          {geocodingResult?.error && (
+            <div className="alert red" style={{ marginBottom: 10 }}>
+              {geocodingResult.error}
+            </div>
+          )}
+
+          <button
+            className="btn primary sm"
+            onClick={runGeocodeMissing}
+            disabled={geocodingRunning || !apiKeySet}
+            title={!apiKeySet ? 'יש להגדיר מפתח API קודם' : undefined}
+          >
+            {geocodingRunning ? 'מתרגם כתובות...' : '🗺️ הרץ גיאוקודינג לקופות חסרות'}
+          </button>
         </div>
 
         {/* === GLOBAL SETTINGS === */}
