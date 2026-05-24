@@ -85,7 +85,8 @@ export const cards = {
         ? { lat: coords.lat, lng: coords.lng }
         : undefined),
   // Task 61: batch — re-geocode every card whose geocode_status is not 'ok'.
-  geocodeMissing: ()     => api.post('/cards/geocode-missing'),
+  // When `city` is supplied, the batch is scoped to that city only.
+  geocodeMissing: (city)  => api.post('/cards/geocode-missing', city ? { city } : undefined),
 };
 
 // ---- ENVELOPES ----

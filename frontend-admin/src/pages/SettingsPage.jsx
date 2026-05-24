@@ -65,6 +65,7 @@ export default function SettingsPage() {
   // Geocoding (task 61)
   const [geocodingRunning, setGeocodingRunning] = useState(false)
   const [geocodingResult, setGeocodingResult]   = useState(null) // { attempted, ok, not_found, error } or { error }
+  const [geocodeCity, setGeocodeCity]           = useState('')   // '' = all cities; otherwise scope to this city
 
   // Google Maps API key (task 62) — sensitive, stored in settings table only.
   const [apiKeySet, setApiKeySet]   = useState(false)   // does the server have a key?
@@ -186,7 +187,7 @@ export default function SettingsPage() {
     setGeocodingResult(null)
     setGeocodingRunning(true)
     try {
-      const stats = await cardsApi.geocodeMissing()
+      const stats = await cardsApi.geocodeMissing(geocodeCity || undefined)
       setGeocodingResult(stats)
     } catch (err) {
       setGeocodingResult({ error: err.message || 'שגיאה בהרצת הגיאוקודינג' })
@@ -447,14 +448,34 @@ export default function SettingsPage() {
             </div>
           )}
 
-          <button
-            className="btn primary sm"
-            onClick={runGeocodeMissing}
-            disabled={geocodingRunning || !apiKeySet}
-            title={!apiKeySet ? 'יש להגדיר מפתח API קודם' : undefined}
-          >
-            {geocodingRunning ? 'מתרגם כתובות...' : '🗺️ הרץ גיאוקודינג לקופות חסרות'}
-          </button>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            <label style={{ fontSize: 13, color: 'var(--text2)' }}>
+              סנן לפי עיר:
+            </label>
+            <select
+              value={geocodeCity}
+              onChange={(e) => setGeocodeCity(e.target.value)}
+              disabled={geocodingRunning}
+              style={{ minWidth: 180 }}
+            >
+              <option value="">כל הערים</option>
+              {Array.isArray(cityList) && cityList.map(c => (
+                <option key={c.id} value={c.name}>{c.name}</option>
+              ))}
+            </select>
+            <button
+              className="btn primary sm"
+              onClick={runGeocodeMissing}
+              disabled={geocodingRunning || !apiKeySet}
+              title={!apiKeySet ? 'יש להגדיר מפתח API קודם' : undefined}
+            >
+              {geocodingRunning
+                ? 'מתרגם כתובות...'
+                : geocodeCity
+                  ? `🗺️ הרץ גיאוקודינג לעיר ${geocodeCity}`
+                  : '🗺️ הרץ גיאוקודינג לקופות חסרות'}
+            </button>
+          </div>
         </div>
 
         {/* === CITIES & DISTRICTS === */}

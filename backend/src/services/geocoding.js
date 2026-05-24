@@ -182,16 +182,26 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // When `autoApprove` is true, successful results are also marked approved
 // automatically (attributed to `userId`) so the admin only needs to handle
 // the cards Google couldn't locate.
+// When `city` is supplied, only active cards whose `city` matches (case-insensitive,
+// trimmed) are processed — useful for re-running the geocoder for a single city
+// without re-touching every other card.
 // Returns counters + `not_found_cards`: every active card currently stuck
 // at `not_found` (so the admin can pin them manually on the map).
 async function geocodeMissingCards(opts = {}) {
-  const { autoApprove = false, userId = null } = opts;
-  const { rows } = await pool.query(
-    `SELECT id FROM cards
-       WHERE status = 'active'
-         AND (geocode_status IS NULL OR geocode_status <> 'ok')
-       ORDER BY id`,
-  );
+  const { autoApprove = false, userId = null, city = null } = opts;
+  const cityFilter = (typeof city === 'string' && city.trim()) ? city.trim() : null;
+
+  const selectParams = [];
+  let selectSql = `SELECT id FROM cards
+                     WHERE status = 'active'
+                       AND (geocode_status IS NULL OR geocode_status <> 'ok')`;
+  if (cityFilter) {
+    selectParams.push(cityFilter);
+    selectSql += ` AND lower(btrim(city)) = lower(btrim($${selectParams.length}))`;
+  }
+  selectSql += ` ORDER BY id`;
+  const { rows } = await pool.query(selectSql, selectParams);
+
   const stats = { attempted: 0, ok: 0, not_found: 0, error: 0, disabled: 0 };
   for (const { id } of rows) {
     const result = await geocodeCard(id, { autoApprove, userId });
@@ -207,15 +217,19 @@ async function geocodeMissingCards(opts = {}) {
     if (stats.attempted < rows.length) await sleep(150);
   }
 
-  const { rows: notFoundRows } = await pool.query(
-    `SELECT c.id, c.city, c.neighborhood, c.street, c.building, c.custom_name,
-            b.iron_number
-       FROM cards c
-       JOIN boxes b ON b.id = c.box_id
-      WHERE c.status = 'active'
-        AND c.geocode_status = 'not_found'
-      ORDER BY b.iron_number`,
-  );
+  const notFoundParams = [];
+  let notFoundSql = `SELECT c.id, c.city, c.neighborhood, c.street, c.building, c.custom_name,
+                            b.iron_number
+                       FROM cards c
+                       JOIN boxes b ON b.id = c.box_id
+                      WHERE c.status = 'active'
+                        AND c.geocode_status = 'not_found'`;
+  if (cityFilter) {
+    notFoundParams.push(cityFilter);
+    notFoundSql += ` AND lower(btrim(c.city)) = lower(btrim($${notFoundParams.length}))`;
+  }
+  notFoundSql += ` ORDER BY b.iron_number`;
+  const { rows: notFoundRows } = await pool.query(notFoundSql, notFoundParams);
   stats.not_found_cards = notFoundRows;
   return stats;
 }

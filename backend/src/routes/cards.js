@@ -137,7 +137,13 @@ router.get('/', async (req, res, next) => {
 // Registered before any '/:id/...' route so the literal path matches first.
 router.post('/geocode-missing', requireRole('admin'), async (req, res, next) => {
   try {
-    const stats = await geocodeMissingCards({ autoApprove: true, userId: req.user.id });
+    const rawCity = req.body?.city;
+    const city = (typeof rawCity === 'string' && rawCity.trim()) ? rawCity.trim() : null;
+    const stats = await geocodeMissingCards({
+      autoApprove: true,
+      userId: req.user.id,
+      city,
+    });
     res.json(stats);
   } catch (err) { next(err); }
 });
