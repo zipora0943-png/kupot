@@ -197,9 +197,13 @@ describe('buildLocationClause', () => {
 });
 
 describe('bestMatchSpecificity', () => {
+  // Scores: district=1, city=3, neighborhood=5, street=7, box=9
+  //   + 1 when box_type_id is also present on the rule.
   const card = {
     box_id: 42,
+    box_type_id: 7,
     city: 'בני ברק',
+    cityDistrict: 'מרכז',
     neighborhood: 'רמת אלחנן',
     street: 'חזון איש',
   };
@@ -213,48 +217,124 @@ describe('bestMatchSpecificity', () => {
     expect(bestMatchSpecificity(card, undefined)).toBe(0);
   });
 
-  test('returns city specificity (1) for a city-only match', () => {
-    expect(bestMatchSpecificity(card, [{ type: 'city', value: 'בני ברק' }])).toBe(1);
+  test('returns city specificity (3) for a city-only match', () => {
+    expect(bestMatchSpecificity(card, [{ type: 'city', value: 'בני ברק' }])).toBe(3);
   });
 
-  test('returns neighborhood specificity (2) over a city match', () => {
+  test('returns neighborhood specificity (5) over a city match', () => {
     expect(bestMatchSpecificity(card, [
       { type: 'city',         value: 'בני ברק' },
       { type: 'neighborhood', city: 'בני ברק', value: 'רמת אלחנן' },
-    ])).toBe(2);
+    ])).toBe(5);
   });
 
-  test('returns street specificity (3) when street matches', () => {
+  test('returns street specificity (7) when street matches', () => {
     expect(bestMatchSpecificity(card, [
       { type: 'city',         value: 'בני ברק' },
       { type: 'street',       city: 'בני ברק', neighborhood: 'רמת אלחנן', value: 'חזון איש' },
-    ])).toBe(3);
+    ])).toBe(7);
   });
 
-  test('box rule wins (specificity 4) over any location rule', () => {
+  test('box rule wins (specificity 9) over any location rule', () => {
     expect(bestMatchSpecificity(card, [
       { type: 'street', city: 'בני ברק', neighborhood: 'רמת אלחנן', value: 'חזון איש' },
       { type: 'box',    box_id: 42 },
-    ])).toBe(4);
+    ])).toBe(9);
+  });
+
+  test('district rule (specificity 1) matches when card.cityDistrict equals', () => {
+    expect(bestMatchSpecificity(card, [{ type: 'district', value: 'מרכז' }])).toBe(1);
+    expect(bestMatchSpecificity(card, [{ type: 'district', value: 'דרום' }])).toBe(0);
+    expect(bestMatchSpecificity(card, [{ district: 'מרכז' }])).toBe(1);
+  });
+
+  test('box_type_id refinement adds +1 to the location score', () => {
+    expect(bestMatchSpecificity(card, [{ city: 'בני ברק' }])).toBe(3);
+    expect(bestMatchSpecificity(card, [{ city: 'בני ברק', box_type_id: 7 }])).toBe(4);
+    expect(bestMatchSpecificity(card, [{ city: 'בני ברק', box_type_id: 99 }])).toBe(0); // mismatch
+  });
+
+  test('city + box_type (4) loses to neighborhood (5) — location dominates', () => {
+    expect(bestMatchSpecificity(card, [
+      { city: 'בני ברק', box_type_id: 7 },
+      { city: 'בני ברק', neighborhood: 'רמת אלחנן' },
+    ])).toBe(5);
+  });
+
+  test('box_type-only rule (specificity 1) matches when card has that type', () => {
+    expect(bestMatchSpecificity(card, [{ box_type_id: 7 }])).toBe(1);
+    expect(bestMatchSpecificity(card, [{ box_type_id: 99 }])).toBe(0);
   });
 
   // ── Partial-key shape ──
   test('partial-key shapes score by deepest field', () => {
-    expect(bestMatchSpecificity(card, [{ city: 'בני ברק' }])).toBe(1);
+    expect(bestMatchSpecificity(card, [{ city: 'בני ברק' }])).toBe(3);
     expect(bestMatchSpecificity(card, [
       { city: 'בני ברק', neighborhood: 'רמת אלחנן' },
-    ])).toBe(2);
+    ])).toBe(5);
     expect(bestMatchSpecificity(card, [
       { city: 'בני ברק', neighborhood: 'רמת אלחנן', street: 'חזון איש' },
-    ])).toBe(3);
-    expect(bestMatchSpecificity(card, [{ box_id: 42 }])).toBe(4);
+    ])).toBe(7);
+    expect(bestMatchSpecificity(card, [{ box_id: 42 }])).toBe(9);
   });
 
   test('mixed-shape rules pick the highest score', () => {
     expect(bestMatchSpecificity(card, [
-      { city: 'בני ברק' },                                                 // partial, score 1
+      { city: 'בני ברק' },                                                 // partial, score 3
       { type: 'street', city: 'בני ברק', neighborhood: 'רמת אלחנן',
-        value: 'חזון איש' },                                                // tagged, score 3
-    ])).toBe(3);
+        value: 'חזון איש' },                                                // tagged, score 7
+    ])).toBe(7);
+  });
+});
+
+describe('district + box_type_id rules', () => {
+  const card = {
+    box_id: 42, box_type_id: 7,
+    city: 'בני ברק', cityDistrict: 'מרכז',
+    neighborhood: 'רמת אלחנן', street: 'חזון איש',
+  };
+
+  test('district rule matches via card.cityDistrict', () => {
+    expect(matchesRule(card, { type: 'district', value: 'מרכז' })).toBe(true);
+    expect(matchesRule(card, { type: 'district', value: 'דרום' })).toBe(false);
+    expect(matchesRule(card, { district: 'מרכז' })).toBe(true);
+  });
+
+  test('district rule misses when card has no resolved district', () => {
+    const cardNoDistrict = { ...card, cityDistrict: null };
+    expect(matchesRule(cardNoDistrict, { district: 'מרכז' })).toBe(false);
+  });
+
+  test('box_type_id refinement narrows a location rule', () => {
+    expect(matchesRule(card, { city: 'בני ברק', box_type_id: 7 })).toBe(true);
+    expect(matchesRule(card, { city: 'בני ברק', box_type_id: 99 })).toBe(false);
+  });
+
+  test('box_type_id-only rule matches any card of that type', () => {
+    expect(matchesRule(card, { box_type_id: 7 })).toBe(true);
+    expect(matchesRule({ box_id: 1, box_type_id: 7 }, { box_type_id: 7 })).toBe(true);
+    expect(matchesRule({ box_id: 1, box_type_id: 99 }, { box_type_id: 7 })).toBe(false);
+  });
+
+  test('buildLocationClause expands district rule into cities subquery', () => {
+    const params = [];
+    const clause = buildLocationClause([{ district: 'מרכז' }], params);
+    expect(clause).toContain('SELECT 1 FROM cities ci');
+    expect(clause).toContain('ci.district = $1');
+    expect(params).toEqual(['מרכז']);
+  });
+
+  test('buildLocationClause adds b.box_type_id refinement', () => {
+    const params = [];
+    const clause = buildLocationClause([{ city: 'בני ברק', box_type_id: 7 }], params);
+    expect(clause).toBe('((c.city = $1 AND b.box_type_id = $2))');
+    expect(params).toEqual(['בני ברק', 7]);
+  });
+
+  test('buildLocationClause supports box_type-only rule', () => {
+    const params = [];
+    const clause = buildLocationClause([{ box_type_id: 7 }], params);
+    expect(clause).toBe('((b.box_type_id = $1))');
+    expect(params).toEqual([7]);
   });
 });

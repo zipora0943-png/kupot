@@ -202,3 +202,19 @@ export const boxTypes = {
   update: (id, data)     => api.put(`/settings/box-types/${id}`, data),
   remove: (id)           => api.delete(`/settings/box-types/${id}`),
 };
+
+// ---- CITIES & DISTRICTS ----
+// Single table cities(name, district). "Districts" are the DISTINCT
+// non-null district values — get them via districts.getAll(). Rename a
+// district across all rows via districts.rename({ from, to }).
+export const cities = {
+  getAll: ()             => api.get('/settings/cities'),
+  unassigned: ()         => api.get('/settings/unassigned-cities'),
+  create: (data)         => api.post('/settings/cities', data),
+  update: (id, data)     => api.put(`/settings/cities/${id}`, data),
+  remove: (id)           => api.delete(`/settings/cities/${id}`),
+};
+export const districts = {
+  getAll: ()             => api.get('/settings/districts'),
+  rename: (from, to)     => api.put('/settings/districts/rename', { from, to }),
+};

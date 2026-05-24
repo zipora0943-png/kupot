@@ -4,19 +4,34 @@ const pool = require('../db/pool');
  * Two rule shapes are accepted (both flavors live in production data):
  *
  *   1) Tagged shape (used by seed scripts and earlier tests):
+ *      { type: 'district',     value: 'דרום' }
  *      { type: 'city',         value: 'בני ברק' }
  *      { type: 'neighborhood', city: 'בני ברק', value: 'רמת אלחנן' }
  *      { type: 'street',       city: '...', neighborhood: '...', value: 'חזון איש' }
  *      { type: 'box',          box_id: 42 }
  *
  *   2) Partial-key shape (created by the admin UI / UserModal):
+ *      { district: 'דרום' }
  *      { city: 'בני ברק' }
  *      { city: 'בני ברק', neighborhood: 'רמת אלחנן' }
  *      { city: '...', neighborhood: '...', street: 'חזון איש' }
  *      { box_id: 42 }
  *
- * Hierarchy specificity (highest wins):
- *   box (4) > street (3) > neighborhood (2) > city (1)
+ *   Any rule may additionally include `box_type_id` (integer) to restrict the
+ *   rule to boxes of a specific type. It can also stand alone as
+ *   { box_type_id: 5 } — applies to every box of that type regardless of
+ *   location.
+ *
+ * Hierarchy specificity (highest wins, integer scoring):
+ *   box (9) > street (7) > neighborhood (5) > city (3) > district (1)
+ *   Adding box_type_id to a rule adds +1 to its score (so e.g. "city + box_type"
+ *   beats plain city but loses to neighborhood — narrowing by location dominates).
+ *   A box_type-only rule scores 1 (same as district — least specific).
+ *
+ * District matching depends on the `cities` table: a district rule matches a
+ * card iff the card's city.name is present in `cities` with that district
+ * value. Cities not in the table are unreachable through district rules
+ * (the admin gets a warning in the settings page).
  */
 
 // ─── helpers: detect shape and extract scalar fields the rule pins down ──
@@ -28,34 +43,51 @@ function isTagged(rule) {
   return rule && typeof rule === 'object' && typeof rule.type === 'string';
 }
 
-// Returns the rule normalized as { city?, neighborhood?, street?, building?, box_id? }.
+// Returns the rule normalized as
+//   { district?, city?, neighborhood?, street?, building?, box_id?, box_type_id? }.
 // Tagged-shape rules are converted; partial-key rules are returned as-is.
 // Returns null if the rule yields no constraints.
 function normalizeRule(rule) {
   if (!rule || typeof rule !== 'object') return null;
 
+  // box_type_id can attach to any shape; collect it once.
+  let boxTypeId = null;
+  if (ruleHasField(rule, 'box_type_id')) {
+    const n = Number(rule.box_type_id);
+    if (Number.isInteger(n)) boxTypeId = n;
+  }
+
   if (isTagged(rule)) {
+    let out = null;
     switch (rule.type) {
+      case 'district':
+        if (rule.value) out = { district: rule.value };
+        break;
       case 'city':
-        if (!rule.value) return null;
-        return { city: rule.value };
+        if (rule.value) out = { city: rule.value };
+        break;
       case 'neighborhood':
-        if (!rule.city || !rule.value) return null;
-        return { city: rule.city, neighborhood: rule.value };
+        if (rule.city && rule.value) out = { city: rule.city, neighborhood: rule.value };
+        break;
       case 'street':
-        if (!rule.city || !rule.neighborhood || !rule.value) return null;
-        return { city: rule.city, neighborhood: rule.neighborhood, street: rule.value };
+        if (rule.city && rule.neighborhood && rule.value)
+          out = { city: rule.city, neighborhood: rule.neighborhood, street: rule.value };
+        break;
       case 'box': {
         const n = Number(rule.box_id);
-        return Number.isInteger(n) ? { box_id: n } : null;
+        if (Number.isInteger(n)) out = { box_id: n };
+        break;
       }
-      default:
-        return null;
     }
+    if (!out && boxTypeId == null) return null;
+    if (!out) out = {};
+    if (boxTypeId != null) out.box_type_id = boxTypeId;
+    return out;
   }
 
   // Partial-key shape
   const out = {};
+  if (ruleHasField(rule, 'district'))     out.district     = rule.district;
   if (ruleHasField(rule, 'city'))         out.city         = rule.city;
   if (ruleHasField(rule, 'neighborhood')) out.neighborhood = rule.neighborhood;
   if (ruleHasField(rule, 'street'))       out.street       = rule.street;
@@ -64,23 +96,34 @@ function normalizeRule(rule) {
     const n = Number(rule.box_id);
     if (Number.isInteger(n)) out.box_id = n;
   }
+  if (boxTypeId != null) out.box_type_id = boxTypeId;
   return Object.keys(out).length === 0 ? null : out;
 }
 
 // Specificity score for a normalized rule. Higher = more specific.
+// Base scores leave room for the +1 box_type_id refinement without ever
+// surpassing the next location tier: e.g. "city + box_type" (4) < "neighborhood" (5).
 function ruleScore(norm) {
   if (!norm) return 0;
-  if (norm.box_id != null) return 4;
-  if (norm.street)         return 3;
-  if (norm.neighborhood)   return 2;
-  if (norm.city)           return 1;
-  if (norm.building)       return 3; // treat as street level (building requires street in practice)
-  return 0;
+  let base;
+  if (norm.box_id != null)        base = 9;
+  else if (norm.street)           base = 7;
+  else if (norm.building)         base = 7; // treat as street level
+  else if (norm.neighborhood)     base = 5;
+  else if (norm.city)             base = 3;
+  else if (norm.district)         base = 1;
+  else                            base = 0;
+  // A box_type-only rule (no location at all) still counts as specificity 1.
+  if (base === 0 && norm.box_type_id != null) return 1;
+  return base + (norm.box_type_id != null ? 1 : 0);
 }
 
 // ─── Build a SQL WHERE fragment from a list of rules.
 // `params` is mutated (push values for parameter binding).
 // Returns the SQL fragment, or null if no valid rules.
+//
+// Outer query is expected to alias the boxes table as `b` and cards table
+// as `c`. District rules expand to a subquery against the `cities` table.
 function buildLocationClause(rules, params) {
   if (!Array.isArray(rules) || rules.length === 0) return null;
   const orParts = [];
@@ -92,10 +135,20 @@ function buildLocationClause(rules, params) {
       params.push(norm.box_id);
       andParts.push(`b.id = $${params.length}`);
     } else {
+      if (norm.district) {
+        params.push(norm.district);
+        andParts.push(
+          `EXISTS (SELECT 1 FROM cities ci WHERE ci.name = c.city AND ci.district = $${params.length})`
+        );
+      }
       if (norm.city)         { params.push(norm.city);         andParts.push(`c.city = $${params.length}`); }
       if (norm.neighborhood) { params.push(norm.neighborhood); andParts.push(`c.neighborhood = $${params.length}`); }
       if (norm.street)       { params.push(norm.street);       andParts.push(`c.street = $${params.length}`); }
       if (norm.building)     { params.push(norm.building);     andParts.push(`c.building = $${params.length}`); }
+    }
+    if (norm.box_type_id != null) {
+      params.push(norm.box_type_id);
+      andParts.push(`b.box_type_id = $${params.length}`);
     }
     if (andParts.length > 0) orParts.push('(' + andParts.join(' AND ') + ')');
   }
@@ -181,15 +234,25 @@ async function isCardAssignedToCollector(cardId, userId) {
 }
 
 // ─── Pure JS helpers — kept for tests and client-side validation.
+//
+// `card` may include `box_type_id` (when matching by box type) and
+// `cityDistrict` (the resolved district for the card's city, used to match
+// district rules). Both are optional — when absent, the corresponding rule
+// constraints simply fail.
 function matchesRule(card, rule) {
   if (!card) return false;
   const norm = normalizeRule(rule);
   if (!norm) return false;
-  if (norm.box_id != null) return Number(card.box_id) === Number(norm.box_id);
-  if (norm.city         && card.city         !== norm.city)         return false;
-  if (norm.neighborhood && card.neighborhood !== norm.neighborhood) return false;
-  if (norm.street       && card.street       !== norm.street)       return false;
-  if (norm.building     && card.building     !== norm.building)     return false;
+  if (norm.box_id != null) {
+    if (Number(card.box_id) !== Number(norm.box_id)) return false;
+  } else {
+    if (norm.district     && card.cityDistrict !== norm.district)    return false;
+    if (norm.city         && card.city         !== norm.city)        return false;
+    if (norm.neighborhood && card.neighborhood !== norm.neighborhood) return false;
+    if (norm.street       && card.street       !== norm.street)      return false;
+    if (norm.building     && card.building     !== norm.building)    return false;
+  }
+  if (norm.box_type_id != null && Number(card.box_type_id) !== Number(norm.box_type_id)) return false;
   return true;
 }
 
@@ -225,6 +288,7 @@ async function findCollectorForLocation(location, client) {
   if (!location) return null;
   const card = {
     box_id:       location.box_id,
+    box_type_id:  location.box_type_id,
     city:         location.city,
     neighborhood: location.neighborhood,
     street:       location.street,
@@ -233,6 +297,21 @@ async function findCollectorForLocation(location, client) {
   if (card.box_id == null && !card.city) return null;
 
   const db = client || pool;
+
+  // Resolve box_type_id from the box if the caller didn't supply it but a box_id
+  // is present — so rules that filter by box_type_id can match correctly.
+  if (card.box_type_id == null && card.box_id != null) {
+    const { rows } = await db.query(`SELECT box_type_id FROM boxes WHERE id = $1`, [card.box_id]);
+    if (rows[0]) card.box_type_id = rows[0].box_type_id;
+  }
+
+  // Resolve the card's district from the cities table so that district rules
+  // can match by comparing against card.cityDistrict.
+  if (card.city) {
+    const { rows } = await db.query(`SELECT district FROM cities WHERE name = $1`, [card.city]);
+    card.cityDistrict = rows[0]?.district || null;
+  }
+
   const { rows: collectors } = await db.query(
     `SELECT id, area_assignments, area_exclusions
        FROM users
@@ -255,54 +334,83 @@ async function findCollectorForLocation(location, client) {
 // ─── SQL match predicates ───────────────────────────────────────────────
 // A rule (`r`) inside jsonb_array_elements matches the card iff:
 //   • box rule       — r->>'box_id' is a positive integer that equals c.box_id
-//   • tagged rule    — r->>'type' identifies one of city/neighborhood/street
+//   • tagged rule    — r->>'type' identifies one of district/city/neighborhood/street
 //                      and r->>'value' (plus the upstream keys) equal the card
-//   • partial-key    — every present key (city/neighborhood/street/building)
-//                      equals the corresponding card column; at least one of
-//                      city/neighborhood/street/building must be present
+//   • partial-key    — every present location key (district/city/neighborhood/
+//                      street/building) equals the corresponding card column;
+//                      at least one must be present OR `box_type_id` must be set
+//   • box_type_id (if present in the rule) must equal b.box_type_id
 //
-// Used inside the LATERAL below; `c` refers to the outer card row.
+// District matching resolves the card's city against the `cities` table:
+// the rule matches iff a row exists in cities with name = c.city and district
+// = the rule's district value.
+//
+// Used inside the LATERAL below; `c` refers to the outer card row, `b` to
+// the outer boxes row (every caller joins boxes b ON b.id = c.box_id).
 const RULE_MATCHES_CARD = `(
+  -- Per-rule location predicate
   (
-    (r ? 'box_id') AND (r->>'box_id') ~ '^[0-9]+$' AND (r->>'box_id')::int = c.box_id
-  )
-  OR
-  (
-    (r ? 'type') AND (
-         (r->>'type' = 'city'         AND r->>'value' = c.city)
-      OR (r->>'type' = 'neighborhood' AND r->>'city' = c.city AND r->>'value' = c.neighborhood)
-      OR (r->>'type' = 'street'       AND r->>'city' = c.city AND r->>'neighborhood' = c.neighborhood AND r->>'value' = c.street)
+    (
+      (r ? 'box_id') AND (r->>'box_id') ~ '^[0-9]+$' AND (r->>'box_id')::int = c.box_id
+    )
+    OR
+    (
+      (r ? 'type') AND (
+           (r->>'type' = 'district'     AND EXISTS (SELECT 1 FROM cities ci WHERE ci.name = c.city AND ci.district = r->>'value'))
+        OR (r->>'type' = 'city'         AND r->>'value' = c.city)
+        OR (r->>'type' = 'neighborhood' AND r->>'city' = c.city AND r->>'value' = c.neighborhood)
+        OR (r->>'type' = 'street'       AND r->>'city' = c.city AND r->>'neighborhood' = c.neighborhood AND r->>'value' = c.street)
+      )
+    )
+    OR
+    (
+      NOT (r ? 'type') AND NOT (r ? 'box_id')
+      AND ((r ? 'district') OR (r ? 'city') OR (r ? 'neighborhood') OR (r ? 'street') OR (r ? 'building'))
+      AND (NOT (r ? 'district')     OR EXISTS (SELECT 1 FROM cities ci WHERE ci.name = c.city AND ci.district = r->>'district'))
+      AND (NOT (r ? 'city')         OR r->>'city'         = c.city)
+      AND (NOT (r ? 'neighborhood') OR r->>'neighborhood' = c.neighborhood)
+      AND (NOT (r ? 'street')       OR r->>'street'       = c.street)
+      AND (NOT (r ? 'building')     OR r->>'building'     = c.building)
+    )
+    OR
+    (
+      -- box_type-only rule (no location): qualifies any box of that type
+      NOT (r ? 'type') AND NOT (r ? 'box_id')
+      AND NOT ((r ? 'district') OR (r ? 'city') OR (r ? 'neighborhood') OR (r ? 'street') OR (r ? 'building'))
+      AND (r ? 'box_type_id') AND (r->>'box_type_id') ~ '^[0-9]+$'
     )
   )
-  OR
-  (
-    NOT (r ? 'type') AND NOT (r ? 'box_id')
-    AND ((r ? 'city') OR (r ? 'neighborhood') OR (r ? 'street') OR (r ? 'building'))
-    AND (NOT (r ? 'city')         OR r->>'city'         = c.city)
-    AND (NOT (r ? 'neighborhood') OR r->>'neighborhood' = c.neighborhood)
-    AND (NOT (r ? 'street')       OR r->>'street'       = c.street)
-    AND (NOT (r ? 'building')     OR r->>'building'     = c.building)
+  -- box_type_id refinement (applies on top of the location predicate)
+  AND (
+    NOT (r ? 'box_type_id') OR (
+      (r->>'box_type_id') ~ '^[0-9]+$'
+      AND (r->>'box_type_id')::int = b.box_type_id
+    )
   )
 )`;
 
 // Specificity score for a single rule element `r` (used in ORDER BY).
+// Must mirror the JS ruleScore() function in this file.
 const RULE_SCORE_SQL = `(
-  CASE
-    WHEN (r ? 'box_id') THEN 4
+  (CASE
+    WHEN (r ? 'box_id') THEN 9
     WHEN (r ? 'type') THEN
       CASE r->>'type'
-        WHEN 'box'          THEN 4
-        WHEN 'street'       THEN 3
-        WHEN 'neighborhood' THEN 2
-        WHEN 'city'         THEN 1
+        WHEN 'box'          THEN 9
+        WHEN 'street'       THEN 7
+        WHEN 'neighborhood' THEN 5
+        WHEN 'city'         THEN 3
+        WHEN 'district'     THEN 1
         ELSE 0
       END
-    WHEN (r ? 'street')       THEN 3
-    WHEN (r ? 'building')     THEN 3
-    WHEN (r ? 'neighborhood') THEN 2
-    WHEN (r ? 'city')         THEN 1
+    WHEN (r ? 'street')       THEN 7
+    WHEN (r ? 'building')     THEN 7
+    WHEN (r ? 'neighborhood') THEN 5
+    WHEN (r ? 'city')         THEN 3
+    WHEN (r ? 'district')     THEN 1
     ELSE 0
-  END
+  END)
+  + (CASE WHEN (r ? 'box_type_id') THEN 1 ELSE 0 END)
 )`;
 
 /**

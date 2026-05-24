@@ -1,7 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import Modal from '@shared/components/Modal'
 import LocationCombobox from './LocationCombobox'
-import { users as usersApi } from '../api/endpoints'
+import {
+  users as usersApi,
+  districts as districtsApi,
+  boxTypes as boxTypesApi,
+} from '../api/endpoints'
 import { useAuth } from '@shared/context/AuthContext'
 
 const ROLE_OPTIONS = [
@@ -23,61 +27,80 @@ const TAG_RM_STYLE = {
   fontWeight: 700, lineHeight: 1,
 }
 
-// Convert a rule object → short Hebrew chip text
-function ruleToLabel(rule) {
+// Convert a rule object → short Hebrew chip text.
+// `boxTypeNames` is { [id]: name } for resolving box_type_id labels.
+function ruleToLabel(rule, boxTypeNames) {
   if (!rule || typeof rule !== 'object') return null
-  if (rule.box_id) return `קופה #${rule.box_id}`
-  if (rule.building) return `${rule.street || ''} ${rule.building}`.trim() + (rule.city ? ` (${rule.city})` : '')
+  const typeSuffix = rule.box_type_id
+    ? ` + ${boxTypeNames?.[rule.box_type_id] || `סוג #${rule.box_type_id}`}`
+    : ''
+  if (rule.box_id) return `קופה #${rule.box_id}${typeSuffix}`
+  if (rule.building) return `${rule.street || ''} ${rule.building}`.trim() + (rule.city ? ` (${rule.city})` : '') + typeSuffix
   if (rule.street) {
     const inCity = rule.city || rule.neighborhood
-    return inCity ? `${rule.street} (${inCity})` : rule.street
+    return (inCity ? `${rule.street} (${inCity})` : rule.street) + typeSuffix
   }
-  if (rule.neighborhood) return `${rule.neighborhood} (שכונה)`
-  if (rule.city) return `${rule.city} (כל העיר)`
+  if (rule.neighborhood) return `${rule.neighborhood} (שכונה)` + typeSuffix
+  if (rule.city) return `${rule.city} (כל העיר)` + typeSuffix
+  if (rule.district) return `${rule.district} (כל המחוז)` + typeSuffix
+  if (rule.box_type_id) return boxTypeNames?.[rule.box_type_id] ? `כל ה${boxTypeNames[rule.box_type_id]}` : `סוג קופה #${rule.box_type_id}`
   return JSON.stringify(rule)
 }
 
-function buildRuleFromInputs({ city, neighborhood, street, building, boxId }) {
+function buildRuleFromInputs({ district, city, neighborhood, street, building, boxId, boxTypeId }) {
+  const d  = (district || '').trim()
   const c  = (city || '').trim()
   const n  = (neighborhood || '').trim()
   const s  = (street || '').trim()
   const b  = (building || '').trim()
   const bid = (boxId || '').trim()
+  const bt = (boxTypeId || '').toString().trim()
 
   if (bid) {
     const num = Number(bid)
     if (!Number.isInteger(num)) return { error: 'מס׳ קופה חייב להיות מספר שלם' }
-    return { rule: { box_id: num } }
+    const rule = { box_id: num }
+    if (bt) rule.box_type_id = Number(bt)
+    return { rule }
   }
-  if (!c && !n && !s && !b) {
-    return { error: 'יש למלא לפחות עיר / שכונה / רחוב / מס׳ קופה' }
+  if (!d && !c && !n && !s && !b && !bt) {
+    return { error: 'יש למלא לפחות מחוז / עיר / שכונה / רחוב / מס׳ קופה / סוג קופה' }
   }
   const rule = {}
+  if (d) rule.district = d
   if (c) rule.city = c
   if (n) rule.neighborhood = n
   if (s) rule.street = s
   if (b) rule.building = b
+  if (bt) rule.box_type_id = Number(bt)
   return { rule }
 }
 
 /**
  * Editor for one rule list (assignments OR exclusions). Lets the user add
  * rules via a row of inputs and remove them via an ✕ on each chip.
+ *
+ * Props additions:
+ *   knownDistricts — string[] of available district names
+ *   boxTypeOptions — [{ id, name }] for the box-type dropdown
+ *   boxTypeNames   — { [id]: name } map for chip labels
  */
-function RulesEditor({ rules, onChange, label }) {
+function RulesEditor({ rules, onChange, label, knownDistricts, boxTypeOptions, boxTypeNames }) {
+  const [district,     setDistrict]     = useState('')
   const [city,         setCity]         = useState('')
   const [neighborhood, setNeighborhood] = useState('')
   const [street,       setStreet]       = useState('')
   const [building,     setBuilding]     = useState('')
   const [boxId,        setBoxId]        = useState('')
+  const [boxTypeId,    setBoxTypeId]    = useState('')
   const [err,          setErr]          = useState(null)
 
   function addRule() {
     setErr(null)
-    const result = buildRuleFromInputs({ city, neighborhood, street, building, boxId })
+    const result = buildRuleFromInputs({ district, city, neighborhood, street, building, boxId, boxTypeId })
     if (result.error) { setErr(result.error); return }
     onChange([...(Array.isArray(rules) ? rules : []), result.rule])
-    setCity(''); setNeighborhood(''); setStreet(''); setBuilding(''); setBoxId('')
+    setDistrict(''); setCity(''); setNeighborhood(''); setStreet(''); setBuilding(''); setBoxId(''); setBoxTypeId('')
   }
 
   function removeAt(idx) {
@@ -97,6 +120,14 @@ function RulesEditor({ rules, onChange, label }) {
       </div>
 
       <div className="modal-row">
+        <div className="field"><label>מחוז</label>
+          <select value={district} onChange={(e) => setDistrict(e.target.value)}>
+            <option value="">— (אין בחירה) —</option>
+            {(knownDistricts || []).map(d => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+        </div>
         <div className="field"><label>עיר</label>
           <LocationCombobox level="city" value={city} onChange={setCity} placeholder="ירושלים" />
         </div>
@@ -114,6 +145,14 @@ function RulesEditor({ rules, onChange, label }) {
         <div className="field"><label>מס׳ קופה (בודדת)</label>
           <input value={boxId} onChange={(e) => setBoxId(e.target.value)} placeholder="789" />
         </div>
+        <div className="field"><label>סוג קופה (סינון)</label>
+          <select value={boxTypeId} onChange={(e) => setBoxTypeId(e.target.value)}>
+            <option value="">— (כל הסוגים) —</option>
+            {(boxTypeOptions || []).map(t => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
       </div>
       <div className="actions" style={{ marginBottom: 8 }}>
         <button type="button" className="btn sm" onClick={addRule}>+ הוסף</button>
@@ -125,7 +164,7 @@ function RulesEditor({ rules, onChange, label }) {
           <span style={{ color: 'var(--text3)', fontSize: 12 }}>—</span>
         ) : rules.map((r, i) => (
           <span key={i} style={TAG_STYLE}>
-            {ruleToLabel(r)}
+            {ruleToLabel(r, boxTypeNames)}
             <span
               style={TAG_RM_STYLE}
               onClick={() => removeAt(i)}
@@ -167,10 +206,21 @@ export default function UserModal({ open, user, onClose, onSaved, onDeactivated 
   const [submitting, setSubmitting] = useState(false)
   const [errMsg, setErrMsg] = useState(null)
 
+  // Lookups for rule editing — districts (free-text list from cities table)
+  // and box types (id+name). Loaded once when the modal opens.
+  const [knownDistricts, setKnownDistricts] = useState([])
+  const [boxTypeOptions, setBoxTypeOptions] = useState([])
+  const boxTypeNames = useMemo(
+    () => Object.fromEntries(boxTypeOptions.map(t => [t.id, t.name])),
+    [boxTypeOptions]
+  )
+
   useEffect(() => {
     if (!open) return
     setErrMsg(null)
     setSubmitting(false)
+    districtsApi.getAll().then(d => setKnownDistricts(Array.isArray(d) ? d : [])).catch(() => setKnownDistricts([]))
+    boxTypesApi.getAll().then(d => setBoxTypeOptions(Array.isArray(d) ? d : [])).catch(() => setBoxTypeOptions([]))
     if (isEdit) {
       setName(user.name || '')
       setUsername(user.username || '')
@@ -353,14 +403,20 @@ export default function UserModal({ open, user, onClose, onSaved, onDeactivated 
       {showAreas && (
         <>
           <RulesEditor
-            label="שיוך אזורים (היררכי — עיר ← שכונה ← רחוב ← קופה)"
+            label="שיוך אזורים (היררכי — מחוז ← עיר ← שכונה ← רחוב ← קופה, ניתן להוסיף סינון לפי סוג קופה)"
             rules={assignments}
             onChange={setAssignments}
+            knownDistricts={knownDistricts}
+            boxTypeOptions={boxTypeOptions}
+            boxTypeNames={boxTypeNames}
           />
           <RulesEditor
             label="החרגות (אזורים שיוסרו מתוך השיוך)"
             rules={exclusions}
             onChange={setExclusions}
+            knownDistricts={knownDistricts}
+            boxTypeOptions={boxTypeOptions}
+            boxTypeNames={boxTypeNames}
           />
         </>
       )}

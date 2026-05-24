@@ -287,3 +287,20 @@ CREATE TABLE IF NOT EXISTS location_overrides (
 );
 CREATE INDEX IF NOT EXISTS idx_location_overrides_card_id ON location_overrides(card_id);
 CREATE INDEX IF NOT EXISTS idx_location_overrides_user_id ON location_overrides(user_id);
+
+-- ─────────────────────────────────────────
+--  CITIES / DISTRICTS  (ערים ומחוזות)
+--
+--  Single-table mapping of city → district. The district column is free-text
+--  (district list is derived from DISTINCT cities.district). Used to expand
+--  district-based user assignments into the set of matching cities at query
+--  time, and to surface cities that exist in cards but aren't in this table
+--  (so an admin can assign them to a district).
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS cities (
+  id         SERIAL PRIMARY KEY,
+  name       VARCHAR(100) NOT NULL UNIQUE,
+  district   VARCHAR(100),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_cities_district ON cities(district);

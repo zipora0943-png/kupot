@@ -4,11 +4,13 @@ import {
   taskTypes as taskTypesApi,
   reportTypes as reportTypesApi,
   boxTypes as boxTypesApi,
+  cities as citiesApi,
   cards as cardsApi,
 } from '../api/endpoints'
 import TaskTypeModal from '../components/TaskTypeModal'
 import ReportTypeModal from '../components/ReportTypeModal'
 import BoxTypeModal from '../components/BoxTypeModal'
+import CityModal from '../components/CityModal'
 
 const ITEM_ROW_STYLE = {
   display: 'flex',
@@ -73,11 +75,21 @@ export default function SettingsPage() {
   const [taskList, setTaskList] = useState(null)
   const [reportList, setReportList] = useState(null)
   const [boxList, setBoxList] = useState(null)
+  const [cityList, setCityList] = useState(null)
+  const [unassignedCities, setUnassignedCities] = useState([])
 
-  // Modal state — { which, item } where item===null means create
+  // Modal state — { which, item, prefillName? } where item===null means create
   const [modal, setModal] = useState(null)
-  function openModal(which, item = null) { setModal({ which, item }) }
+  function openModal(which, item = null, extra = {}) { setModal({ which, item, ...extra }) }
   function closeModal() { setModal(null) }
+
+  // Refresh the unassigned-cities banner. Called on initial load and after
+  // any city create/update/delete so it stays in sync.
+  function refreshUnassigned() {
+    citiesApi.unassigned()
+      .then(list => setUnassignedCities(Array.isArray(list) ? list : []))
+      .catch(() => setUnassignedCities([]))
+  }
 
   // Helpers to upsert / remove items inside a list
   function upsert(setter, saved) {
@@ -109,6 +121,8 @@ export default function SettingsPage() {
     taskTypesApi.getAll().then(d => !cancelled && setTaskList(Array.isArray(d) ? d : [])).catch(() => !cancelled && setTaskList([]))
     reportTypesApi.getAll().then(d => !cancelled && setReportList(Array.isArray(d) ? d : [])).catch(() => !cancelled && setReportList([]))
     boxTypesApi.getAll().then(d => !cancelled && setBoxList(Array.isArray(d) ? d : [])).catch(() => !cancelled && setBoxList([]))
+    citiesApi.getAll().then(d => !cancelled && setCityList(Array.isArray(d) ? d : [])).catch(() => !cancelled && setCityList([]))
+    citiesApi.unassigned().then(d => !cancelled && setUnassignedCities(Array.isArray(d) ? d : [])).catch(() => !cancelled && setUnassignedCities([]))
 
     return () => { cancelled = true }
   }, [])
@@ -190,6 +204,34 @@ export default function SettingsPage() {
           <div className="page-subtitle">סוגים ופרמטרים גלובליים של המערכת</div>
         </div>
       </div>
+
+      {unassignedCities.length > 0 && (
+        <div className="alert" style={{
+          background: 'var(--yellow-soft, #fef3c7)',
+          color: 'var(--yellow, #92400e)',
+          border: '1px solid var(--yellow, #fcd34d)',
+          padding: 12, borderRadius: 8, marginBottom: 16,
+        }}>
+          ⚠️ נמצאו {unassignedCities.length} ערים בכרטסות שאינן בטבלת הערים.
+          ‎שיוך גובה למחוז לא יכלול אותן עד שתוסיפו אותן ותשייכו למחוז:
+          <div style={{ marginTop: 6 }}>
+            {unassignedCities.map(name => (
+              <span key={name} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '3px 10px', marginInlineEnd: 6, marginBottom: 6,
+                background: 'var(--surface, #fff)',
+                border: '1px solid var(--border, #e5e7eb)',
+                borderRadius: 14, fontSize: 12, cursor: 'pointer',
+              }}
+                onClick={() => openModal('city', null, { prefillName: name })}
+                title="הוספה למילון הערים"
+              >
+                {name} <span style={{ color: 'var(--text3)' }}>+</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16 }}>
 
@@ -355,6 +397,42 @@ export default function SettingsPage() {
           </button>
         </div>
 
+        {/* === CITIES & DISTRICTS === */}
+        <div className="panel" style={{ gridColumn: 'span 2' }}>
+          <div className="panel-title">ערים ומחוזות</div>
+          <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 12 }}>
+            מילון ערים עם שיוך למחוז. שיוך גובה ל-"מחוז X" כולל אוטומטית את כל הערים שהוגדרו כאן עם המחוז הזה.
+            שינוי המחוז של עיר משפיע מיידית על הגובים המשויכים — ללא צורך בעדכון נוסף.
+          </div>
+          {cityList === null ? (
+            <div className="loading"><div className="spinner" /><span>טוען...</span></div>
+          ) : cityList.length === 0 ? (
+            <div className="empty">אין ערים מוגדרות</div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 0 }}>
+              {cityList.map(c => (
+                <div key={c.id} style={ITEM_ROW_STYLE}>
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{c.name}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
+                      {c.district ? `מחוז: ${c.district}` : 'ללא מחוז'}
+                    </div>
+                  </div>
+                  <button
+                    className="btn sm"
+                    onClick={() => openModal('city', c)}
+                  >עריכה</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <button
+            className="btn sm"
+            style={{ marginTop: 12 }}
+            onClick={() => openModal('city')}
+          >+ הוספת עיר</button>
+        </div>
+
         {/* === GLOBAL SETTINGS === */}
         <div className="panel">
           <div className="panel-title">הגדרות כלליות</div>
@@ -420,6 +498,15 @@ export default function SettingsPage() {
         onClose={closeModal}
         onSaved={(saved) => upsert(setBoxList, saved)}
         onDeleted={(id) => removeById(setBoxList, id)}
+      />
+
+      <CityModal
+        open={modal?.which === 'city'}
+        item={modal?.which === 'city' ? modal.item : null}
+        prefillName={modal?.which === 'city' ? modal.prefillName : undefined}
+        onClose={closeModal}
+        onSaved={(saved) => { upsert(setCityList, saved); refreshUnassigned() }}
+        onDeleted={(id) => { removeById(setCityList, id); refreshUnassigned() }}
       />
     </div>
   )

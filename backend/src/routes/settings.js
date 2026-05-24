@@ -306,6 +306,132 @@ router.delete('/box-types/:id', requireRole('admin'), async (req, res, next) => 
   }
 });
 
+// ── CITIES & DISTRICTS ────────────────────────────────────────────
+// One table — `cities(id, name UNIQUE, district)` — drives both lists.
+// "Districts" are the DISTINCT non-null district values across rows.
+// Rules in users.area_assignments can target a `district` value; the SQL
+// fragment in userAssignment.js joins back to this table to expand a
+// district rule into "all cities mapped to that district".
+
+// GET /api/settings/cities — full list with their districts
+router.get('/cities', async (_req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, name, district FROM cities ORDER BY name`
+    );
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
+// GET /api/settings/districts — DISTINCT non-null district names
+router.get('/districts', async (_req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT DISTINCT district AS name
+         FROM cities
+        WHERE district IS NOT NULL AND district <> ''
+        ORDER BY district`
+    );
+    res.json(rows.map(r => r.name));
+  } catch (err) { next(err); }
+});
+
+// GET /api/settings/unassigned-cities — cities that appear in cards.city but
+// are NOT yet in the cities table (so district rules can't reach them and
+// the admin should fix that).
+router.get('/unassigned-cities', async (_req, res, next) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT DISTINCT c.city AS name
+        FROM cards c
+        WHERE c.city IS NOT NULL AND c.city <> ''
+          AND NOT EXISTS (SELECT 1 FROM cities ci WHERE ci.name = c.city)
+        ORDER BY c.city
+    `);
+    res.json(rows.map(r => r.name));
+  } catch (err) { next(err); }
+});
+
+router.post('/cities', requireRole('admin'), async (req, res, next) => {
+  const { name, district } = req.body || {};
+  const e = validateString(name, 'name');
+  if (e) return badRequest(res, e);
+  if (district !== undefined && district !== null && typeof district !== 'string')
+    return badRequest(res, 'district must be string or null');
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO cities (name, district) VALUES ($1, $2)
+       RETURNING id, name, district`,
+      [name.trim(), district ? district.trim() : null]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'city with this name already exists' });
+    next(err);
+  }
+});
+
+router.put('/cities/:id', requireRole('admin'), async (req, res, next) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return badRequest(res, 'Invalid id');
+
+  const { name, district } = req.body || {};
+  const sets = [], params = [];
+  if (name !== undefined) {
+    const e = validateString(name, 'name');
+    if (e) return badRequest(res, e);
+    params.push(name.trim()); sets.push(`name = $${params.length}`);
+  }
+  if (district !== undefined) {
+    if (district !== null && typeof district !== 'string')
+      return badRequest(res, 'district must be string or null');
+    params.push(district ? district.trim() : null); sets.push(`district = $${params.length}`);
+  }
+  if (sets.length === 0) return badRequest(res, 'No fields to update');
+  params.push(id);
+
+  try {
+    const { rows } = await pool.query(
+      `UPDATE cities SET ${sets.join(', ')} WHERE id = $${params.length}
+       RETURNING id, name, district`,
+      params
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'city with this name already exists' });
+    next(err);
+  }
+});
+
+router.delete('/cities/:id', requireRole('admin'), async (req, res, next) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return badRequest(res, 'Invalid id');
+  try {
+    await pool.query(`DELETE FROM cities WHERE id = $1`, [id]);
+    res.json({ success: true });
+  } catch (err) { next(err); }
+});
+
+// Rename a district across every city mapped to it (so the admin can edit
+// "districts" even though they're just a free-text column).
+// Body: { from: 'oldName', to: 'newName' }
+router.put('/districts/rename', requireRole('admin'), async (req, res, next) => {
+  const { from, to } = req.body || {};
+  const ef = validateString(from, 'from');
+  if (ef) return badRequest(res, ef);
+  // `to` may be empty to clear the district from all cities.
+  if (to !== undefined && to !== null && typeof to !== 'string')
+    return badRequest(res, 'to must be string or null');
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE cities SET district = $1 WHERE district = $2`,
+      [to ? to.trim() : null, from.trim()]
+    );
+    res.json({ updated: rowCount });
+  } catch (err) { next(err); }
+});
+
 // ─── routes ───────────────────────────────────────────────────────
 
 // GET /api/settings/maps-key  — returns the Google Maps API key in plaintext
