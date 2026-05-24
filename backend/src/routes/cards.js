@@ -148,6 +148,32 @@ router.post('/geocode-missing', requireRole('admin'), async (req, res, next) => 
   } catch (err) { next(err); }
 });
 
+// GET /api/cards/geocode-pending  — admin: list active cards whose geocode_status
+// is NULL or anything other than 'ok'. Optional `?city=` scopes to that city.
+// Used by the SettingsPage to drive a client-side batch loop (one geocode per
+// request) so a large batch never holds a single HTTP connection open long
+// enough to be killed by the browser/proxy.
+router.get('/geocode-pending', requireRole('admin'), async (req, res, next) => {
+  const rawCity = req.query?.city;
+  const city = (typeof rawCity === 'string' && rawCity.trim()) ? rawCity.trim() : null;
+  const params = [];
+  let sql = `SELECT c.id, c.city, c.neighborhood, c.street, c.building, c.custom_name,
+                    b.iron_number
+               FROM cards c
+               JOIN boxes b ON b.id = c.box_id
+              WHERE c.status = 'active'
+                AND (c.geocode_status IS NULL OR c.geocode_status <> 'ok')`;
+  if (city) {
+    params.push(city);
+    sql += ` AND lower(btrim(c.city)) = lower(btrim($${params.length}))`;
+  }
+  sql += ` ORDER BY c.id`;
+  try {
+    const { rows } = await pool.query(sql, params);
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
 // GET /api/cards/locations  — distinct city/neighborhood/street values currently
 // stored in cards, for autocomplete combobox in card editing / task execution forms.
 // Query params:
@@ -429,10 +455,14 @@ router.get('/:id/history', async (req, res, next) => {
 router.post('/:id/geocode', requireRole('admin'), async (req, res, next) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+  // When the SettingsPage drives the batch loop, it passes `?autoApprove=1` so a
+  // successful result is also marked approved (attributed to the running admin),
+  // matching the server-side batch behaviour.
+  const autoApprove = req.query?.autoApprove === '1' || req.query?.autoApprove === 'true';
   try {
     const { rows } = await pool.query(`SELECT id FROM cards WHERE id = $1`, [id]);
     if (!rows[0]) return res.status(404).json({ error: 'Not found' });
-    const result = await geocodeCard(id);
+    const result = await geocodeCard(id, { autoApprove, userId: req.user.id });
     if (!result) return res.status(500).json({ error: 'Geocoding failed' });
     res.json({
       status: result.status,

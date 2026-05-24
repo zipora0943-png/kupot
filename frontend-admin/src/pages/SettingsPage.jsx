@@ -66,6 +66,7 @@ export default function SettingsPage() {
   const [geocodingRunning, setGeocodingRunning] = useState(false)
   const [geocodingResult, setGeocodingResult]   = useState(null) // { attempted, ok, not_found, error } or { error }
   const [geocodeCity, setGeocodeCity]           = useState('')   // '' = all cities; otherwise scope to this city
+  const [geocodeProgress, setGeocodeProgress]   = useState(null) // { done, total } while running, null otherwise
 
   // Google Maps API key (task 62) — sensitive, stored in settings table only.
   const [apiKeySet, setApiKeySet]   = useState(false)   // does the server have a key?
@@ -182,12 +183,36 @@ export default function SettingsPage() {
     }
   }
 
+  // Client-driven batch: one card per HTTP request, so a long run never holds
+  // a single connection open and the UI can show real progress. Mirrors the
+  // legacy server-side `geocodeMissing` semantics (auto-approve on success).
   async function runGeocodeMissing() {
     if (geocodingRunning) return
     setGeocodingResult(null)
+    setGeocodeProgress(null)
     setGeocodingRunning(true)
     try {
-      const stats = await cardsApi.geocodeMissing(geocodeCity || undefined)
+      const pending = await cardsApi.geocodePending(geocodeCity || undefined)
+      const list = Array.isArray(pending) ? pending : []
+      const stats = { attempted: 0, ok: 0, not_found: 0, error: 0, disabled: 0 }
+      const notFoundById = new Map()
+      for (let i = 0; i < list.length; i++) {
+        const card = list[i]
+        setGeocodeProgress({ done: i, total: list.length })
+        try {
+          const r = await cardsApi.geocode(card.id, { autoApprove: true })
+          stats.attempted += 1
+          if (r?.status === 'ok')             stats.ok += 1
+          else if (r?.status === 'not_found') { stats.not_found += 1; notFoundById.set(card.id, card) }
+          else if (r?.status === 'disabled')  stats.disabled += 1
+          else                                stats.error += 1
+        } catch {
+          stats.attempted += 1
+          stats.error += 1
+        }
+      }
+      setGeocodeProgress({ done: list.length, total: list.length })
+      stats.not_found_cards = Array.from(notFoundById.values())
       setGeocodingResult(stats)
     } catch (err) {
       setGeocodingResult({ error: err.message || 'שגיאה בהרצת הגיאוקודינג' })
@@ -470,7 +495,9 @@ export default function SettingsPage() {
               title={!apiKeySet ? 'יש להגדיר מפתח API קודם' : undefined}
             >
               {geocodingRunning
-                ? 'מתרגם כתובות...'
+                ? (geocodeProgress
+                    ? `מתרגם כתובות... ${geocodeProgress.done}/${geocodeProgress.total}`
+                    : 'מתרגם כתובות...')
                 : geocodeCity
                   ? `🗺️ הרץ גיאוקודינג לעיר ${geocodeCity}`
                   : '🗺️ הרץ גיאוקודינג לקופות חסרות'}

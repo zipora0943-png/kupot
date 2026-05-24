@@ -75,7 +75,14 @@ export const cards = {
   // params: { level: 'city'|'neighborhood'|'street', city?, neighborhood? }
   locations: (params)    => api.get('/cards/locations', params),
   // Task 61: force re-geocode of a single card.
-  geocode: (id)          => api.post(`/cards/${id}/geocode`),
+  // `autoApprove` is used by the SettingsPage batch loop — a successful result
+  // is then marked approved automatically (server-side), matching the legacy
+  // single-call batch endpoint behaviour.
+  geocode: (id, { autoApprove } = {}) =>
+    api.post(`/cards/${id}/geocode${autoApprove ? '?autoApprove=1' : ''}`),
+  // Task 61 batch (client-driven): list cards still pending geocode, optionally
+  // scoped to a single city. Frontend iterates and calls `geocode(id, {autoApprove:true})`.
+  geocodePending: (city)  => api.get('/cards/geocode-pending', city ? { city } : undefined),
   // Task 61: admin marks the stored coordinates as visually approved on the map.
   // Task 62: optional manual coords (after dragging the marker) — when supplied
   // they overwrite the geocoder result and the status is forced to 'ok'.
