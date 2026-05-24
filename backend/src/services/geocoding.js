@@ -119,9 +119,12 @@ async function geocodeAddress(address) {
   }
 }
 
-// Geocode a card and persist the result. Re-geocoding resets `geocode_approved`
-// so an admin must visually re-confirm the new location on the map.
-async function geocodeCard(cardId) {
+// Geocode a card and persist the result. By default, re-geocoding resets
+// `geocode_approved` so an admin must visually re-confirm the new location.
+// When called from the batch script (`autoApprove: true`), a successful
+// `ok` result is also marked approved automatically, attributed to `userId`.
+async function geocodeCard(cardId, opts = {}) {
+  const { autoApprove = false, userId = null } = opts;
   try {
     const { rows } = await pool.query(
       `SELECT id, city, neighborhood, street, building FROM cards WHERE id = $1`,
@@ -137,18 +140,33 @@ async function geocodeCard(cardId) {
       building: card.building,
     });
 
-    await pool.query(
-      `UPDATE cards
-          SET latitude = $1,
-              longitude = $2,
-              geocoded_at = NOW(),
-              geocode_status = $3,
-              geocode_approved = FALSE,
-              geocode_approved_by = NULL,
-              geocode_approved_at = NULL
-        WHERE id = $4`,
-      [result.lat, result.lng, result.status, cardId],
-    );
+    if (autoApprove && result.status === 'ok' && Number.isInteger(userId)) {
+      await pool.query(
+        `UPDATE cards
+            SET latitude = $1,
+                longitude = $2,
+                geocoded_at = NOW(),
+                geocode_status = 'ok',
+                geocode_approved = TRUE,
+                geocode_approved_by = $3,
+                geocode_approved_at = NOW()
+          WHERE id = $4`,
+        [result.lat, result.lng, userId, cardId],
+      );
+    } else {
+      await pool.query(
+        `UPDATE cards
+            SET latitude = $1,
+                longitude = $2,
+                geocoded_at = NOW(),
+                geocode_status = $3,
+                geocode_approved = FALSE,
+                geocode_approved_by = NULL,
+                geocode_approved_at = NULL
+          WHERE id = $4`,
+        [result.lat, result.lng, result.status, cardId],
+      );
+    }
     return result;
   } catch (err) {
     console.error('[geocoding] geocodeCard failed for card', cardId, err.message);
@@ -160,8 +178,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Batch-geocode every active card whose geocode_status is not 'ok'.
 // Google does not require throttling like Nominatim, but we keep a small gap
-// between requests to avoid hammering quotas. Returns counters.
-async function geocodeMissingCards() {
+// between requests to avoid hammering quotas.
+// When `autoApprove` is true, successful results are also marked approved
+// automatically (attributed to `userId`) so the admin only needs to handle
+// the cards Google couldn't locate.
+// Returns counters + `not_found_cards`: every active card currently stuck
+// at `not_found` (so the admin can pin them manually on the map).
+async function geocodeMissingCards(opts = {}) {
+  const { autoApprove = false, userId = null } = opts;
   const { rows } = await pool.query(
     `SELECT id FROM cards
        WHERE status = 'active'
@@ -170,7 +194,7 @@ async function geocodeMissingCards() {
   );
   const stats = { attempted: 0, ok: 0, not_found: 0, error: 0, disabled: 0 };
   for (const { id } of rows) {
-    const result = await geocodeCard(id);
+    const result = await geocodeCard(id, { autoApprove, userId });
     stats.attempted += 1;
     if (result) {
       if (result.status === 'ok')             stats.ok += 1;
@@ -182,6 +206,17 @@ async function geocodeMissingCards() {
     }
     if (stats.attempted < rows.length) await sleep(150);
   }
+
+  const { rows: notFoundRows } = await pool.query(
+    `SELECT c.id, c.city, c.neighborhood, c.street, c.building, c.custom_name,
+            b.iron_number
+       FROM cards c
+       JOIN boxes b ON b.id = c.box_id
+      WHERE c.status = 'active'
+        AND c.geocode_status = 'not_found'
+      ORDER BY b.iron_number`,
+  );
+  stats.not_found_cards = notFoundRows;
   return stats;
 }
 

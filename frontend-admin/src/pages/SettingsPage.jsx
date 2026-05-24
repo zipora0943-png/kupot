@@ -1,15 +1,18 @@
 import React, { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   settings as settingsApi,
   taskTypes as taskTypesApi,
   reportTypes as reportTypesApi,
   boxTypes as boxTypesApi,
+  installationTypes as installationTypesApi,
   cities as citiesApi,
   cards as cardsApi,
 } from '../api/endpoints'
 import TaskTypeModal from '../components/TaskTypeModal'
 import ReportTypeModal from '../components/ReportTypeModal'
 import BoxTypeModal from '../components/BoxTypeModal'
+import InstallationTypeModal from '../components/InstallationTypeModal'
 import CityModal from '../components/CityModal'
 
 const ITEM_ROW_STYLE = {
@@ -75,6 +78,7 @@ export default function SettingsPage() {
   const [taskList, setTaskList] = useState(null)
   const [reportList, setReportList] = useState(null)
   const [boxList, setBoxList] = useState(null)
+  const [installationList, setInstallationList] = useState(null)
   const [cityList, setCityList] = useState(null)
   const [unassignedCities, setUnassignedCities] = useState([])
 
@@ -121,6 +125,7 @@ export default function SettingsPage() {
     taskTypesApi.getAll().then(d => !cancelled && setTaskList(Array.isArray(d) ? d : [])).catch(() => !cancelled && setTaskList([]))
     reportTypesApi.getAll().then(d => !cancelled && setReportList(Array.isArray(d) ? d : [])).catch(() => !cancelled && setReportList([]))
     boxTypesApi.getAll().then(d => !cancelled && setBoxList(Array.isArray(d) ? d : [])).catch(() => !cancelled && setBoxList([]))
+    installationTypesApi.getAll().then(d => !cancelled && setInstallationList(Array.isArray(d) ? d : [])).catch(() => !cancelled && setInstallationList([]))
     citiesApi.getAll().then(d => !cancelled && setCityList(Array.isArray(d) ? d : [])).catch(() => !cancelled && setCityList([]))
     citiesApi.unassigned().then(d => !cancelled && setUnassignedCities(Array.isArray(d) ? d : [])).catch(() => !cancelled && setUnassignedCities([]))
 
@@ -317,6 +322,31 @@ export default function SettingsPage() {
           >+ הוספה</button>
         </div>
 
+        {/* === INSTALLATION TYPES === */}
+        <div className="panel">
+          <div className="panel-title">סוגי התקנה</div>
+          {installationList === null ? (
+            <div className="loading"><div className="spinner" /><span>טוען...</span></div>
+          ) : installationList.length === 0 ? (
+            <div className="empty">אין סוגי התקנה להצגה</div>
+          ) : (
+            installationList.map(t => (
+              <div key={t.id} style={ITEM_ROW_STYLE}>
+                <div style={{ fontWeight: 600 }}>{t.name}</div>
+                <button
+                  className="btn sm"
+                  onClick={() => openModal('installation', t)}
+                >עריכה</button>
+              </div>
+            ))
+          )}
+          <button
+            className="btn sm"
+            style={{ marginTop: 12 }}
+            onClick={() => openModal('installation')}
+          >+ הוספה</button>
+        </div>
+
         {/* === GEOCODING / MAP === */}
         <div className="panel">
           <div className="panel-title">מפה וגיאוקודינג</div>
@@ -372,11 +402,13 @@ export default function SettingsPage() {
             מתרגם כתובות של קופות פעילות לקואורדינטות (לתצוגה על המפה ולאימות GPS של גובים).
             החיפוש מוגבל לעיר שהוזנה בכרטסת — אם הרחוב לא קיים בעיר הזו, התוצאה נדחית
             במקום להחזיר רחוב מעיר שכנה.
+            כל תוצאה מוצלחת מסומנת אוטומטית כמאושרת — בסיום ההרצה תוצג רשימה של
+            הכרטסות שגוגל לא מצא, כדי שתוכלי להיכנס לכל אחת ולמקם את הסיכה ידנית.
           </div>
 
           {geocodingResult && !geocodingResult.error && (
             <div className="alert green" style={{ marginBottom: 10 }}>
-              הסתיים. נסיונות: {geocodingResult.attempted} | הצליחו: {geocodingResult.ok} |
+              הסתיים. נסיונות: {geocodingResult.attempted} | הצליחו ואושרו אוטומטית: {geocodingResult.ok} |
               לא נמצאו: {geocodingResult.not_found} | שגיאות: {geocodingResult.error}
               {geocodingResult.disabled ? ` | מושבת: ${geocodingResult.disabled}` : ''}
             </div>
@@ -384,6 +416,46 @@ export default function SettingsPage() {
           {geocodingResult?.error && (
             <div className="alert red" style={{ marginBottom: 10 }}>
               {geocodingResult.error}
+            </div>
+          )}
+
+          {Array.isArray(geocodingResult?.not_found_cards) && geocodingResult.not_found_cards.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+                כרטסות שגוגל לא מצא ({geocodingResult.not_found_cards.length}) — יש לפתוח כל אחת ולמקם את הסיכה ידנית במפה:
+              </div>
+              <ul style={{
+                listStyle: 'none',
+                padding: 0,
+                margin: 0,
+                maxHeight: 240,
+                overflowY: 'auto',
+                border: '1px solid var(--border, #eef0f3)',
+                borderRadius: 6,
+              }}>
+                {geocodingResult.not_found_cards.map((c) => {
+                  const addressParts = [c.street, c.building].filter(Boolean).join(' ')
+                  const regionParts = [c.neighborhood, c.city].filter(Boolean).join(', ')
+                  const address = [addressParts, regionParts].filter(Boolean).join(' — ')
+                  return (
+                    <li key={c.id} style={{
+                      padding: '8px 10px',
+                      borderBottom: '1px solid var(--border, #eef0f3)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                      alignItems: 'center',
+                    }}>
+                      <span>
+                        <strong>{c.iron_number}</strong>
+                        {c.custom_name ? ` (${c.custom_name})` : ''}
+                        {address ? ` — ${address}` : ''}
+                      </span>
+                      <Link to={`/cards/${c.id}`} className="btn sm">פתח כרטסת</Link>
+                    </li>
+                  )
+                })}
+              </ul>
             </div>
           )}
 
@@ -498,6 +570,14 @@ export default function SettingsPage() {
         onClose={closeModal}
         onSaved={(saved) => upsert(setBoxList, saved)}
         onDeleted={(id) => removeById(setBoxList, id)}
+      />
+
+      <InstallationTypeModal
+        open={modal?.which === 'installation'}
+        item={modal?.which === 'installation' ? modal.item : null}
+        onClose={closeModal}
+        onSaved={(saved) => upsert(setInstallationList, saved)}
+        onDeleted={(id) => removeById(setInstallationList, id)}
       />
 
       <CityModal
