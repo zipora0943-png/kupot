@@ -11,6 +11,7 @@ import DochotPage        from '../pages/DochotPage'
 import CashroomAdminPage from '../pages/CashroomAdminPage'
 import UsersPage         from '../pages/UsersPage'
 import SettingsPage      from '../pages/SettingsPage'
+import ImportBoxesPage   from '../pages/ImportBoxesPage'
 
 // Each entry's <element/> is mounted on first visit and kept mounted afterward;
 // inactive ones are toggled to display:none so their state survives navigation.
@@ -25,6 +26,7 @@ const ROUTES = [
   { path: '/cashroom-admin', element: <CashroomAdminPage /> },
   { path: '/users',          element: <UsersPage /> },
   { path: '/settings',       element: <SettingsPage /> },
+  { path: '/import-boxes',   element: <ImportBoxesPage /> },
 ]
 
 export const KEEP_ALIVE_PATHS = ROUTES.map((r) => r.path)

@@ -217,3 +217,34 @@ export const districts = {
   getAll: ()             => api.get('/settings/districts'),
   rename: (from, to)     => api.put('/settings/districts/rename', { from, to }),
 };
+
+// ---- IMPORTS ----
+// Bulk-import boxes + first card from an .xlsx upload (admin only).
+// The shared `api` wrapper forces JSON; multipart uploads need a raw fetch.
+async function postFile(path, file) {
+  if (!file) throw new Error('יש לבחור קובץ');
+  const fd = new FormData();
+  fd.append('file', file);
+  const token = localStorage.getItem('kupot_token');
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: fd,
+  });
+  let data = null;
+  const text = await res.text();
+  if (text) { try { data = JSON.parse(text); } catch { data = { raw: text }; } }
+  if (!res.ok) {
+    const msg = (data && data.error) || `שגיאה (${res.status})`;
+    const err = new Error(msg);
+    err.status = res.status;
+    err.payload = data;
+    throw err;
+  }
+  return data;
+}
+
+export const imports = {
+  previewBoxes: (file) => postFile('/imports/boxes/preview', file),
+  commitBoxes:  (file) => postFile('/imports/boxes/commit', file),
+};

@@ -67,6 +67,7 @@ app.use('/api/settings',       require('./routes/settings'));
 app.use('/api/uploads',        require('./routes/uploads'));
 app.use('/api/version',        require('./routes/version'));
 app.use('/api/location-overrides', require('./routes/locationOverrides'));
+app.use('/api/imports',        require('./routes/imports'));
 
 // ── Health check
 app.get('/health', async (_req, res) => {
