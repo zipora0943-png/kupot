@@ -26,16 +26,29 @@ function StatusPill({ status }) {
   )
 }
 
+// Aggressive string normalization — must mirror backend `s()` in routes/imports.js.
+// Without this, a value pasted into an edit cell may carry invisible bidi marks
+// from the source (Excel/Word) and silently fail to match a DB value.
+function norm(v) {
+  if (v === undefined || v === null) return ''
+  return String(v)
+    .normalize('NFC')
+    .replace(/[​-‏‪-‮⁠-⁩﻿]/g, '')
+    .replace(/[  -   　]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 // Pure client-side classifier — must stay in sync with backend analyzeAgainst.
 function classifyRows(rows, knownBoxTypes, existingIronsSet) {
   const seenInFile = new Map()
   const result = rows.map(r => {
-    const iron = (r.iron_number || '').trim()
+    const iron = norm(r.iron_number)
     if (!iron) return { ...r, iron_number: '', status: 'error', reason: 'מספר ברזל חסר' }
     if (existingIronsSet.has(iron)) {
       return { ...r, iron_number: iron, status: 'duplicate', reason: 'מספר ברזל כבר קיים במערכת' }
     }
-    const bt = (r.box_type_name || '').trim()
+    const bt = norm(r.box_type_name)
     if (bt && !knownBoxTypes.has(bt)) {
       return { ...r, iron_number: iron, box_type_name: bt, status: 'skip', reason: `סוג קופה לא קיים: ${bt}` }
     }

@@ -37,9 +37,20 @@ const COL = {
   notes:   'הערות מיקום',
 };
 
+// Aggressive string normalization. Excel-on-Hebrew often injects invisible
+// characters that make values look identical to a human but compare unequal:
+//   - bidi marks (LRM/RLM, isolates, embeds, overrides)
+//   - NBSP / various Unicode spaces
+//   - decomposed vs composed forms (NFC fixes points-with-niqqud variants)
+// Without this, "קופות מלבן" from the xlsx fails to match the box_types row.
 function s(v) {
   if (v === undefined || v === null) return '';
-  return String(v).trim();
+  return String(v)
+    .normalize('NFC')
+    .replace(/[​-‏‪-‮⁠-⁩﻿]/g, '')
+    .replace(/[  -   　]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function rowIsEmpty(r) {
