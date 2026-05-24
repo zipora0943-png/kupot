@@ -148,12 +148,47 @@ router.post('/geocode-missing', requireRole('admin'), async (req, res, next) => 
   } catch (err) { next(err); }
 });
 
-// GET /api/cards/geocode-pending  — admin: list active cards whose geocode_status
-// is NULL or anything other than 'ok'. Optional `?city=` scopes to that city.
-// Used by the SettingsPage to drive a client-side batch loop (one geocode per
-// request) so a large batch never holds a single HTTP connection open long
-// enough to be killed by the browser/proxy.
+// GET /api/cards/geocode-pending  — admin: list active cards that still need
+// a geocode attempt. By default we skip cards that already settled on 'ok'
+// (success — nothing to do) and 'not_found' (Google already said no — retrying
+// the same address won't help; the admin is expected to fix the address, use
+// the street-rename feature, or pin manually). Cards stuck at 'error' or
+// 'disabled' (transient: network glitch, missing API key) are still picked up
+// so they auto-recover once the underlying issue is fixed.
+//
+// Optional `?city=` scopes to that city.
+// Optional `?includeNotFound=1` brings back the sticky 'not_found' cards too —
+// used by the "retry not-found cards" button in the SettingsPage.
 router.get('/geocode-pending', requireRole('admin'), async (req, res, next) => {
+  const rawCity = req.query?.city;
+  const city = (typeof rawCity === 'string' && rawCity.trim()) ? rawCity.trim() : null;
+  const includeNotFound = req.query?.includeNotFound === '1' || req.query?.includeNotFound === 'true';
+  const params = [];
+  let sql = `SELECT c.id, c.city, c.neighborhood, c.street, c.building, c.custom_name,
+                    b.iron_number
+               FROM cards c
+               JOIN boxes b ON b.id = c.box_id
+              WHERE c.status = 'active'
+                AND (c.geocode_status IS NULL OR c.geocode_status <> 'ok')`;
+  if (!includeNotFound) {
+    sql += ` AND (c.geocode_status IS NULL OR c.geocode_status <> 'not_found')`;
+  }
+  if (city) {
+    params.push(city);
+    sql += ` AND lower(btrim(c.city)) = lower(btrim($${params.length}))`;
+  }
+  sql += ` ORDER BY c.id`;
+  try {
+    const { rows } = await pool.query(sql, params);
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
+// GET /api/cards/geocode-not-found  — admin: list active cards currently stuck
+// at `geocode_status = 'not_found'` (so the SettingsPage can group them by
+// street for bulk rename, including cards from previous runs that are still
+// sitting in the backlog). Optional `?city=` scopes to that city.
+router.get('/geocode-not-found', requireRole('admin'), async (req, res, next) => {
   const rawCity = req.query?.city;
   const city = (typeof rawCity === 'string' && rawCity.trim()) ? rawCity.trim() : null;
   const params = [];
@@ -162,12 +197,12 @@ router.get('/geocode-pending', requireRole('admin'), async (req, res, next) => {
                FROM cards c
                JOIN boxes b ON b.id = c.box_id
               WHERE c.status = 'active'
-                AND (c.geocode_status IS NULL OR c.geocode_status <> 'ok')`;
+                AND c.geocode_status = 'not_found'`;
   if (city) {
     params.push(city);
     sql += ` AND lower(btrim(c.city)) = lower(btrim($${params.length}))`;
   }
-  sql += ` ORDER BY c.id`;
+  sql += ` ORDER BY c.city, c.street, b.iron_number`;
   try {
     const { rows } = await pool.query(sql, params);
     res.json(rows);
@@ -472,11 +507,12 @@ router.get('/:id/history', async (req, res, next) => {
     const { rows: card } = await pool.query(`SELECT box_id FROM cards WHERE id = $1`, [id]);
     if (!card[0]) return res.status(404).json({ error: 'Not found' });
     const { rows } = await pool.query(
-      `SELECT c.*,
+      `SELECT c.*, b.iron_number,
               rc.ids       AS resolved_collector_ids,
               rc.names_arr AS resolved_collector_names,
               rc.names     AS resolved_collector_name
          FROM cards c
+         JOIN boxes b ON b.id = c.box_id
          ${RESOLVED_COLLECTORS_LATERAL}
         WHERE c.box_id = $1 ORDER BY c.opened_at`,
       [card[0].box_id]

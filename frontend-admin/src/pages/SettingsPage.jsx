@@ -67,6 +67,7 @@ export default function SettingsPage() {
   const [geocodingResult, setGeocodingResult]   = useState(null) // { attempted, ok, not_found, error } or { error }
   const [geocodeCity, setGeocodeCity]           = useState('')   // '' = all cities; otherwise scope to this city
   const [geocodeProgress, setGeocodeProgress]   = useState(null) // { done, total } while running, null otherwise
+  const [geocodeRetryNotFound, setGeocodeRetryNotFound] = useState(false) // include sticky 'not_found' on retry
   // Street-rename groups: key=`${city}|${street}`, value={ newStreet, applying, lastResult }
   // `lastResult` is { ok, failed: [{ id, iron_number, returned_address }] }
   const [renameState, setRenameState]           = useState({})
@@ -189,6 +190,11 @@ export default function SettingsPage() {
   // Client-driven batch: one card per HTTP request, so a long run never holds
   // a single connection open and the UI can show real progress. Mirrors the
   // legacy server-side `geocodeMissing` semantics (auto-approve on success).
+  //
+  // By default cards already stuck at 'not_found' are skipped (retrying the
+  // same address won't help — the admin is expected to fix the street name via
+  // the rename panel, or pin manually). The "כולל ניסיון חוזר..." checkbox
+  // forces those cards back into the loop.
   async function runGeocodeMissing() {
     if (geocodingRunning) return
     setGeocodingResult(null)
@@ -196,10 +202,11 @@ export default function SettingsPage() {
     setRenameState({})
     setGeocodingRunning(true)
     try {
-      const pending = await cardsApi.geocodePending(geocodeCity || undefined)
+      const pending = await cardsApi.geocodePending(geocodeCity || undefined, {
+        includeNotFound: geocodeRetryNotFound,
+      })
       const list = Array.isArray(pending) ? pending : []
       const stats = { attempted: 0, ok: 0, not_found: 0, error: 0, disabled: 0 }
-      const notFoundById = new Map()
       for (let i = 0; i < list.length; i++) {
         const card = list[i]
         setGeocodeProgress({ done: i, total: list.length })
@@ -207,7 +214,7 @@ export default function SettingsPage() {
           const r = await cardsApi.geocode(card.id, { autoApprove: true })
           stats.attempted += 1
           if (r?.status === 'ok')             stats.ok += 1
-          else if (r?.status === 'not_found') { stats.not_found += 1; notFoundById.set(card.id, card) }
+          else if (r?.status === 'not_found') stats.not_found += 1
           else if (r?.status === 'disabled')  stats.disabled += 1
           else                                stats.error += 1
         } catch {
@@ -216,7 +223,15 @@ export default function SettingsPage() {
         }
       }
       setGeocodeProgress({ done: list.length, total: list.length })
-      stats.not_found_cards = Array.from(notFoundById.values())
+      // Pull the full not_found backlog so the rename panel covers ALL stuck
+      // cards in scope, not just the ones we just attempted. This is what makes
+      // re-runs idempotent — the admin keeps seeing what's left to fix.
+      try {
+        const backlog = await cardsApi.geocodeNotFound(geocodeCity || undefined)
+        stats.not_found_cards = Array.isArray(backlog) ? backlog : []
+      } catch {
+        stats.not_found_cards = []
+      }
       setGeocodingResult(stats)
     } catch (err) {
       setGeocodingResult({ error: err.message || 'שגיאה בהרצת הגיאוקודינג' })
@@ -661,6 +676,19 @@ export default function SettingsPage() {
                   ? `🗺️ הרץ גיאוקודינג לעיר ${geocodeCity}`
                   : '🗺️ הרץ גיאוקודינג לקופות חסרות'}
             </button>
+            <label style={{ fontSize: 13, color: 'var(--text2)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <input
+                type="checkbox"
+                checked={geocodeRetryNotFound}
+                onChange={(e) => setGeocodeRetryNotFound(e.target.checked)}
+                disabled={geocodingRunning}
+              />
+              כולל ניסיון חוזר לכרטסות שלא נמצאו בעבר
+            </label>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
+            ההרצה מדלגת על כרטסות שגוגל כבר אמר עליהן "לא נמצא" — אין טעם לנסות את אותה כתובת שוב.
+            סמני את התיבה כדי לכפות ניסיון חוזר גם עליהן.
           </div>
         </div>
 

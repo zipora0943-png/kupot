@@ -81,8 +81,18 @@ export const cards = {
   geocode: (id, { autoApprove } = {}) =>
     api.post(`/cards/${id}/geocode${autoApprove ? '?autoApprove=1' : ''}`),
   // Task 61 batch (client-driven): list cards still pending geocode, optionally
-  // scoped to a single city. Frontend iterates and calls `geocode(id, {autoApprove:true})`.
-  geocodePending: (city)  => api.get('/cards/geocode-pending', city ? { city } : undefined),
+  // scoped to a single city. Skips cards already stuck at `not_found` by
+  // default (retrying the same address won't help); pass `includeNotFound:true`
+  // to force a retry of those too.
+  geocodePending: (city, { includeNotFound } = {}) => {
+    const q = {}
+    if (city) q.city = city
+    if (includeNotFound) q.includeNotFound = '1'
+    return api.get('/cards/geocode-pending', Object.keys(q).length ? q : undefined)
+  },
+  // All cards currently stuck at `not_found` (used by the rename panel so the
+  // admin sees the full backlog, not just the cards attempted in this run).
+  geocodeNotFound: (city) => api.get('/cards/geocode-not-found', city ? { city } : undefined),
   // Bulk-rename the street for a list of failed cards and re-geocode. Cards
   // where Google still can't find the new street are left untouched and come
   // back with `returned_address` for the UI to display.
