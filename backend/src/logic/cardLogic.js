@@ -33,6 +33,7 @@ async function openCard(boxId, location, userId, client, eventType = EVENT.INSTA
     city, neighborhood, street, building, location_notes,
     collector_id, custom_name, alert_days_personal,
     receipt_required, receipt_details,
+    installation_type,
   } = location || {};
 
   // pre-check: refuse to open a second active card for the same box
@@ -55,12 +56,13 @@ async function openCard(boxId, location, userId, client, eventType = EVENT.INSTA
     `INSERT INTO cards
        (box_id, city, neighborhood, street, building, location_notes,
         collector_id, custom_name, alert_days_personal,
-        receipt_required, receipt_details, status, opened_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'active',NOW())
+        receipt_required, receipt_details, installation_type, status, opened_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'active',NOW())
      RETURNING *`,
     [boxId, city, neighborhood, street, building, location_notes,
      resolvedCollectorId, custom_name, alert_days_personal,
-     receipt_required || false, receipt_details]
+     receipt_required || false, receipt_details,
+     installation_type || null]
   );
   const card = rows[0];
 

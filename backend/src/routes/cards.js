@@ -60,7 +60,6 @@ router.get('/', async (req, res, next) => {
   const { city, neighborhood, street, collector_id, status, custom_name, receipt_required, box_id } = req.query;
 
   let q = `SELECT c.*, b.iron_number,
-                  it.name AS installation_type_name,
                   rc.ids       AS resolved_collector_ids,
                   rc.names_arr AS resolved_collector_names,
                   rc.names     AS resolved_collector_name,
@@ -72,7 +71,6 @@ router.get('/', async (req, res, next) => {
                   EXISTS (SELECT 1 FROM tasks   t WHERE t.card_id = c.id AND t.status IN ('open','in_progress')) AS has_open_task
              FROM cards c
              JOIN boxes b ON b.id = c.box_id
-             LEFT JOIN installation_types it ON it.id = c.installation_type_id
              ${RESOLVED_COLLECTORS_LATERAL}
             WHERE 1=1`;
   const p = [];
@@ -203,13 +201,11 @@ router.get('/lookup-by-iron/:iron_number', async (req, res, next) => {
 
     const { rows: activeRows } = await pool.query(
       `SELECT c.*, b.iron_number, b.status AS box_status,
-              it.name AS installation_type_name,
               rc.ids       AS resolved_collector_ids,
               rc.names_arr AS resolved_collector_names,
               rc.names     AS resolved_collector_name
          FROM cards c
          JOIN boxes b ON b.id = c.box_id
-         LEFT JOIN installation_types it ON it.id = c.installation_type_id
          ${RESOLVED_COLLECTORS_LATERAL}
         WHERE c.box_id = $1 AND c.status = 'active'
         LIMIT 1`,
@@ -238,7 +234,6 @@ router.get('/:id', async (req, res, next) => {
     }
     const { rows } = await pool.query(
       `SELECT c.*, b.iron_number, b.status AS box_status, bt.name AS box_type_name,
-              it.name AS installation_type_name,
               rc.ids       AS resolved_collector_ids,
               rc.names_arr AS resolved_collector_names,
               rc.names     AS resolved_collector_name,
@@ -249,7 +244,6 @@ router.get('/:id', async (req, res, next) => {
          FROM cards c
          JOIN boxes b ON b.id = c.box_id
          LEFT JOIN box_types bt ON bt.id = b.box_type_id
-         LEFT JOIN installation_types it ON it.id = c.installation_type_id
          ${RESOLVED_COLLECTORS_LATERAL}
         WHERE c.id = $1`,
       [id]
@@ -265,13 +259,13 @@ router.get('/:id', async (req, res, next) => {
 router.post('/', requireRole('admin'), async (req, res, next) => {
   const { box_id, city, neighborhood, street, building, location_notes,
           collector_id, custom_name, alert_days_personal,
-          receipt_required, receipt_details, installation_type_id } = req.body || {};
+          receipt_required, receipt_details, installation_type } = req.body || {};
 
   const bid = Number(box_id);
   if (!Number.isInteger(bid)) return res.status(400).json({ error: 'box_id required' });
-  if (installation_type_id !== undefined && installation_type_id !== null
-      && !Number.isInteger(Number(installation_type_id))) {
-    return res.status(400).json({ error: 'Invalid installation_type_id' });
+  if (installation_type !== undefined && installation_type !== null
+      && typeof installation_type !== 'string') {
+    return res.status(400).json({ error: 'installation_type must be string or null' });
   }
 
   const client = await pool.connect();
@@ -281,7 +275,7 @@ router.post('/', requireRole('admin'), async (req, res, next) => {
       bid,
       { city, neighborhood, street, building, location_notes,
         collector_id, custom_name, alert_days_personal,
-        receipt_required, receipt_details, installation_type_id },
+        receipt_required, receipt_details, installation_type },
       req.user.id,
       client,
       EVENT.INSTALLATION,
@@ -312,7 +306,7 @@ router.put('/:id', requireRole('admin'), async (req, res, next) => {
     'city', 'neighborhood', 'street', 'building', 'location_notes',
     'custom_name', 'alert_days_personal',
     'receipt_required', 'receipt_details',
-    'installation_type_id',
+    'installation_type',
   ];
   const addressFields = new Set(['city', 'neighborhood', 'street', 'building']);
   const sets = [];
@@ -321,14 +315,10 @@ router.put('/:id', requireRole('admin'), async (req, res, next) => {
   for (const key of allowed) {
     if (Object.prototype.hasOwnProperty.call(req.body || {}, key)) {
       let value = req.body[key];
-      if (key === 'installation_type_id') {
-        if (value !== null && value !== undefined && value !== '') {
-          if (!Number.isInteger(Number(value))) {
-            return res.status(400).json({ error: 'Invalid installation_type_id' });
-          }
-          value = Number(value);
-        } else {
-          value = null;
+      if (key === 'installation_type') {
+        if (value === '' || value === undefined) value = null;
+        else if (value !== null && typeof value !== 'string') {
+          return res.status(400).json({ error: 'installation_type must be string or null' });
         }
       }
       params.push(value);

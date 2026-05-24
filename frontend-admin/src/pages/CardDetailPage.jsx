@@ -110,6 +110,7 @@ export default function CardDetailPage() {
       alert_days_personal:  card.alert_days_personal ?? '',
       receipt_required:     !!card.receipt_required,
       receipt_details:      card.receipt_details ?? '',
+      installation_type:    card.installation_type ?? '',
     })
     setSaveErr(null)
     setEditing(true)
@@ -144,6 +145,7 @@ export default function CardDetailPage() {
                                : Number(form.alert_days_personal),
         receipt_required:    !!form.receipt_required,
         receipt_details:     form.receipt_details || null,
+        installation_type:   form.installation_type?.trim() ? form.installation_type.trim() : null,
       }
       const updated = await cardsApi.update(id, payload)
       // The PUT response doesn't include the joined fields (iron_number, collector_name, box_type_name).
@@ -351,6 +353,15 @@ export default function CardDetailPage() {
             <input value={form.location_notes} onChange={e => updateForm('location_notes', e.target.value)} />
           </div>
 
+          <div className="field" style={{ marginBottom: 12 }}>
+            <label>סוג התקנה <span style={{ color: 'var(--text3)', fontWeight: 400 }}>(אופציונלי)</span></label>
+            <input
+              value={form.installation_type ?? ''}
+              onChange={e => updateForm('installation_type', e.target.value)}
+              placeholder="למשל: קיר, תקרה, עמוד"
+            />
+          </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
             <div className="field">
               <label>טווח התראה אישי <span style={{ color: 'var(--text3)', fontWeight: 400 }}>(אופציונלי — גובר על הגלובלי)</span></label>
@@ -414,6 +425,12 @@ export default function CardDetailPage() {
         <div className="info-card">
           <div className="k">סוג קופה</div>
           <div className="v">{card.box_type_name || '—'}</div>
+        </div>
+        <div className="info-card">
+          <div className="k">סוג התקנה</div>
+          <div className="v" style={{ color: card.installation_type ? 'var(--text)' : 'var(--text3)', fontStyle: card.installation_type ? 'normal' : 'italic' }}>
+            {card.installation_type || 'לא הוגדר'}
+          </div>
         </div>
         <div className="info-card">
           <div className="k">עיר</div>

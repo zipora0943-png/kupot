@@ -202,7 +202,6 @@ export const boxTypes = {
   update: (id, data)     => api.put(`/settings/box-types/${id}`, data),
   remove: (id)           => api.delete(`/settings/box-types/${id}`),
 };
-
 // ---- CITIES & DISTRICTS ----
 // Single table cities(name, district). "Districts" are the DISTINCT
 // non-null district values — get them via districts.getAll(). Rename a

@@ -289,6 +289,18 @@ CREATE INDEX IF NOT EXISTS idx_location_overrides_card_id ON location_overrides(
 CREATE INDEX IF NOT EXISTS idx_location_overrides_user_id ON location_overrides(user_id);
 
 -- ─────────────────────────────────────────
+--  INSTALLATION TYPE  (סוג התקנה — חופשי)
+--
+--  Free-text label set on the card by the admin. An earlier iteration used
+--  a lookup table (`installation_types` + `cards.installation_type_id`);
+--  we dropped that and switched to a free-text column so the admin can
+--  type any value without managing a list.
+-- ─────────────────────────────────────────
+ALTER TABLE cards DROP COLUMN IF EXISTS installation_type_id;
+DROP TABLE IF EXISTS installation_types;
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS installation_type VARCHAR(150);
+
+-- ─────────────────────────────────────────
 --  CITIES / DISTRICTS  (ערים ומחוזות)
 --
 --  Single-table mapping of city → district. The district column is free-text

@@ -461,6 +461,10 @@ export default function CollectionPage() {
             <span className="v">{card.location_notes || '—'}</span>
           </div>
           <div className="kv">
+            <span className="k">סוג התקנה</span>
+            <span className="v">{card.installation_type || '—'}</span>
+          </div>
+          <div className="kv">
             <span className="k">תאריך גביה אחרון</span>
             <span className="v">{formatDate(card.last_collection_at)}</span>
           </div>
