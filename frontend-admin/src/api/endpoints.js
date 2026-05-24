@@ -249,4 +249,8 @@ export const imports = {
   commitBoxes:  (file) => postFile('/imports/boxes/commit', file),
   // commit-rows: takes JSON rows (after inline edits) instead of the file.
   commitRows:   (rows) => api.post('/imports/boxes/commit-rows', { rows }),
+
+  // V2 — extended template with custom_name / alert / receipt fields.
+  previewBoxesV2:    (file) => postFile('/imports/boxes-v2/preview', file),
+  commitRowsV2:      (rows) => api.post('/imports/boxes-v2/commit-rows', { rows }),
 };

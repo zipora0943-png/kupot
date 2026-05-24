@@ -234,6 +234,23 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {/* === BULK IMPORT LINKS === */}
+      <div className="panel" style={{ marginBottom: 16 }}>
+        <div className="panel-title">ייבוא קופות מאקסל</div>
+        <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 10 }}>
+          העלאת קובץ .xlsx ליצירת קופה + כרטסת ראשונה לכל שורה.
+          ניתן לערוך שורות בעייתיות ישירות בתצוגה המקדימה לפני ביצוע הייבוא.
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Link to="/import-boxes" className="btn btn-secondary">
+            📥 ייבוא בסיסי (8 עמודות)
+          </Link>
+          <Link to="/import-boxes-v2" className="btn btn-secondary">
+            📥 ייבוא מורחב (11 עמודות, עם שם מותאם / התראה / קבלה)
+          </Link>
+        </div>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16 }}>
 
         {/* === TASK TYPES === */}

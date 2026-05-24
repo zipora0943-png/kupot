@@ -194,13 +194,17 @@ async function insertRows(toInsert, userId) {
       const card = await openCard(
         box.id,
         {
-          city:              r.city,
-          neighborhood:      r.neighborhood,
-          street:            r.street,
-          building:          r.building,
-          location_notes:    r.location_notes,
-          installation_type: r.installation_type,
-          collector_id:      null,
+          city:                r.city,
+          neighborhood:        r.neighborhood,
+          street:              r.street,
+          building:            r.building,
+          location_notes:      r.location_notes,
+          installation_type:   r.installation_type,
+          custom_name:         r.custom_name || null,
+          alert_days_personal: Number.isInteger(r.alert_days_personal) ? r.alert_days_personal : null,
+          receipt_required:    r.receipt_required === true,
+          receipt_details:     r.receipt_details || null,
+          collector_id:        null,
         },
         userId,
         client,
@@ -293,6 +297,135 @@ router.post('/boxes/commit-rows', async (req, res, next) => {
     box_type_name:     s(r.box_type_name) || null,
     location_notes:    s(r.location_notes) || null,
   }));
+
+  let analyzed, summary;
+  try {
+    ({ analyzed, summary } = await analyzeRows(rows));
+  } catch (err) { return next(err); }
+
+  if (summary.duplicate > 0 || summary.error > 0 || summary.skip > 0) {
+    return res.status(400).json({
+      error: 'יש שורות לא תקינות — תקן ונסה שוב',
+      problems: analyzed.filter(r => r.status !== 'ok'),
+    });
+  }
+
+  const toInsert = analyzed.filter(r => r.status === 'ok');
+  if (toInsert.length === 0) return res.status(400).json({ error: 'אין שורות לייבוא' });
+
+  try {
+    const created = await insertRows(toInsert, req.user.id);
+    res.json({ success: true, created: created.length, skipped: 0, rows: created });
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'מספר ברזל כפול נתגלה בזמן הכתיבה — הייבוא בוטל' });
+    }
+    next(err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+//  V2 IMPORT — extended structure with custom_name / alert / receipt fields
+//  Spreadsheet columns (RTL): שם מותאם, רחוב, מספר, הערות, שכונה, עיר,
+//                              סוג קופה, התראה, מספר ברזל, הערות קבלה, קבלה
+// ─────────────────────────────────────────────────────────────────────────
+
+const COL_V2 = {
+  custom_name:     'שם מותאם',
+  street:          'רחוב',
+  building:        'מספר',
+  location_notes:  'הערות',        // first הערות column
+  neighborhood:    'שכונה',
+  city:            'עיר',
+  boxType:         'סוג קופה',
+  alertDays:       'התראה',        // integer — days for personal alert
+  iron:            'מספר ברזל',
+  receipt_details: 'הערות קבלה',
+  receipt_req:     'קבלה',         // boolean: '-1' = yes, else no
+};
+
+function rowIsEmptyV2(r) {
+  return Object.values(COL_V2).every(h => !s(r[h]));
+}
+
+function parseWorkbookV2(buffer) {
+  let wb;
+  try {
+    wb = XLSX.read(buffer, { type: 'buffer' });
+  } catch (err) {
+    return { rows: [], parseError: `קובץ לא תקין: ${err.message}` };
+  }
+  const sheetName = wb.SheetNames[0];
+  if (!sheetName) return { rows: [], parseError: 'הקובץ ריק (אין גיליון)' };
+  const sheet = wb.Sheets[sheetName];
+  const raw = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+
+  const rows = [];
+  raw.forEach((r, idx) => {
+    if (rowIsEmptyV2(r)) return;
+
+    const alertRaw = s(r[COL_V2.alertDays]);
+    const alertNum = Number.parseInt(alertRaw, 10);
+    const alert_days_personal = Number.isFinite(alertNum) && alertNum > 0 ? alertNum : null;
+
+    // Excel "-1" convention for boolean true; everything else (0, blank, etc.) is false.
+    const receipt_required = s(r[COL_V2.receipt_req]) === '-1';
+
+    rows.push({
+      rowNum:              idx + 2,
+      iron_number:         s(r[COL_V2.iron]),
+      box_type_name:       s(r[COL_V2.boxType]) || null,
+      custom_name:         s(r[COL_V2.custom_name]) || null,
+      street:              s(r[COL_V2.street]) || null,
+      building:            s(r[COL_V2.building]) || null,
+      neighborhood:        s(r[COL_V2.neighborhood]) || null,
+      city:                s(r[COL_V2.city]) || null,
+      location_notes:      s(r[COL_V2.location_notes]) || null,
+      receipt_details:     s(r[COL_V2.receipt_details]) || null,
+      receipt_required,
+      alert_days_personal,
+    });
+  });
+  return { rows };
+}
+
+// ── POST /api/imports/boxes-v2/preview
+router.post('/boxes-v2/preview', upload.single('file'), async (req, res, next) => {
+  if (!req.file) return res.status(400).json({ error: 'יש לבחור קובץ' });
+  try {
+    const { rows, parseError } = parseWorkbookV2(req.file.buffer);
+    if (parseError) return res.status(400).json({ error: parseError });
+    if (rows.length === 0) return res.status(400).json({ error: 'לא נמצאו שורות נתונים' });
+
+    const { analyzed, summary, box_types, existing_irons } = await analyzeRows(rows);
+    res.json({ rows: analyzed, summary, box_types, existing_irons });
+  } catch (err) { next(err); }
+});
+
+// ── POST /api/imports/boxes-v2/commit-rows
+router.post('/boxes-v2/commit-rows', async (req, res, next) => {
+  const body = req.body || {};
+  if (!Array.isArray(body.rows) || body.rows.length === 0) {
+    return res.status(400).json({ error: 'אין שורות לייבוא' });
+  }
+
+  const rows = body.rows.map((r, i) => {
+    const alertNum = Number.parseInt(r.alert_days_personal, 10);
+    return {
+      rowNum:              Number.isFinite(r.rowNum) ? r.rowNum : i + 2,
+      iron_number:         s(r.iron_number),
+      box_type_name:       s(r.box_type_name) || null,
+      custom_name:         s(r.custom_name) || null,
+      street:              s(r.street) || null,
+      building:            s(r.building) || null,
+      neighborhood:        s(r.neighborhood) || null,
+      city:                s(r.city) || null,
+      location_notes:      s(r.location_notes) || null,
+      receipt_details:     s(r.receipt_details) || null,
+      receipt_required:    r.receipt_required === true,
+      alert_days_personal: Number.isFinite(alertNum) && alertNum > 0 ? alertNum : null,
+    };
+  });
 
   let analyzed, summary;
   try {

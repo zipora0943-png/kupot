@@ -19,8 +19,9 @@ app.use(cors({
 
 // ── Body parser with explicit size limit.
 // Bulk-import (commit-rows) sends thousands of rows at once → needs a larger
-// limit. It's mounted FIRST so it wins the path match for that one endpoint.
-app.use('/api/imports/boxes/commit-rows', express.json({ limit: '20mb' }));
+// limit. Mounted FIRST so they win the path match for those endpoints.
+app.use('/api/imports/boxes/commit-rows',    express.json({ limit: '20mb' }));
+app.use('/api/imports/boxes-v2/commit-rows', express.json({ limit: '20mb' }));
 app.use(express.json({ limit: process.env.MAX_JSON_BODY || '1mb' }));
 
 // ── Request logging
