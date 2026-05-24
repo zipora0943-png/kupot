@@ -5,14 +5,12 @@ import {
   taskTypes as taskTypesApi,
   reportTypes as reportTypesApi,
   boxTypes as boxTypesApi,
-  installationTypes as installationTypesApi,
   cities as citiesApi,
   cards as cardsApi,
 } from '../api/endpoints'
 import TaskTypeModal from '../components/TaskTypeModal'
 import ReportTypeModal from '../components/ReportTypeModal'
 import BoxTypeModal from '../components/BoxTypeModal'
-import InstallationTypeModal from '../components/InstallationTypeModal'
 import CityModal from '../components/CityModal'
 
 const ITEM_ROW_STYLE = {
@@ -78,7 +76,6 @@ export default function SettingsPage() {
   const [taskList, setTaskList] = useState(null)
   const [reportList, setReportList] = useState(null)
   const [boxList, setBoxList] = useState(null)
-  const [installationList, setInstallationList] = useState(null)
   const [cityList, setCityList] = useState(null)
   const [unassignedCities, setUnassignedCities] = useState([])
 
@@ -125,7 +122,6 @@ export default function SettingsPage() {
     taskTypesApi.getAll().then(d => !cancelled && setTaskList(Array.isArray(d) ? d : [])).catch(() => !cancelled && setTaskList([]))
     reportTypesApi.getAll().then(d => !cancelled && setReportList(Array.isArray(d) ? d : [])).catch(() => !cancelled && setReportList([]))
     boxTypesApi.getAll().then(d => !cancelled && setBoxList(Array.isArray(d) ? d : [])).catch(() => !cancelled && setBoxList([]))
-    installationTypesApi.getAll().then(d => !cancelled && setInstallationList(Array.isArray(d) ? d : [])).catch(() => !cancelled && setInstallationList([]))
     citiesApi.getAll().then(d => !cancelled && setCityList(Array.isArray(d) ? d : [])).catch(() => !cancelled && setCityList([]))
     citiesApi.unassigned().then(d => !cancelled && setUnassignedCities(Array.isArray(d) ? d : [])).catch(() => !cancelled && setUnassignedCities([]))
 
@@ -319,31 +315,6 @@ export default function SettingsPage() {
             className="btn sm"
             style={{ marginTop: 12 }}
             onClick={() => openModal('box')}
-          >+ הוספה</button>
-        </div>
-
-        {/* === INSTALLATION TYPES === */}
-        <div className="panel">
-          <div className="panel-title">סוגי התקנה</div>
-          {installationList === null ? (
-            <div className="loading"><div className="spinner" /><span>טוען...</span></div>
-          ) : installationList.length === 0 ? (
-            <div className="empty">אין סוגי התקנה להצגה</div>
-          ) : (
-            installationList.map(t => (
-              <div key={t.id} style={ITEM_ROW_STYLE}>
-                <div style={{ fontWeight: 600 }}>{t.name}</div>
-                <button
-                  className="btn sm"
-                  onClick={() => openModal('installation', t)}
-                >עריכה</button>
-              </div>
-            ))
-          )}
-          <button
-            className="btn sm"
-            style={{ marginTop: 12 }}
-            onClick={() => openModal('installation')}
           >+ הוספה</button>
         </div>
 
@@ -570,14 +541,6 @@ export default function SettingsPage() {
         onClose={closeModal}
         onSaved={(saved) => upsert(setBoxList, saved)}
         onDeleted={(id) => removeById(setBoxList, id)}
-      />
-
-      <InstallationTypeModal
-        open={modal?.which === 'installation'}
-        item={modal?.which === 'installation' ? modal.item : null}
-        onClose={closeModal}
-        onSaved={(saved) => upsert(setInstallationList, saved)}
-        onDeleted={(id) => removeById(setInstallationList, id)}
       />
 
       <CityModal
