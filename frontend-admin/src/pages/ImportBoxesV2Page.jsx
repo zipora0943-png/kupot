@@ -166,11 +166,15 @@ export default function ImportBoxesV2Page() {
     if (!rows) return
     const okRows = rows.filter(r => r.status === 'ok')
     if (okRows.length === 0) return
-    if (!confirm(`לבצע ייבוא של ${okRows.length} שורות?`)) return
+    const skipCount = rows.length - okRows.length
+    const msg = skipCount > 0
+      ? `לבצע ייבוא של ${okRows.length} שורות? ${skipCount} שורות בעייתיות יידלגו (תוכל להוריד דוח לפני).`
+      : `לבצע ייבוא של ${okRows.length} שורות?`
+    if (!confirm(msg)) return
     setCommitting(true); setErrMsg(null)
     try {
       const data = await importsApi.commitRowsV2(okRows)
-      setResult(data); setRows(null); setFile(null)
+      setResult({ ...data, totalSkipped: skipCount }); setRows(null); setFile(null)
     } catch (err) {
       setErrMsg(err.message || 'שגיאה בייבוא')
     } finally {
@@ -180,13 +184,8 @@ export default function ImportBoxesV2Page() {
 
   const summary = useMemo(() => rows ? summarize(rows) : null, [rows])
 
-  const canCommit = useMemo(() => {
-    if (!summary) return false
-    return (summary.ok || 0) > 0 &&
-           (summary.duplicate || 0) === 0 &&
-           (summary.error || 0) === 0 &&
-           (summary.skip || 0) === 0
-  }, [summary])
+  // Allow commit as long as there's at least one OK row — bad rows just get dropped.
+  const canCommit = useMemo(() => (summary?.ok || 0) > 0, [summary])
 
   const visibleRows = useMemo(() => {
     if (!rows) return []
@@ -249,9 +248,9 @@ export default function ImportBoxesV2Page() {
   const blockReasons = useMemo(() => {
     if (!summary) return []
     const r = []
-    if ((summary.duplicate || 0) > 0) r.push(`${summary.duplicate} מספרי ברזל כפולים — תקן בטבלה למטה`)
-    if ((summary.error    || 0) > 0) r.push(`${summary.error} שורות שגויות (מספר ברזל חסר) — תקן בטבלה למטה`)
-    if ((summary.skip     || 0) > 0) r.push(`${summary.skip} שורות עם סוג קופה לא ידוע — בחר סוג מהרשימה`)
+    if ((summary.duplicate || 0) > 0) r.push(`${summary.duplicate} מספרי ברזל כפולים — יידלגו (או תקן בטבלה למטה)`)
+    if ((summary.error    || 0) > 0) r.push(`${summary.error} שורות שגויות (מספר ברזל חסר) — יידלגו (או תקן בטבלה למטה)`)
+    if ((summary.skip     || 0) > 0) r.push(`${summary.skip} שורות עם סוג קופה לא ידוע — יידלגו (או בחר סוג מהרשימה)`)
     if ((summary.ok       || 0) === 0) r.push('אין שורות תקינות לייבוא')
     return r
   }, [summary])
@@ -302,6 +301,7 @@ export default function ImportBoxesV2Page() {
       {result && (
         <div className="panel" style={{ marginTop: 12, background: '#dcfce7', color: '#166534' }}>
           ✓ הייבוא הושלם: נוצרו {result.created} קופות וכרטסות.
+          {result.totalSkipped > 0 && ` דולגו ${result.totalSkipped} שורות בעייתיות.`}
         </div>
       )}
 
