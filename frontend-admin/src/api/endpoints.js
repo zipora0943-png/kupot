@@ -83,6 +83,11 @@ export const cards = {
   // Task 61 batch (client-driven): list cards still pending geocode, optionally
   // scoped to a single city. Frontend iterates and calls `geocode(id, {autoApprove:true})`.
   geocodePending: (city)  => api.get('/cards/geocode-pending', city ? { city } : undefined),
+  // Bulk-rename the street for a list of failed cards and re-geocode. Cards
+  // where Google still can't find the new street are left untouched and come
+  // back with `returned_address` for the UI to display.
+  retryStreetRename: (cardIds, newStreet) =>
+    api.post('/cards/retry-street-rename', { cardIds, newStreet }),
   // Task 61: admin marks the stored coordinates as visually approved on the map.
   // Task 62: optional manual coords (after dragging the marker) — when supplied
   // they overwrite the geocoder result and the status is forced to 'ok'.

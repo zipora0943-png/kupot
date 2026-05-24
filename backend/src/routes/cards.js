@@ -8,7 +8,7 @@ const {
   buildLocationClause, temporaryAccessClause,
   RESOLVED_COLLECTORS_LATERAL,
 } = require('../logic/userAssignment');
-const { geocodeCard, geocodeMissingCards } = require('../services/geocoding');
+const { geocodeCard, geocodeMissingCards, retryCardWithStreet } = require('../services/geocoding');
 const { haversineMeters } = require('../services/distance');
 
 // Radius (meters) within which the collector is considered "at" the card location.
@@ -171,6 +171,42 @@ router.get('/geocode-pending', requireRole('admin'), async (req, res, next) => {
   try {
     const { rows } = await pool.query(sql, params);
     res.json(rows);
+  } catch (err) { next(err); }
+});
+
+// POST /api/cards/retry-street-rename  — admin: re-geocode a list of cards with
+// an overridden street name. For each card where Google returns a hit, persist
+// the new street + coords + auto-approve. Cards where Google still doesn't find
+// the address are left untouched (the response includes `returned_address` so
+// the UI can show what Google was offering).
+// Body: { cardIds: number[], newStreet: string }
+// Capped at 200 cards per call so the request can't run for minutes.
+router.post('/retry-street-rename', requireRole('admin'), async (req, res, next) => {
+  const { cardIds, newStreet } = req.body || {};
+  if (!Array.isArray(cardIds) || cardIds.length === 0) {
+    return res.status(400).json({ error: 'cardIds must be a non-empty array' });
+  }
+  if (cardIds.length > 200) {
+    return res.status(400).json({ error: 'too many cards in one call (max 200)' });
+  }
+  const ids = cardIds.map(Number).filter(Number.isInteger);
+  if (ids.length === 0) {
+    return res.status(400).json({ error: 'cardIds must contain integers' });
+  }
+  if (typeof newStreet !== 'string' || !newStreet.trim()) {
+    return res.status(400).json({ error: 'newStreet is required' });
+  }
+  try {
+    const results = [];
+    for (const id of ids) {
+      const r = await retryCardWithStreet(id, newStreet, { userId: req.user.id });
+      results.push(r);
+    }
+    const summary = results.reduce((acc, r) => {
+      acc[r.status] = (acc[r.status] || 0) + 1;
+      return acc;
+    }, {});
+    res.json({ summary, results });
   } catch (err) { next(err); }
 });
 

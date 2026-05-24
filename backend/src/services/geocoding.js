@@ -93,15 +93,27 @@ async function geocodeAddress(address) {
 
       // Defence in depth — Google's components filter should already restrict
       // to the city, but we double-check the response just in case.
+      // On rejection we expose `returned_address` so the UI can show the admin
+      // *what* Google was offering (useful when proposing a street rename).
       if (!localityMatches(first.address_components, city)) {
         console.warn('[geocoding] result rejected — locality mismatch',
           { city, returned: first.formatted_address });
-        return { status: 'not_found', lat: null, lng: null };
+        return {
+          status: 'not_found',
+          lat: null,
+          lng: null,
+          returned_address: first.formatted_address || null,
+        };
       }
 
       const loc = first.geometry?.location;
       if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number') {
-        return { status: 'ok', lat: loc.lat, lng: loc.lng };
+        return {
+          status: 'ok',
+          lat: loc.lat,
+          lng: loc.lng,
+          returned_address: first.formatted_address || null,
+        };
       }
       return { status: 'error', lat: null, lng: null };
     }
@@ -234,10 +246,66 @@ async function geocodeMissingCards(opts = {}) {
   return stats;
 }
 
+// Re-geocode a card with an overridden street name. The card is updated in DB
+// ONLY when Google returns `ok` for the new street (street column overwritten,
+// coords saved, status='ok', auto-approved attributed to `userId`). On failure
+// nothing in DB changes — the caller gets back what Google returned so the UI
+// can show "תיקון לא עזר — גוגל החזיר X".
+//
+// Returns:
+//   { id, status: 'ok' | 'not_found' | 'error' | 'disabled',
+//     lat, lng, returned_address, old_street, new_street }
+async function retryCardWithStreet(cardId, newStreet, opts = {}) {
+  const { userId = null } = opts;
+  const street = (typeof newStreet === 'string') ? newStreet.trim() : '';
+  if (!street) return { id: cardId, status: 'error', error: 'newStreet required' };
+
+  const { rows } = await pool.query(
+    `SELECT id, city, neighborhood, street, building FROM cards WHERE id = $1`,
+    [cardId],
+  );
+  const card = rows[0];
+  if (!card) return { id: cardId, status: 'error', error: 'card not found' };
+
+  const result = await geocodeAddress({
+    city: card.city,
+    neighborhood: card.neighborhood,
+    street,
+    building: card.building,
+  });
+
+  if (result.status === 'ok' && Number.isInteger(userId)) {
+    await pool.query(
+      `UPDATE cards
+          SET street = $1,
+              latitude = $2,
+              longitude = $3,
+              geocoded_at = NOW(),
+              geocode_status = 'ok',
+              geocode_approved = TRUE,
+              geocode_approved_by = $4,
+              geocode_approved_at = NOW()
+        WHERE id = $5`,
+      [street, result.lat, result.lng, userId, cardId],
+    );
+  }
+
+  return {
+    id: cardId,
+    status: result.status,
+    lat: result.lat,
+    lng: result.lng,
+    returned_address: result.returned_address || null,
+    old_street: card.street,
+    new_street: street,
+  };
+}
+
 module.exports = {
   geocodeAddress,
   geocodeCard,
   geocodeMissingCards,
+  retryCardWithStreet,
   buildAddressQuery,
   getApiKey,
   localityMatches, // exported for testing

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   settings as settingsApi,
@@ -67,6 +67,9 @@ export default function SettingsPage() {
   const [geocodingResult, setGeocodingResult]   = useState(null) // { attempted, ok, not_found, error } or { error }
   const [geocodeCity, setGeocodeCity]           = useState('')   // '' = all cities; otherwise scope to this city
   const [geocodeProgress, setGeocodeProgress]   = useState(null) // { done, total } while running, null otherwise
+  // Street-rename groups: key=`${city}|${street}`, value={ newStreet, applying, lastResult }
+  // `lastResult` is { ok, failed: [{ id, iron_number, returned_address }] }
+  const [renameState, setRenameState]           = useState({})
 
   // Google Maps API key (task 62) — sensitive, stored in settings table only.
   const [apiKeySet, setApiKeySet]   = useState(false)   // does the server have a key?
@@ -190,6 +193,7 @@ export default function SettingsPage() {
     if (geocodingRunning) return
     setGeocodingResult(null)
     setGeocodeProgress(null)
+    setRenameState({})
     setGeocodingRunning(true)
     try {
       const pending = await cardsApi.geocodePending(geocodeCity || undefined)
@@ -218,6 +222,73 @@ export default function SettingsPage() {
       setGeocodingResult({ error: err.message || 'שגיאה בהרצת הגיאוקודינג' })
     } finally {
       setGeocodingRunning(false)
+    }
+  }
+
+  // Group not_found_cards by (city|street) so the admin can fix a typo once
+  // and apply it to every card on that street in one click.
+  const renameGroups = useMemo(() => {
+    const cards = Array.isArray(geocodingResult?.not_found_cards) ? geocodingResult.not_found_cards : []
+    const map = new Map()
+    for (const c of cards) {
+      const street = (c.street || '').trim()
+      if (!street) continue
+      const cityKey = (c.city || '').trim()
+      const key = `${cityKey}|${street}`
+      if (!map.has(key)) map.set(key, { key, city: cityKey, street, cards: [] })
+      map.get(key).cards.push(c)
+    }
+    return Array.from(map.values()).sort((a, b) => b.cards.length - a.cards.length)
+  }, [geocodingResult])
+
+  function setRenameField(key, patch) {
+    setRenameState(prev => ({ ...prev, [key]: { ...(prev[key] || {}), ...patch } }))
+  }
+
+  async function applyStreetRename(group) {
+    const st = renameState[group.key] || {}
+    if (st.applying) return
+    const newStreet = (st.newStreet || '').trim()
+    if (!newStreet) return
+    setRenameField(group.key, { applying: true, lastResult: null })
+    try {
+      const cardIds = group.cards.map(c => c.id)
+      const { results } = await cardsApi.retryStreetRename(cardIds, newStreet)
+      const okIds = new Set()
+      const failed = []
+      for (const r of (results || [])) {
+        if (r.status === 'ok') okIds.add(r.id)
+        else {
+          const card = group.cards.find(c => c.id === r.id)
+          failed.push({
+            id: r.id,
+            iron_number: card?.iron_number,
+            returned_address: r.returned_address,
+            status: r.status,
+          })
+        }
+      }
+      // Drop the successfully-renamed cards from the not_found list so the
+      // group either shrinks or disappears.
+      setGeocodingResult(prev => {
+        if (!prev || !Array.isArray(prev.not_found_cards)) return prev
+        const remaining = prev.not_found_cards.filter(c => !okIds.has(c.id))
+        return {
+          ...prev,
+          ok: (prev.ok || 0) + okIds.size,
+          not_found: (prev.not_found || 0) - okIds.size,
+          not_found_cards: remaining,
+        }
+      })
+      setRenameField(group.key, {
+        applying: false,
+        lastResult: { ok: okIds.size, failed },
+      })
+    } catch (err) {
+      setRenameField(group.key, {
+        applying: false,
+        lastResult: { ok: 0, failed: [], error: err.message || 'שגיאה בהחלת התיקון' },
+      })
     }
   }
 
@@ -430,6 +501,94 @@ export default function SettingsPage() {
           {geocodingResult?.error && (
             <div className="alert red" style={{ marginBottom: 10 }}>
               {geocodingResult.error}
+            </div>
+          )}
+
+          {renameGroups.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+                תיקון שם רחוב — קבוצות שלא נמצאו ({renameGroups.length}):
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 8 }}>
+                במקום ללכת לכל כרטסת, הזיני שם רחוב מתוקן (למשל "הרב כהנמן" במקום "השומר") —
+                המערכת תנסה לאתר אותו מחדש ותעדכן את כל הכרטסות בקבוצה זו. כרטסות שגוגל
+                עדיין לא מוצא יישארו ברשימה למטה.
+              </div>
+              <div style={{
+                border: '1px solid var(--border, #eef0f3)',
+                borderRadius: 6,
+                maxHeight: 320,
+                overflowY: 'auto',
+              }}>
+                {renameGroups.map(g => {
+                  const st = renameState[g.key] || {}
+                  const value = st.newStreet ?? ''
+                  const last = st.lastResult
+                  return (
+                    <div key={g.key} style={{ padding: '8px 10px', borderBottom: '1px solid var(--border, #eef0f3)' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                        <span style={{ minWidth: 0, flex: '1 1 auto' }}>
+                          <strong>{g.street || '(ללא רחוב)'}</strong>
+                          {g.city ? <span style={{ color: 'var(--text3)' }}> — {g.city}</span> : null}
+                          <span style={{ color: 'var(--text3)' }}> ({g.cards.length})</span>
+                        </span>
+                        <input
+                          type="text"
+                          placeholder="שם רחוב מתוקן"
+                          value={value}
+                          onChange={(e) => setRenameField(g.key, { newStreet: e.target.value })}
+                          disabled={!!st.applying}
+                          style={{ minWidth: 180 }}
+                        />
+                        <button
+                          className="btn sm primary"
+                          disabled={!!st.applying || !value.trim()}
+                          onClick={() => applyStreetRename(g)}
+                        >
+                          {st.applying ? `מחיל... (${g.cards.length})` : 'החל'}
+                        </button>
+                      </div>
+                      {last && (
+                        <div style={{ marginTop: 6, fontSize: 12 }}>
+                          {last.error ? (
+                            <span style={{ color: 'var(--red, #dc2626)' }}>{last.error}</span>
+                          ) : (
+                            <>
+                              <span style={{ color: 'var(--green, #16a34a)' }}>
+                                ✓ עודכנו {last.ok} כרטסות
+                              </span>
+                              {last.failed.length > 0 && (
+                                <div style={{ marginTop: 4, color: 'var(--text2)' }}>
+                                  <div>נכשלו {last.failed.length}:</div>
+                                  <ul style={{ margin: '2px 0 0 0', paddingInlineStart: 18 }}>
+                                    {last.failed.slice(0, 5).map(f => (
+                                      <li key={f.id}>
+                                        {f.iron_number ? <strong>{f.iron_number}</strong> : `#${f.id}`}
+                                        {f.returned_address
+                                          ? <> — גוגל החזיר: <em>{f.returned_address}</em></>
+                                          : f.status === 'not_found'
+                                            ? ' — לא נמצא'
+                                            : f.status === 'disabled'
+                                              ? ' — מפתח API לא מוגדר'
+                                              : ' — שגיאה'}
+                                      </li>
+                                    ))}
+                                    {last.failed.length > 5 && (
+                                      <li style={{ color: 'var(--text3)' }}>
+                                        ועוד {last.failed.length - 5}...
+                                      </li>
+                                    )}
+                                  </ul>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
 
