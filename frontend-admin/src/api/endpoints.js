@@ -247,4 +247,6 @@ async function postFile(path, file) {
 export const imports = {
   previewBoxes: (file) => postFile('/imports/boxes/preview', file),
   commitBoxes:  (file) => postFile('/imports/boxes/commit', file),
+  // commit-rows: takes JSON rows (after inline edits) instead of the file.
+  commitRows:   (rows) => api.post('/imports/boxes/commit-rows', { rows }),
 };
