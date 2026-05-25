@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { cards as cardsApi } from '../api/endpoints'
+import { useData } from '@shared/context/DataStoreContext'
 import { daysSince } from '../utils/daysSince'
 
 const STORAGE_KEY = 'collector:boxes:filters'
@@ -18,9 +18,13 @@ function readStoredFilters() {
 
 export default function BoxesPage() {
   const navigate = useNavigate()
-  const [list, setList] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  // Read from the central store — populated at login and kept fresh by
+  // Socket.IO. Filter to active cards in-memory (the store holds all statuses).
+  const { data: allCards, loading } = useData('cards')
+  const list = useMemo(
+    () => (Array.isArray(allCards) ? allCards.filter((c) => c.status === 'active') : []),
+    [allCards],
+  )
 
   const stored = useMemo(() => readStoredFilters(), [])
   const [searchInput, setSearchInput] = useState(stored?.search ?? '')
@@ -32,24 +36,6 @@ export default function BoxesPage() {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ search: searchInput, sort }))
     } catch { /* ignore quota errors */ }
   }, [searchInput, sort])
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    cardsApi.getAll({ status: 'active' })
-      .then((rows) => {
-        if (cancelled) return
-        setList(Array.isArray(rows) ? rows : [])
-      })
-      .catch((err) => {
-        if (cancelled) return
-        setError(err.message || 'שגיאה בטעינת הקופות')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [])
 
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput.trim().toLowerCase()), 200)
@@ -94,7 +80,6 @@ export default function BoxesPage() {
   }, [list, search, sort])
 
   if (loading) return <div className="loading">טוען...</div>
-  if (error) return <div className="alert red">{error}</div>
 
   return (
     <div>

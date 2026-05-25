@@ -72,6 +72,7 @@ app.use('/api/uploads',        require('./routes/uploads'));
 app.use('/api/version',        require('./routes/version'));
 app.use('/api/location-overrides', require('./routes/locationOverrides'));
 app.use('/api/imports',        require('./routes/imports'));
+app.use('/api/initial-load',   require('./routes/initialLoad'));
 
 // ── Health check
 app.get('/health', async (_req, res) => {
@@ -112,7 +113,17 @@ const PORT = Number.parseInt(process.env.PORT, 10) || 3000;
 // Only listen when this file is the entry point (so tests can import `app`
 // without spawning a real server).
 if (require.main === module) {
-  app.listen(PORT, () => console.log(`Kupot backend listening on port ${PORT}`));
+  const http   = require('http');
+  const socket = require('./services/socket');
+  const dbListener = require('./services/dbListener');
+
+  const server = http.createServer(app);
+  socket.init(server);
+  dbListener.start().catch((err) =>
+    console.error('[dbListener] failed to start:', err.message),
+  );
+
+  server.listen(PORT, () => console.log(`Kupot backend listening on port ${PORT}`));
 }
 
 module.exports = app;

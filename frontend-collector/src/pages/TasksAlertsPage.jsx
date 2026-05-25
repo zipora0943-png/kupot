@@ -1,11 +1,7 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import {
-  tasks as tasksApi,
-  alerts as alertsApi,
-  reports as reportsApi,
-} from '../api/endpoints'
 import { useAuth } from '@shared/context/AuthContext'
+import { useData } from '@shared/context/DataStoreContext'
 import TaskModal from '../components/TaskModal'
 import ReportModal from '../components/ReportModal'
 import CloseReportModal from '@shared/components/CloseReportModal'
@@ -36,79 +32,39 @@ export default function TasksAlertsPage() {
       : 'all'
   const [tab, setTab] = useState(initialTab)
   const [createOpen, setCreateOpen] = useState(false)
-
-  const [tasksList, setTasksList] = useState([])
-  const [tasksLoading, setTasksLoading] = useState(true)
-  const [tasksError, setTasksError] = useState(null)
-
-  const [alertsList, setAlertsList] = useState([])
-  const [alertsLoading, setAlertsLoading] = useState(true)
-  const [alertsError, setAlertsError] = useState(null)
-
-  const [openReports, setOpenReports] = useState([])
-  const [reportsLoading, setReportsLoading] = useState(false)
-  const [reportsError, setReportsError] = useState(null)
   const [openReport, setOpenReport]   = useState(null)
   const [closeReport, setCloseReport] = useState(null)
 
-  const loadTasks = useCallback(() => {
-    let cancelled = false
-    setTasksLoading(true)
-    setTasksError(null)
-    tasksApi.getAll({ status: 'open' })
-      .then((rows) => { if (!cancelled) setTasksList(Array.isArray(rows) ? rows : []) })
-      .catch((err) => { if (!cancelled) setTasksError(err.message || 'שגיאה בטעינת המשימות') })
-      .finally(() => { if (!cancelled) setTasksLoading(false) })
-    return () => { cancelled = true }
-  }, [])
+  // All three slices come from the DataStore: populated at login, kept
+  // current by Socket.IO entity.changed events. Page-level filtering
+  // (open vs. all) happens in-memory.
+  const { data: tasksAll,    loading: tasksLoading,  refetch: refetchTasks  } = useData('tasks')
+  const { data: alertsData,  loading: alertsLoading } = useData('alertsNoCollection')
+  const { data: reportsAll,  loading: reportsLoading } = useData('reports')
 
-  const loadAlerts = useCallback(() => {
-    let cancelled = false
-    setAlertsLoading(true)
-    setAlertsError(null)
-    alertsApi.noCollection()
-      .then((data) => {
-        if (cancelled) return
-        const items = Array.isArray(data?.items) ? data.items : []
-        setAlertsList(items)
-        try { window.dispatchEvent(new CustomEvent('alerts:refresh', { detail: items.length })) } catch (_) { /* no-op */ }
-      })
-      .catch((err) => { if (!cancelled) setAlertsError(err.message || 'שגיאה בטעינת ההתראות') })
-      .finally(() => { if (!cancelled) setAlertsLoading(false) })
-    return () => { cancelled = true }
-  }, [])
+  const tasksList = useMemo(
+    () => (Array.isArray(tasksAll) ? tasksAll.filter((t) => t.status === 'open') : []),
+    [tasksAll],
+  )
+  const alertsList = useMemo(
+    () => (Array.isArray(alertsData?.items) ? alertsData.items : []),
+    [alertsData],
+  )
+  const openReports = useMemo(
+    () => (isAdmin && Array.isArray(reportsAll) ? reportsAll.filter((r) => r.status === 'open') : []),
+    [isAdmin, reportsAll],
+  )
 
-  const loadReports = useCallback(() => {
-    if (!isAdmin) return undefined
-    let cancelled = false
-    setReportsLoading(true)
-    setReportsError(null)
-    reportsApi.getAll({ status: 'open' })
-      .then((rows) => { if (!cancelled) setOpenReports(Array.isArray(rows) ? rows : []) })
-      .catch((err) => { if (!cancelled) setReportsError(err.message || 'שגיאה בטעינת הדיווחים') })
-      .finally(() => { if (!cancelled) setReportsLoading(false) })
-    return () => { cancelled = true }
-  }, [isAdmin])
+  const tasksError   = null
+  const alertsError  = null
+  const reportsError = null
 
-  useEffect(() => {
-    const c1 = loadTasks()
-    const c2 = loadAlerts()
-    const c3 = loadReports()
-    return () => { c1?.(); c2?.(); c3?.() }
-  }, [loadTasks, loadAlerts, loadReports])
+  // Modal-driven local updates are no-ops now — the socket-triggered refetch
+  // brings the latest report into the store. Keeping the prop for compatibility.
+  function handleReportSaved() { /* store refreshes via socket */ }
 
-  function handleReportSaved(updated) {
-    if (!updated) return
-    setOpenReports(prev => {
-      if (updated.status && updated.status !== 'open') {
-        return prev.filter(r => r.id !== updated.id)
-      }
-      return prev.map(r => r.id === updated.id ? { ...r, ...updated } : r)
-    })
-  }
-
-  const reportsCount = isAdmin ? openReports.length : 0
-  const allCount = tasksList.length + alertsList.length + reportsCount
+  const reportsCount   = isAdmin ? openReports.length : 0
+  const allCount       = tasksList.length + alertsList.length + reportsCount
   const alertsTabCount = alertsList.length + reportsCount
 
   return (
@@ -230,7 +186,7 @@ export default function TasksAlertsPage() {
         <TaskModal
           open={createOpen}
           onClose={() => setCreateOpen(false)}
-          onSaved={() => { setCreateOpen(false); loadTasks() }}
+          onSaved={() => { setCreateOpen(false); refetchTasks() }}
         />
       )}
 
@@ -247,10 +203,7 @@ export default function TasksAlertsPage() {
         <CloseReportModal
           report={closeReport}
           onClose={() => setCloseReport(null)}
-          onClosed={(updated) => {
-            handleReportSaved(updated)
-            loadReports()
-          }}
+          onClosed={handleReportSaved}
         />
       )}
     </div>

@@ -1,28 +1,28 @@
-import React, { useEffect, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import BarcodeScanner from '../components/BarcodeScanner'
-import { cards as cardsApi, envelopes as envelopesApi } from '../api/endpoints'
+import { envelopes as envelopesApi } from '../api/endpoints'
+import { useData } from '@shared/context/DataStoreContext'
 
 export default function ScanPage() {
   const { cardId } = useParams()
   const navigate = useNavigate()
 
-  const [boxId, setBoxId] = useState(null)
+  // We only need card.box_id here — read it from the store instead of fetching.
+  const { data: cardsList } = useData('cards')
+  const boxId = useMemo(() => {
+    if (!cardId || !Array.isArray(cardsList)) return null
+    const id = Number(cardId)
+    const found = cardsList.find((c) => Number(c.id) === id)
+    return found?.box_id ?? null
+  }, [cardsList, cardId])
+
   const [pendingValue, setPendingValue] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
   const [scannerKey, setScannerKey] = useState(0)
   const [manualOpen, setManualOpen] = useState(false)
   const [manualInput, setManualInput] = useState('')
-
-  useEffect(() => {
-    if (!cardId) return
-    let cancelled = false
-    cardsApi.get(cardId)
-      .then((data) => { if (!cancelled) setBoxId(data?.box_id ?? null) })
-      .catch(() => { /* keep boxId null; submit will surface the error */ })
-    return () => { cancelled = true }
-  }, [cardId])
 
   function handleScan(value) {
     setPendingValue(String(value))

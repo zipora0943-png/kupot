@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { tasks as tasksApi } from '../api/endpoints'
+import { useData } from '@shared/context/DataStoreContext'
 import TaskExecModal from '../components/TaskExecModal'
 import TaskExecDetailsModal from '../components/TaskExecDetailsModal'
 import TaskNotExecutedModal from '../components/TaskNotExecutedModal'
@@ -35,25 +35,19 @@ export default function TaskViewPage() {
   const { taskId } = useParams()
   const navigate = useNavigate()
 
-  const [task, setTask] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  // Read the task from the store (no round-trip). The list fetched by
+  // /api/tasks already includes all the joined fields this page needs.
+  const { data: tasksList, loading } = useData('tasks')
+  const task = useMemo(() => {
+    if (!Array.isArray(tasksList)) return null
+    const id = Number(taskId)
+    return tasksList.find((t) => Number(t.id) === id) || null
+  }, [tasksList, taskId])
+  const error = null
 
   const [execOpen, setExecOpen] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [notExecOpen, setNotExecOpen] = useState(false)
-
-  useEffect(() => {
-    if (!taskId) return
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-    tasksApi.get(taskId)
-      .then((data) => { if (!cancelled) setTask(data) })
-      .catch((err) => { if (!cancelled) setError(err.message || 'שגיאה בטעינת המשימה') })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [taskId])
 
   const flavor = useMemo(() => {
     if (!task) return null
@@ -82,14 +76,14 @@ export default function TaskViewPage() {
     return parts.join(' • ')
   }, [task])
 
-  function handleExecSuccess(updated) {
-    if (updated) setTask(prev => ({ ...prev, ...updated }))
+  // After exec / not-exec the backend NOTIFY fires → store refreshes → list
+  // updates automatically. We just close the modal and navigate back.
+  function handleExecSuccess() {
     setExecOpen(false)
     navigate('/tasks-alerts', { state: { tab: 'tasks' } })
   }
 
-  function handleNotExecSuccess(updated) {
-    if (updated) setTask(prev => ({ ...prev, ...updated }))
+  function handleNotExecSuccess() {
     setNotExecOpen(false)
     navigate('/tasks-alerts', { state: { tab: 'tasks' } })
   }

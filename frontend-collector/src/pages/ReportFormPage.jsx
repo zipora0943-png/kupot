@@ -1,10 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   reports as reportsApi,
-  reportTypes as reportTypesApi,
   uploads as uploadsApi,
 } from '../api/endpoints'
+import { useBootstrap } from '@shared/context/DataStoreContext'
 
 export default function ReportFormPage() {
   const { cardId } = useParams()
@@ -12,8 +12,13 @@ export default function ReportFormPage() {
   const [searchParams] = useSearchParams()
   const reason = searchParams.get('reason')
 
-  const [types, setTypes] = useState([])
-  const [typesLoading, setTypesLoading] = useState(true)
+  // Report types come from /api/initial-load (loaded once at login).
+  const bootstrap = useBootstrap()
+  const types = useMemo(
+    () => (Array.isArray(bootstrap?.report_types) ? bootstrap.report_types : []),
+    [bootstrap],
+  )
+  const typesLoading = bootstrap == null
 
   const [reportTypeId, setReportTypeId] = useState('')
   const [description, setDescription] = useState(
@@ -27,16 +32,6 @@ export default function ReportFormPage() {
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
-
-  useEffect(() => {
-    let cancelled = false
-    setTypesLoading(true)
-    reportTypesApi.getAll()
-      .then((d) => { if (!cancelled) setTypes(Array.isArray(d) ? d : []) })
-      .catch(() => { if (!cancelled) setTypes([]) })
-      .finally(() => { if (!cancelled) setTypesLoading(false) })
-    return () => { cancelled = true }
-  }, [])
 
   useEffect(() => {
     if (!imagePreview) return

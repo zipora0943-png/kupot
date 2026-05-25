@@ -263,7 +263,14 @@ ALTER TABLE tasks ADD COLUMN IF NOT EXISTS not_executed_reason TEXT;
 ALTER TABLE cards ADD COLUMN IF NOT EXISTS latitude       DECIMAL(10,7);
 ALTER TABLE cards ADD COLUMN IF NOT EXISTS longitude      DECIMAL(10,7);
 ALTER TABLE cards ADD COLUMN IF NOT EXISTS geocoded_at    TIMESTAMPTZ;
--- geocode_status values: NULL (never attempted), 'ok', 'not_found', 'error', 'disabled'.
+-- geocode_status values: NULL (never attempted), 'ok', 'neighborhood_center',
+-- 'not_found', 'error', 'disabled'.
+--   'ok'                  — street+number resolved precisely (auto-approvable
+--                           in batch when the admin runs the geocoder).
+--   'neighborhood_center' — fallback for cards that have no street: located at
+--                           the neighborhood centroid. NEVER auto-approved —
+--                           an admin must drag the pin to the real spot (or
+--                           accept the centroid) and approve manually.
 ALTER TABLE cards ADD COLUMN IF NOT EXISTS geocode_status VARCHAR(20);
 
 -- Geocode approval: after the backend geocodes an address, an admin visually
@@ -317,6 +324,56 @@ CREATE TABLE IF NOT EXISTS cities (
 );
 CREATE INDEX IF NOT EXISTS idx_cities_district ON cities(district);
 
+-- ─────────────────────────────────────────
+--  CARD LETTER  (אות סידורית: A, B, C, …, Z, AA, AB, …)
+--
+--  Each box may have multiple cards over its lifetime (open → close → reopen at
+--  a new location, etc.). The card "code" shown in the UI is iron_number +
+--  card_letter (e.g. "100482A", "100482B"). Letters are assigned per-box in
+--  the order cards are opened (oldest = A).
+--
+--  Stored in the DB (not computed client-side) so the value is canonical
+--  across exports, reports, lookups, and printing.
+-- ─────────────────────────────────────────
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS card_letter VARCHAR(5);
+
+-- Excel-column-style index → letter:
+--   0 → 'A', 1 → 'B', …, 25 → 'Z', 26 → 'AA', 27 → 'AB', …
+CREATE OR REPLACE FUNCTION idx_to_card_letter(idx INTEGER) RETURNS VARCHAR AS $$
+DECLARE
+  result VARCHAR := '';
+  n      INTEGER := idx;
+BEGIN
+  IF idx IS NULL OR idx < 0 THEN
+    RETURN NULL;
+  END IF;
+  LOOP
+    result := chr(65 + (n % 26)) || result;
+    n := (n / 26) - 1;
+    EXIT WHEN n < 0;
+  END LOOP;
+  RETURN result;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+-- One-time backfill: assign A/B/C/… to every card that doesn't have a letter
+-- yet, ordered per-box by opened_at (oldest = A). Idempotent — runs only on
+-- rows where card_letter IS NULL.
+UPDATE cards c
+SET    card_letter = idx_to_card_letter(n.idx::int)
+FROM   (
+  SELECT id,
+         (ROW_NUMBER() OVER (PARTITION BY box_id ORDER BY opened_at, id) - 1)::int AS idx
+    FROM cards
+   WHERE card_letter IS NULL
+) n
+WHERE c.id = n.id;
+
+-- Enforce uniqueness per box. Created AFTER the backfill so we don't get
+-- a conflict on legacy duplicates (there shouldn't be any, but order matters).
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_card_letter_per_box
+  ON cards(box_id, card_letter);
+
 -- box_types.kind: classify each box type as 'street', 'shop', or 'other' so
 -- the CardsPage filter can offer a "all street boxes" quick-pick (= every kind
 -- != shop). Default 'street' so the existing types light up the preset right
@@ -325,3 +382,70 @@ ALTER TABLE box_types ADD COLUMN IF NOT EXISTS kind VARCHAR(20) NOT NULL DEFAULT
 ALTER TABLE box_types DROP CONSTRAINT IF EXISTS box_types_kind_check;
 ALTER TABLE box_types ADD  CONSTRAINT box_types_kind_check
   CHECK (kind IN ('street','shop','other'));
+
+-- ─────────────────────────────────────────
+--  REAL-TIME CHANGE NOTIFICATIONS  (WebSocket pipeline)
+--
+--  Every change on a tracked table emits a row-level NOTIFY on the channel
+--  `kupot_events` with payload {"t": <table>, "o": <op>, "id": <pk>}.
+--
+--  PostgreSQL only delivers NOTIFY on transaction commit, so rolled-back
+--  changes never leak. Duplicate payloads within the same transaction are
+--  collapsed by the server (fine — one invalidation event per row is enough).
+--
+--  The Node backend's `services/dbListener.js` LISTENs on this channel and
+--  re-broadcasts each event over Socket.IO to the relevant role rooms.
+-- ─────────────────────────────────────────
+
+CREATE OR REPLACE FUNCTION kupot_notify_change() RETURNS TRIGGER AS $$
+DECLARE
+  rec_id  TEXT;
+  payload TEXT;
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    IF TG_TABLE_NAME = 'settings' THEN
+      rec_id := OLD.key;
+    ELSE
+      rec_id := OLD.id::TEXT;
+    END IF;
+  ELSE
+    IF TG_TABLE_NAME = 'settings' THEN
+      rec_id := NEW.key;
+    ELSE
+      rec_id := NEW.id::TEXT;
+    END IF;
+  END IF;
+
+  payload := json_build_object(
+    't',  TG_TABLE_NAME,
+    'o',  lower(TG_OP),
+    'id', rec_id
+  )::TEXT;
+
+  PERFORM pg_notify('kupot_events', payload);
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Attach the trigger to every tracked table. Each block is idempotent
+-- (DROP IF EXISTS + CREATE) so the schema can be re-applied safely.
+DO $do$
+DECLARE
+  tbl TEXT;
+  tracked TEXT[] := ARRAY[
+    'boxes', 'cards', 'envelopes', 'tasks', 'reports', 'events',
+    'users', 'settings', 'task_types', 'report_types', 'box_types',
+    'cities', 'location_overrides'
+  ];
+BEGIN
+  FOREACH tbl IN ARRAY tracked LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS kupot_notify_%I ON %I', tbl, tbl);
+    EXECUTE format(
+      'CREATE TRIGGER kupot_notify_%I
+         AFTER INSERT OR UPDATE OR DELETE ON %I
+         FOR EACH ROW EXECUTE FUNCTION kupot_notify_change()',
+      tbl, tbl
+    );
+  END LOOP;
+END
+$do$;

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { Geolocation } from '@capacitor/geolocation'
 import { cards as cardsApi, locationOverrides as overridesApi } from '../api/endpoints'
+import { useData } from '@shared/context/DataStoreContext'
 import { computeCardLabels } from '@shared/utils/cardLabel'
 import Modal from '@shared/components/Modal'
 import MapView from '@shared/components/MapView'
@@ -38,9 +39,16 @@ export default function CollectionPage() {
   const navigate = useNavigate()
   const location = useLocation()
 
-  const [card, setCard] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
+  // Card comes from the central store, filtered by ID. Store stays current via
+  // Socket.IO so the address/notes/last-collection date refresh automatically
+  // when an admin (or another collector) edits the card.
+  const { data: cardsList, loading } = useData('cards')
+  const card = useMemo(() => {
+    if (!cardId || !Array.isArray(cardsList)) return null
+    const id = Number(cardId)
+    return cardsList.find((c) => Number(c.id) === id) || null
+  }, [cardsList, cardId])
+  const error = null
 
   const [boxNumberInput, setBoxNumberInput] = useState('')
   const [lookupLoading, setLookupLoading] = useState(false)
@@ -64,22 +72,6 @@ export default function CollectionPage() {
     const timer = setTimeout(() => setToast(null), 3000)
     return () => clearTimeout(timer)
   }, [location.state, location.pathname, navigate])
-
-  useEffect(() => {
-    if (!cardId) {
-      setCard(null)
-      setError(null)
-      return
-    }
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-    cardsApi.get(cardId)
-      .then((data) => { if (!cancelled) setCard(data) })
-      .catch((err) => { if (!cancelled) setError(err.message || 'שגיאה בטעינת הכרטסת') })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [cardId])
 
   const cardLabel = useMemo(() => {
     if (!card) return ''
@@ -471,9 +463,17 @@ export default function CollectionPage() {
         </div>
 
         {/* Task 61: show the card location on a map so the collector can
-            visually confirm the address before scanning. */}
-        {card.geocode_status === 'ok' && card.latitude != null && card.longitude != null && (
+            visually confirm the address before scanning. Also shows for
+            `neighborhood_center` (approximate centroid pin) so the collector
+            at least knows the rough area — with a notice that it's not exact. */}
+        {(card.geocode_status === 'ok' || card.geocode_status === 'neighborhood_center')
+          && card.latitude != null && card.longitude != null && (
           <div style={{ margin: '14px 0' }}>
+            {card.geocode_status === 'neighborhood_center' && (
+              <div style={{ fontSize: 12, color: '#92400e', background: '#fef3c7', padding: '6px 10px', borderRadius: 6, marginBottom: 6 }}>
+                📍 מיקום משוער — מרכז השכונה (אין נתוני רחוב לכרטסת זו).
+              </div>
+            )}
             <MapView
               lat={Number(card.latitude)}
               lng={Number(card.longitude)}

@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { alerts as alertsApi } from '../api/endpoints'
+import { useData } from '@shared/context/DataStoreContext'
 
 const ITEMS = [
   { icon: '📦', label: 'קופות', path: '/boxes', match: '/boxes' },
@@ -11,41 +11,18 @@ const ITEMS = [
 export default function BottomNav() {
   const location = useLocation()
   const navigate = useNavigate()
-  const [alertCount, setAlertCount] = useState(0)
-  const lastFetched = useRef(0)
+  const { data: alertsData } = useData('alertsNoCollection')
+
+  // Backend returns { count, items, global_threshold }. Count drives the badge.
+  const alertCount = (() => {
+    const n = Number(alertsData?.count)
+    if (Number.isFinite(n)) return n
+    return Array.isArray(alertsData?.items) ? alertsData.items.length : 0
+  })()
 
   function isActive(item) {
     return location.pathname === item.match || location.pathname.startsWith(item.match + '/')
   }
-
-  function refresh() {
-    lastFetched.current = Date.now()
-    alertsApi.noCollection()
-      .then((data) => {
-        const n = Number(data?.count)
-        setAlertCount(Number.isFinite(n) ? n : 0)
-      })
-      .catch(() => { /* keep previous count */ })
-  }
-
-  useEffect(() => {
-    refresh()
-  }, [])
-
-  useEffect(() => {
-    if (location.pathname === '/tasks-alerts' || location.pathname.startsWith('/tasks-alerts/')) {
-      refresh()
-    }
-  }, [location.pathname])
-
-  useEffect(() => {
-    function onAlertsRefresh(e) {
-      const n = Number(e?.detail)
-      if (Number.isFinite(n)) setAlertCount(n)
-    }
-    window.addEventListener('alerts:refresh', onAlertsRefresh)
-    return () => window.removeEventListener('alerts:refresh', onAlertsRefresh)
-  }, [])
 
   return (
     <nav className="bottom-nav" role="navigation" aria-label="ניווט ראשי">

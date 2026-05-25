@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { envelopes as envelopesApi } from '../api/endpoints'
+import { useData } from '@shared/context/DataStoreContext'
 import CashroomModal from '../components/CashroomModal'
 import BarcodeScanner from '../components/BarcodeScanner'
 
@@ -28,9 +29,15 @@ function isToday(iso) {
 }
 
 export default function CashroomAdminPage() {
-  const [pending, setPending] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [errMsg,  setErrMsg]  = useState(null)
+  // Both lists come from the DataStore: socket-driven refetch keeps them
+  // current after every envelope create / amount-entry without the page
+  // having to do anything.
+  const { data: pendingData, loading: pendingLoading } = useData('pendingEnvelopes')
+  const { data: recentData,  loading: recentLoading  } = useData('recentEnteredEnvelopes')
+  const pending = useMemo(() => (Array.isArray(pendingData) ? pendingData : []), [pendingData])
+  const recent  = useMemo(() => (Array.isArray(recentData)  ? recentData  : []), [recentData])
+  const errMsg    = null
+  const recentErr = null
 
   const [scanValue, setScanValue] = useState('')
   const [scanErr,   setScanErr]   = useState(null)
@@ -40,59 +47,20 @@ export default function CashroomAdminPage() {
 
   const [openEnv, setOpenEnv] = useState(null)
 
-  const [enteredToday, setEnteredToday] = useState([])
-
-  const [recent, setRecent] = useState([])
-  const [recentLoading, setRecentLoading] = useState(true)
-  const [recentErr, setRecentErr] = useState(null)
-
-  async function loadRecent() {
-    setRecentLoading(true)
-    setRecentErr(null)
-    try {
-      const data = await envelopesApi.getRecentEntered(20)
-      setRecent(Array.isArray(data) ? data : [])
-    } catch (err) {
-      setRecentErr(err.message || 'שגיאה בטעינת מעטפות אחרונות')
-    } finally {
-      setRecentLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      setLoading(true)
-      setErrMsg(null)
-      try {
-        const data = await envelopesApi.getPending()
-        if (!cancelled) setPending(Array.isArray(data) ? data : [])
-      } catch (err) {
-        if (!cancelled) setErrMsg(err.message || 'שגיאה בטעינת מעטפות ממתינות')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    load()
-    loadRecent()
-    return () => { cancelled = true }
-  }, [])
+  // "Entered today" stats are derived from the live recent list: any envelope
+  // there with status='entered' + today's entered_at counts.
+  const enteredToday = useMemo(
+    () => recent.filter((e) => e.status === 'entered' && isToday(e.entered_at)),
+    [recent],
+  )
 
   useEffect(() => {
     if (!openEnv && !cameraOpen) scanRef.current?.focus()
   }, [openEnv, cameraOpen])
 
-  function handleEnvSaved(updated) {
-    if (!updated) return
-    setPending(prev => prev.filter(e => e.id !== updated.id))
-    if (updated.status === 'entered' && isToday(updated.entered_at || new Date().toISOString())) {
-      setEnteredToday(prev => {
-        if (prev.some(e => e.id === updated.id)) return prev
-        return [...prev, updated]
-      })
-    }
-    loadRecent()
-  }
+  // The store refetches the affected slices automatically when the backend
+  // emits an envelope-changed event. Just close the modal.
+  function handleEnvSaved() { /* store refreshes via socket */ }
 
   async function performLookup(num) {
     const value = String(num || '').trim()
@@ -196,7 +164,7 @@ export default function CashroomAdminPage() {
 
         {errMsg && <div className="alert red">{errMsg}</div>}
 
-        {loading ? (
+        {pendingLoading ? (
           <div className="loading"><div className="spinner" /><span>טוען מעטפות...</span></div>
         ) : pending.length === 0 ? (
           <div className="empty">אין מעטפות ממתינות 🎉</div>

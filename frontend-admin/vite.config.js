@@ -22,14 +22,16 @@ export default defineConfig({
     },
     // Force these to resolve to this app's node_modules even when imported
     // from frontend-shared (which has no node_modules of its own).
-    dedupe: ['react', 'react-dom', 'react-router-dom', '@vis.gl/react-google-maps'],
+    dedupe: ['react', 'react-dom', 'react-router-dom', '@vis.gl/react-google-maps', 'socket.io-client'],
   },
   server: {
     port: 5173,
     open: true,
     proxy: {
-      '/api':     { target: 'http://localhost:3000', changeOrigin: true },
-      '/uploads': { target: 'http://localhost:3000', changeOrigin: true },
+      '/api':       { target: 'http://localhost:3000', changeOrigin: true },
+      '/uploads':   { target: 'http://localhost:3000', changeOrigin: true },
+      // Socket.IO needs ws:true for the WebSocket upgrade handshake.
+      '/socket.io': { target: 'http://localhost:3000', changeOrigin: true, ws: true },
     },
   },
   preview: {
