@@ -38,6 +38,8 @@ export default function BoxesPage() {
 
   // create-box modal
   const [boxModalOpen, setBoxModalOpen] = useState(false)
+  // edit-box modal (holds the box being edited, or null)
+  const [editingBox, setEditingBox] = useState(null)
 
   // per-row "in flight" state for status mutations (mark unusable / restore)
   const [statusBusyId, setStatusBusyId] = useState(null)
@@ -45,6 +47,19 @@ export default function BoxesPage() {
   function handleBoxCreated(saved) {
     if (!saved) return
     setAllBoxes(prev => [...prev, saved])
+  }
+
+  function handleBoxUpdated(saved) {
+    if (!saved) return
+    // PUT /api/boxes/:id returns the bare boxes row without the joined
+    // box_type_name — re-derive it from the loaded `types` list so the
+    // table cell updates immediately without a full refetch.
+    const typeName = saved.box_type_id != null
+      ? (types.find(t => t.id === saved.box_type_id)?.name ?? null)
+      : null
+    setAllBoxes(prev => prev.map(b =>
+      b.id === saved.id ? { ...b, ...saved, box_type_name: typeName } : b
+    ))
   }
 
   // load boxes + cards (cards needed to show last-card label/date for ex-active boxes)
@@ -310,6 +325,12 @@ export default function BoxesPage() {
                           >צור משימת התקנה</button>
                           <button
                             className="btn sm"
+                            onClick={() => setEditingBox(b)}
+                            disabled={busy}
+                            title="עריכת פרטי הקופה (מספר, סוג, הערות)"
+                          >✏️ עריכה</button>
+                          <button
+                            className="btn sm"
                             onClick={() => handleMarkUnusable(b)}
                             disabled={busy}
                             title="העברת הקופה לסטטוס לא-שמישה (תיעלם מרשימות הגביה)"
@@ -367,6 +388,12 @@ export default function BoxesPage() {
                         <td>{address || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
                         <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                           <button
+                            className="btn sm"
+                            onClick={(e) => { e.stopPropagation(); setEditingBox(b) }}
+                            disabled={busy}
+                            title="עריכת פרטי הקופה (מספר, סוג, הערות)"
+                          >✏️ עריכה</button>
+                          <button
                             className="btn sm danger"
                             onClick={(e) => { e.stopPropagation(); handleMarkUnusable(b) }}
                             disabled={busy}
@@ -417,7 +444,13 @@ export default function BoxesPage() {
                           ) : <span style={{ color: 'var(--text3)' }}>—</span>}
                         </td>
                         <td>{b.notes || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
-                        <td>
+                        <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          <button
+                            className="btn sm"
+                            onClick={() => setEditingBox(b)}
+                            disabled={busy}
+                            title="עריכת פרטי הקופה (מספר, סוג, הערות)"
+                          >✏️ עריכה</button>
                           <button
                             className="btn sm primary"
                             onClick={() => handleRestoreUsable(b)}
@@ -445,6 +478,13 @@ export default function BoxesPage() {
         open={boxModalOpen}
         onClose={() => setBoxModalOpen(false)}
         onSaved={handleBoxCreated}
+      />
+
+      <BoxModal
+        open={editingBox != null}
+        box={editingBox || undefined}
+        onClose={() => setEditingBox(null)}
+        onSaved={handleBoxUpdated}
       />
     </div>
   )
