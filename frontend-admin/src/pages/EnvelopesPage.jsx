@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { envelopes as envelopesApi, cards as cardsApi } from '../api/endpoints'
+import { useData } from '@shared/context/DataStoreContext'
 import { computeCardLabels } from '@shared/utils/cardLabel'
 import CashroomModal from '../components/CashroomModal'
 import { exportEnvelopes } from '../utils/exportToCsv'
@@ -35,10 +35,12 @@ function isThisMonth(iso) {
 export default function EnvelopesPage() {
   const navigate = useNavigate()
 
-  const [allEnvs,   setAllEnvs]   = useState([])
-  const [allCards,  setAllCards]  = useState([])
-  const [loading,   setLoading]   = useState(true)
-  const [errMsg,    setErrMsg]    = useState(null)
+  // Envelopes + cards come from the central DataStore.
+  const { data: envsData,  loading } = useData('envelopes')
+  const { data: cardsData          } = useData('cards')
+  const allEnvs  = useMemo(() => (Array.isArray(envsData)  ? envsData  : []), [envsData])
+  const allCards = useMemo(() => (Array.isArray(cardsData) ? cardsData : []), [cardsData])
+  const errMsg = null
 
   // filters
   const [search,    setSearch]    = useState('')
@@ -51,35 +53,8 @@ export default function EnvelopesPage() {
   // modal
   const [openEnv, setOpenEnv] = useState(null)
 
-  function handleEnvSaved(updated) {
-    if (!updated) return
-    setAllEnvs(prev => prev.map(e => e.id === updated.id ? { ...e, ...updated } : e))
-  }
-
-  // load envelopes + cards
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      setLoading(true)
-      setErrMsg(null)
-      try {
-        const [e, c] = await Promise.all([
-          envelopesApi.getAll(),
-          cardsApi.getAll().catch(() => []),
-        ])
-        if (!cancelled) {
-          setAllEnvs(Array.isArray(e) ? e : [])
-          setAllCards(Array.isArray(c) ? c : [])
-        }
-      } catch (err) {
-        if (!cancelled) setErrMsg(err.message || 'שגיאה בטעינת מעטפות')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [])
+  // Store refresh via socket after a save — no local patch needed.
+  function handleEnvSaved() { /* store refreshes via socket */ }
 
   // Map<cardId, label> across all cards (so letters reflect true chronological order)
   const labels = useMemo(() => computeCardLabels(allCards), [allCards])

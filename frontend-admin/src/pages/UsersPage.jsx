@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { users as usersApi } from '../api/endpoints'
+import React, { useMemo, useState } from 'react'
+import { useData } from '@shared/context/DataStoreContext'
 import UserModal from '../components/UserModal'
 
 const ROLE_LABELS = {
@@ -50,9 +50,10 @@ function AreaTags({ rules }) {
 }
 
 export default function UsersPage() {
-  const [allUsers, setAllUsers] = useState([])
-  const [loading,  setLoading]  = useState(true)
-  const [errMsg,   setErrMsg]   = useState(null)
+  // Users come from the central DataStore.
+  const { data: usersData, loading } = useData('users')
+  const allUsers = useMemo(() => (Array.isArray(usersData) ? usersData : []), [usersData])
+  const errMsg = null
 
   // filters
   const [search, setSearch] = useState('')
@@ -67,39 +68,9 @@ export default function UsersPage() {
   function openEdit(u)  { setEditUser(u);    setModalOpen(true) }
   function closeModal() { setModalOpen(false); setEditUser(null) }
 
-  function handleSaved(saved) {
-    if (!saved) return
-    setAllUsers(prev => {
-      const idx = prev.findIndex(u => u.id === saved.id)
-      if (idx >= 0) {
-        const next = prev.slice()
-        next[idx] = { ...prev[idx], ...saved }
-        return next
-      }
-      return [...prev, saved]
-    })
-  }
-  function handleDeactivated(id) {
-    setAllUsers(prev => prev.map(u => u.id === id ? { ...u, active: false } : u))
-  }
-
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      setLoading(true)
-      setErrMsg(null)
-      try {
-        const data = await usersApi.getAll()
-        if (!cancelled) setAllUsers(Array.isArray(data) ? data : [])
-      } catch (err) {
-        if (!cancelled) setErrMsg(err.message || 'שגיאה בטעינת משתמשים')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [])
+  // Store refresh via socket after a save / deactivate — no local patch needed.
+  function handleSaved()       { /* store refreshes via socket */ }
+  function handleDeactivated() { /* store refreshes via socket */ }
 
   // counts
   const stats = useMemo(() => {

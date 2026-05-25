@@ -1,10 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  alerts as alertsApi,
-  reports as reportsApi,
-  cards as cardsApi,
-} from '../api/endpoints'
+import { useData } from '@shared/context/DataStoreContext'
 import { computeCardLabels } from '@shared/utils/cardLabel'
 import ReportModal from '../components/ReportModal'
 import CloseReportModal from '@shared/components/CloseReportModal'
@@ -31,13 +27,20 @@ export default function AlertsPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
 
-  const [globalThreshold, setGlobalThreshold] = useState(30)
-  const [items,           setItems]    = useState([])    // no-collection items
-  const [openReports,     setOpenReports] = useState([])
-  const [allCards,        setAllCards] = useState([])
-  const [loading,         setLoading]  = useState(true)
-  const [errMsg,          setErrMsg]   = useState(null)
-  const [reloadCounter,   setReloadCounter] = useState(0)
+  // Pulled from the central DataStore — populated at login, kept current
+  // by Socket.IO events on cards/events/settings/reports.
+  const { data: ncData,        loading: ncLoading       } = useData('alertsNoCollection')
+  const { data: reportsAll,    loading: reportsLoading  } = useData('reports')
+  const { data: cardsData                              } = useData('cards')
+  const loading = ncLoading || reportsLoading
+  const globalThreshold = ncData?.global_threshold ?? 30
+  const items = useMemo(() => (Array.isArray(ncData?.items) ? ncData.items : []), [ncData])
+  const openReports = useMemo(
+    () => (Array.isArray(reportsAll) ? reportsAll.filter((r) => r.status === 'open') : []),
+    [reportsAll],
+  )
+  const allCards = useMemo(() => (Array.isArray(cardsData) ? cardsData : []), [cardsData])
+  const errMsg = null
 
   // modal
   const [openReport,  setOpenReport]  = useState(null)
@@ -53,43 +56,8 @@ export default function AlertsPage() {
   const [repSearch, setRepSearch] = useState('')
   const [repType,   setRepType]   = useState('')
 
-  function handleReportSaved(updated) {
-    if (!updated) return
-    setOpenReports(prev => {
-      // If the report was closed/converted, remove it from the "open" panel.
-      if (updated.status && updated.status !== 'open') {
-        return prev.filter(r => r.id !== updated.id)
-      }
-      return prev.map(r => r.id === updated.id ? { ...r, ...updated } : r)
-    })
-  }
-
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      setLoading(true)
-      setErrMsg(null)
-      try {
-        const [nc, rep, c] = await Promise.all([
-          alertsApi.noCollection(),
-          reportsApi.getAll({ status: 'open' }).catch(() => []),
-          cardsApi.getAll().catch(() => []),
-        ])
-        if (!cancelled) {
-          setGlobalThreshold(nc?.global_threshold ?? 30)
-          setItems(Array.isArray(nc?.items) ? nc.items : [])
-          setOpenReports(Array.isArray(rep) ? rep : [])
-          setAllCards(Array.isArray(c) ? c : [])
-        }
-      } catch (err) {
-        if (!cancelled) setErrMsg(err.message || 'שגיאה בטעינת התראות')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [reloadCounter])
+  // Store refresh via socket after a save — no local patch needed.
+  function handleReportSaved() { /* store refreshes via socket */ }
 
   const labels = useMemo(() => computeCardLabels(allCards), [allCards])
 
@@ -478,10 +446,7 @@ export default function AlertsPage() {
         <CloseReportModal
           report={closeReport}
           onClose={() => setCloseReport(null)}
-          onClosed={(updated) => {
-            handleReportSaved(updated)
-            setReloadCounter(c => c + 1)
-          }}
+          onClosed={handleReportSaved}
         />
       )}
     </div>

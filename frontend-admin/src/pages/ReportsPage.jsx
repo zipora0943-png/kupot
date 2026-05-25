@@ -1,10 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  reports as reportsApi,
-  cards as cardsApi,
-  reportTypes as reportTypesApi,
-} from '../api/endpoints'
+import { useData, useBootstrap } from '@shared/context/DataStoreContext'
 import { computeCardLabels } from '@shared/utils/cardLabel'
 import ReportModal from '../components/ReportModal'
 import ManualReportModal from '../components/ManualReportModal'
@@ -32,12 +28,17 @@ export default function ReportsPage() {
   const canCreate = user?.role === 'admin'
   const canCreateReport = user?.role === 'admin' || user?.role === 'collector'
 
-  const [allReports, setAllReports] = useState([])
-  const [allCards,   setAllCards]   = useState([])
-  const [types,      setTypes]      = useState([])
-  const [loading,    setLoading]    = useState(true)
-  const [errMsg,     setErrMsg]     = useState(null)
-  const [reloadCounter, setReloadCounter] = useState(0)
+  // Reports + cards + report-types come from the central DataStore.
+  const { data: reportsData, loading } = useData('reports')
+  const { data: cardsData            } = useData('cards')
+  const bootstrap = useBootstrap()
+  const allReports = useMemo(() => (Array.isArray(reportsData) ? reportsData : []), [reportsData])
+  const allCards   = useMemo(() => (Array.isArray(cardsData)   ? cardsData   : []), [cardsData])
+  const types      = useMemo(
+    () => (Array.isArray(bootstrap?.report_types) ? bootstrap.report_types : []),
+    [bootstrap],
+  )
+  const errMsg = null
 
   // filters
   const [search,    setSearch]    = useState('')
@@ -49,40 +50,8 @@ export default function ReportsPage() {
   const [showCreate,  setShowCreate]  = useState(false)
   const [closeReport, setCloseReport] = useState(null)
 
-  function handleReportSaved(updated) {
-    if (!updated) return
-    setAllReports(prev => prev.map(r =>
-      r.id === updated.id ? { ...r, ...updated } : r
-    ))
-  }
-
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      setLoading(true)
-      setErrMsg(null)
-      try {
-        const [r, c] = await Promise.all([
-          reportsApi.getAll(),
-          cardsApi.getAll().catch(() => []),
-        ])
-        if (!cancelled) {
-          setAllReports(Array.isArray(r) ? r : [])
-          setAllCards(Array.isArray(c) ? c : [])
-        }
-      } catch (err) {
-        if (!cancelled) setErrMsg(err.message || 'שגיאה בטעינת דיווחים')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [reloadCounter])
-
-  useEffect(() => {
-    reportTypesApi.getAll().then(d => setTypes(Array.isArray(d) ? d : [])).catch(() => {})
-  }, [])
+  // Store refresh via socket after a save — no local patch needed.
+  function handleReportSaved() { /* store refreshes via socket */ }
 
   // Card labels (1019A...)
   const labels = useMemo(() => computeCardLabels(allCards), [allCards])
@@ -294,7 +263,7 @@ export default function ReportsPage() {
       {showCreate && (
         <ManualReportModal
           onClose={() => setShowCreate(false)}
-          onCreated={() => setReloadCounter(c => c + 1)}
+          onCreated={() => { /* store refreshes via socket */ }}
         />
       )}
 

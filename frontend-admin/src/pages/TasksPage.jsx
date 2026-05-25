@@ -1,11 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  tasks as tasksApi,
-  cards as cardsApi,
-  reports as reportsApi,
-  taskTypes as taskTypesApi,
-} from '../api/endpoints'
+import { useData, useBootstrap } from '@shared/context/DataStoreContext'
 import { computeCardLabels } from '@shared/utils/cardLabel'
 import TaskExecModal from '../components/TaskExecModal'
 import TaskExecDetailsModal from '../components/TaskExecDetailsModal'
@@ -29,12 +24,20 @@ export default function TasksPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
 
-  const [allTasks,   setAllTasks]   = useState([])
-  const [allCards,   setAllCards]   = useState([])
-  const [allReports, setAllReports] = useState([])
-  const [types,      setTypes]      = useState([])
-  const [loading,    setLoading]    = useState(true)
-  const [errMsg,     setErrMsg]     = useState(null)
+  // Tasks, cards, reports come from the central DataStore — populated at
+  // login, kept live via Socket.IO. Task types are part of /initial-load.
+  const { data: tasksData,   loading } = useData('tasks')
+  const { data: cardsData            } = useData('cards')
+  const { data: reportsData          } = useData('reports')
+  const bootstrap = useBootstrap()
+  const allTasks   = useMemo(() => (Array.isArray(tasksData)   ? tasksData   : []), [tasksData])
+  const allCards   = useMemo(() => (Array.isArray(cardsData)   ? cardsData   : []), [cardsData])
+  const allReports = useMemo(() => (Array.isArray(reportsData) ? reportsData : []), [reportsData])
+  const types      = useMemo(
+    () => (Array.isArray(bootstrap?.task_types) ? bootstrap.task_types : []),
+    [bootstrap],
+  )
+  const errMsg = null
 
   // filters
   const [search,    setSearch]    = useState('')
@@ -64,35 +67,13 @@ export default function TasksPage() {
   // not-executed modal
   const [notExecTask, setNotExecTask] = useState(null)
 
-  function handleExecSuccess(updatedTask) {
-    if (!updatedTask) return
-    // patch the row in-place so the table reflects the new status / executed_at
-    setAllTasks(prev => prev.map(t => t.id === updatedTask.id ? { ...t, ...updatedTask } : t))
-  }
-
-  function handleCancelled(updatedTask) {
-    if (!updatedTask) return
-    setAllTasks(prev => prev.map(t => t.id === updatedTask.id ? { ...t, ...updatedTask } : t))
-  }
-
-  function handleNotExecuted(updatedTask) {
-    if (!updatedTask) return
-    setAllTasks(prev => prev.map(t => t.id === updatedTask.id ? { ...t, ...updatedTask } : t))
-  }
-
-  function handleTaskSaved(saved) {
-    if (!saved) return
-    setAllTasks(prev => {
-      const idx = prev.findIndex(t => t.id === saved.id)
-      if (idx >= 0) {
-        const next = prev.slice()
-        next[idx] = { ...prev[idx], ...saved }
-        return next
-      }
-      // newly created — backend returns row without joined fields, prepend it
-      return [saved, ...prev]
-    })
-  }
+  // After mutations the backend NOTIFY trigger refreshes the relevant store
+  // slices. Modal callbacks are kept for API compatibility but no longer need
+  // to patch local state.
+  function handleExecSuccess() { /* store refreshes via socket */ }
+  function handleCancelled()   { /* store refreshes via socket */ }
+  function handleNotExecuted() { /* store refreshes via socket */ }
+  function handleTaskSaved()   { /* store refreshes via socket */ }
 
   function openCreate() {
     setEditTask(null)
@@ -106,36 +87,6 @@ export default function TasksPage() {
     setTaskModalOpen(false)
     setEditTask(null)
   }
-
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      setLoading(true)
-      setErrMsg(null)
-      try {
-        const [t, c, r] = await Promise.all([
-          tasksApi.getAll(),
-          cardsApi.getAll().catch(() => []),
-          reportsApi.getAll().catch(() => []),
-        ])
-        if (!cancelled) {
-          setAllTasks(Array.isArray(t) ? t : [])
-          setAllCards(Array.isArray(c) ? c : [])
-          setAllReports(Array.isArray(r) ? r : [])
-        }
-      } catch (err) {
-        if (!cancelled) setErrMsg(err.message || 'שגיאה בטעינת משימות')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [])
-
-  useEffect(() => {
-    taskTypesApi.getAll().then(d => setTypes(Array.isArray(d) ? d : [])).catch(() => {})
-  }, [])
 
   // Card labels (1019A...)
   const labels = useMemo(() => computeCardLabels(allCards), [allCards])
