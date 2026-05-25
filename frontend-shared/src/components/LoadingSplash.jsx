@@ -2,6 +2,56 @@ import React from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useDataStoreReady, useDataStoreProgress } from '../context/DataStoreContext'
 
+// Simple inline SVG of a tzedakah box (קופת צדקה): rounded indigo box with
+// a coin slot on top, a falling ₪ coin above the slot, and a heart on the
+// front face to evoke charity. Animated softly via the parent's "breathe"
+// keyframe — no internal animation here.
+function TzedakahBoxIcon({ size = 56 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="kupot-box-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor="#6366f1" />
+          <stop offset="100%" stopColor="#4338ca" />
+        </linearGradient>
+        <linearGradient id="kupot-coin-grad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%"   stopColor="#fde68a" />
+          <stop offset="100%" stopColor="#f59e0b" />
+        </linearGradient>
+      </defs>
+
+      {/* Coin floating above the slot */}
+      <circle cx="32" cy="9" r="5.5" fill="url(#kupot-coin-grad)" stroke="#b45309" strokeWidth="0.8" />
+      <text
+        x="32" y="12"
+        fontSize="7" fontWeight="800"
+        fill="#78350f" textAnchor="middle"
+        fontFamily='system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
+      >₪</text>
+
+      {/* Box lid + slot */}
+      <rect x="11" y="20" width="42" height="6" rx="2" fill="url(#kupot-box-grad)" />
+      <rect x="22" y="22" width="20" height="2"  rx="1" fill="#1e1b4b" />
+
+      {/* Box body */}
+      <rect x="13" y="26" width="38" height="28" rx="3" fill="url(#kupot-box-grad)" />
+
+      {/* Heart on front — symbol of tzedakah */}
+      <path
+        d="M32 47.5
+           c-4 -2 -7 -4.6 -7 -8.5
+           c0 -1.9 1.6 -3.5 3.6 -3.5
+           c1.2 0 2.3 0.7 3 1.7
+           c0.7 -1 1.8 -1.7 3 -1.7
+           c2 0 3.6 1.6 3.6 3.5
+           c0 3.9 -3 6.5 -7 8.5 z"
+        fill="#fff"
+        opacity="0.92"
+      />
+    </svg>
+  )
+}
+
 // Gmail-style loading splash: clean white background, large centered logo
 // mark with breathing animation, prominent multi-color progress bar across
 // the middle of the viewport, minimal text. Renders `children` once the
@@ -69,11 +119,12 @@ export default function LoadingSplash({ children }) {
         }} />
         <div style={{
           position: 'relative',
-          fontSize: 44,
-          lineHeight: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           animation: 'kupot-splash-breathe 2.4s ease-in-out infinite',
         }}>
-          💰
+          <TzedakahBoxIcon size={60} />
         </div>
       </div>
 
