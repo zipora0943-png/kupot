@@ -228,7 +228,7 @@ export default function CardsPage() {
       const q = search.trim().toLowerCase()
       list = list.filter(c => {
         const label = labels.get(c.id) || ''
-        return [c.iron_number, c.custom_name, c.city, c.neighborhood, c.street, c.collector_name, c.id, label]
+        return [c.iron_number, c.custom_name, c.city, c.neighborhood, c.street, c.collector_name, label]
           .filter(Boolean)
           .some(v => String(v).toLowerCase().includes(q))
       })
