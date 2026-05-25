@@ -16,6 +16,7 @@ export default function BoxTypeModal({ open, item, onClose, onSaved, onDeleted }
   const isEdit = !!item
 
   const [name, setName] = useState('')
+  const [kind, setKind] = useState('street')
   const [submitting, setSubmitting] = useState(false)
   const [errMsg, setErrMsg] = useState(null)
 
@@ -23,6 +24,7 @@ export default function BoxTypeModal({ open, item, onClose, onSaved, onDeleted }
     if (!open) return
     setErrMsg(null); setSubmitting(false)
     setName(isEdit ? (item.name || '') : '')
+    setKind(isEdit ? (item.kind || 'street') : 'street')
   }, [open, isEdit, item])
 
   async function handleSave() {
@@ -30,7 +32,7 @@ export default function BoxTypeModal({ open, item, onClose, onSaved, onDeleted }
     if (!name.trim()) return setErrMsg('יש להזין שם')
     setSubmitting(true)
     try {
-      const body = { name: name.trim() }
+      const body = { name: name.trim(), kind }
       const saved = isEdit
         ? await boxTypesApi.update(item.id, body)
         : await boxTypesApi.create(body)
@@ -87,6 +89,18 @@ export default function BoxTypeModal({ open, item, onClose, onSaved, onDeleted }
       <div className="field" style={{ marginBottom: 12 }}>
         <label>שם סוג הקופה *</label>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="למשל: גדולה" autoFocus />
+      </div>
+
+      <div className="field" style={{ marginBottom: 12 }}>
+        <label>קטגוריה</label>
+        <select value={kind} onChange={(e) => setKind(e.target.value)}>
+          <option value="street">קופת רחוב</option>
+          <option value="shop">קופת חנות</option>
+          <option value="other">אחר</option>
+        </select>
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
+          הקיצור "כל קופות הרחוב" בסינון הכרטסות בוחר את כל הסוגים שאינם "חנות".
+        </div>
       </div>
 
       {errMsg && <div className="alert red">{errMsg}</div>}

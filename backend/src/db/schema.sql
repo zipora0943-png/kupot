@@ -316,3 +316,12 @@ CREATE TABLE IF NOT EXISTS cities (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_cities_district ON cities(district);
+
+-- box_types.kind: classify each box type as 'street', 'shop', or 'other' so
+-- the CardsPage filter can offer a "all street boxes" quick-pick (= every kind
+-- != shop). Default 'street' so the existing types light up the preset right
+-- after migration; admin re-tags the shop types from SettingsPage.
+ALTER TABLE box_types ADD COLUMN IF NOT EXISTS kind VARCHAR(20) NOT NULL DEFAULT 'street';
+ALTER TABLE box_types DROP CONSTRAINT IF EXISTS box_types_kind_check;
+ALTER TABLE box_types ADD  CONSTRAINT box_types_kind_check
+  CHECK (kind IN ('street','shop','other'));

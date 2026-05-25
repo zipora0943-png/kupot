@@ -430,15 +430,33 @@ export default function SettingsPage() {
           ) : boxList.length === 0 ? (
             <div className="empty">אין סוגי קופות להצגה</div>
           ) : (
-            boxList.map(t => (
-              <div key={t.id} style={ITEM_ROW_STYLE}>
-                <div style={{ fontWeight: 600 }}>{t.name}</div>
-                <button
-                  className="btn sm"
-                  onClick={() => openModal('box', t)}
-                >עריכה</button>
-              </div>
-            ))
+            boxList.map(t => {
+              const kindLabel = t.kind === 'shop'  ? 'חנות'
+                              : t.kind === 'other' ? 'אחר'
+                              : 'רחוב'
+              const kindColor = t.kind === 'shop'  ? 'var(--yellow, #b45309)'
+                              : t.kind === 'other' ? 'var(--text3)'
+                              : 'var(--green, #15803d)'
+              return (
+                <div key={t.id} style={ITEM_ROW_STYLE}>
+                  <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span>{t.name}</span>
+                    <span style={{
+                      fontSize: 11,
+                      fontWeight: 500,
+                      padding: '2px 8px',
+                      borderRadius: 10,
+                      background: 'var(--bg2, rgba(0,0,0,0.05))',
+                      color: kindColor,
+                    }}>{kindLabel}</span>
+                  </div>
+                  <button
+                    className="btn sm"
+                    onClick={() => openModal('box', t)}
+                  >עריכה</button>
+                </div>
+              )
+            })
           )}
           <button
             className="btn sm"

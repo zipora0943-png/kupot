@@ -80,7 +80,7 @@ router.get('/report-types', async (_req, res, next) => {
 router.get('/box-types', async (_req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, name FROM box_types ORDER BY id`
+      `SELECT id, name, kind FROM box_types ORDER BY id`
     );
     res.json(rows);
   } catch (err) { next(err); }
@@ -254,14 +254,19 @@ router.delete('/report-types/:id', requireRole('admin'), async (req, res, next) 
 });
 
 // ── BOX TYPES ─────────────────────────────────────────────────────
+const BOX_TYPE_KINDS = ['street', 'shop', 'other'];
+
 router.post('/box-types', requireRole('admin'), async (req, res, next) => {
-  const { name } = req.body || {};
+  const { name, kind } = req.body || {};
   const e = validateString(name, 'name');
   if (e) return badRequest(res, e);
+  if (kind !== undefined && !BOX_TYPE_KINDS.includes(kind))
+    return badRequest(res, `kind must be one of: ${BOX_TYPE_KINDS.join(', ')}`);
   try {
     const { rows } = await pool.query(
-      `INSERT INTO box_types (name) VALUES ($1) RETURNING id, name`,
-      [name.trim()]
+      `INSERT INTO box_types (name, kind) VALUES ($1, COALESCE($2, 'street'))
+       RETURNING id, name, kind`,
+      [name.trim(), kind || null]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -274,15 +279,27 @@ router.put('/box-types/:id', requireRole('admin'), async (req, res, next) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return badRequest(res, 'Invalid id');
 
-  const { name } = req.body || {};
-  if (name === undefined) return badRequest(res, 'No fields to update');
-  const e = validateString(name, 'name');
-  if (e) return badRequest(res, e);
+  const { name, kind } = req.body || {};
+  const sets = [];
+  const params = [];
+  if (name !== undefined) {
+    const e = validateString(name, 'name');
+    if (e) return badRequest(res, e);
+    params.push(name.trim()); sets.push(`name = $${params.length}`);
+  }
+  if (kind !== undefined) {
+    if (!BOX_TYPE_KINDS.includes(kind))
+      return badRequest(res, `kind must be one of: ${BOX_TYPE_KINDS.join(', ')}`);
+    params.push(kind); sets.push(`kind = $${params.length}`);
+  }
+  if (sets.length === 0) return badRequest(res, 'No fields to update');
+  params.push(id);
 
   try {
     const { rows } = await pool.query(
-      `UPDATE box_types SET name = $1 WHERE id = $2 RETURNING id, name`,
-      [name.trim(), id]
+      `UPDATE box_types SET ${sets.join(', ')} WHERE id = $${params.length}
+       RETURNING id, name, kind`,
+      params
     );
     if (!rows[0]) return res.status(404).json({ error: 'Not found' });
     res.json(rows[0]);

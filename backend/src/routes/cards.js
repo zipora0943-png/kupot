@@ -59,7 +59,7 @@ async function collectorCanSee(cardId, userId) {
 router.get('/', async (req, res, next) => {
   const { city, neighborhood, street, collector_id, status, custom_name, receipt_required, box_id } = req.query;
 
-  let q = `SELECT c.*, b.iron_number,
+  let q = `SELECT c.*, b.iron_number, b.box_type_id, bt.name AS box_type_name,
                   rc.ids       AS resolved_collector_ids,
                   rc.names_arr AS resolved_collector_names,
                   rc.names     AS resolved_collector_name,
@@ -71,6 +71,7 @@ router.get('/', async (req, res, next) => {
                   EXISTS (SELECT 1 FROM tasks   t WHERE t.card_id = c.id AND t.status IN ('open','in_progress')) AS has_open_task
              FROM cards c
              JOIN boxes b ON b.id = c.box_id
+             LEFT JOIN box_types bt ON bt.id = b.box_type_id
              ${RESOLVED_COLLECTORS_LATERAL}
             WHERE 1=1`;
   const p = [];

@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { cards as cardsApi, alerts as alertsApi, reports as reportsApi } from '../api/endpoints'
+import { cards as cardsApi, alerts as alertsApi, reports as reportsApi, boxTypes as boxTypesApi } from '../api/endpoints'
 import { computeCardLabels } from '@shared/utils/cardLabel'
 import { exportCards } from '../utils/exportToCsv'
 import { useSortable, SortableTh } from '../utils/sortable.jsx'
@@ -10,12 +10,135 @@ const STATUS_LABELS = {
   closed: { label: 'סגורה',     pill: 'gray'  },
 }
 
+// Multi-select dropdown — used by the "סוג קופה" filter. Renders a button that
+// opens a popover with one checkbox per option; `value` is an array of ids.
+// `presets` (optional) is an array of { label, ids } rendered as quick-pick
+// buttons at the top of the popover.
+function MultiSelect({ options, value, onChange, placeholder = 'בחר…', allLabel = 'הכול', presets }) {
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onDocClick(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [open])
+
+  const selected = new Set(value.map(Number))
+  function toggle(id) {
+    const n = Number(id)
+    if (selected.has(n)) onChange(value.filter(v => Number(v) !== n))
+    else onChange([...value, n])
+  }
+
+  const summary = value.length === 0
+    ? allLabel
+    : value.length === 1
+      ? (options.find(o => Number(o.id) === Number(value[0]))?.name ?? placeholder)
+      : `${value.length} נבחרו`
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          background: 'var(--surface)',
+          color: 'var(--text)',
+          border: '1px solid var(--border)',
+          borderRadius: 6,
+          padding: '8px 12px',
+          fontSize: 14,
+          cursor: 'pointer',
+          minWidth: 160,
+          textAlign: 'right',
+        }}
+      >{summary} ▾</button>
+      {open && (
+        <div style={{
+          position: 'absolute',
+          top: 'calc(100% + 4px)',
+          right: 0,
+          zIndex: 20,
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 6,
+          padding: 6,
+          minWidth: 220,
+          maxHeight: 320,
+          overflowY: 'auto',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+        }}>
+          {Array.isArray(presets) && presets.length > 0 && (
+            <div style={{
+              display: 'flex', flexWrap: 'wrap', gap: 4,
+              padding: '4px 4px 8px',
+              borderBottom: '1px solid var(--border)',
+              marginBottom: 6,
+            }}>
+              {presets.map((p, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  className="btn sm"
+                  onClick={() => onChange(p.ids.map(Number))}
+                  title={p.title}
+                >{p.label}</button>
+              ))}
+            </div>
+          )}
+          {options.length === 0 && (
+            <div style={{ padding: 8, color: 'var(--text3)', fontSize: 13 }}>אין סוגים</div>
+          )}
+          {options.map(o => (
+            <label
+              key={o.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '6px 8px',
+                cursor: 'pointer',
+                fontSize: 14,
+                borderRadius: 4,
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              <input
+                type="checkbox"
+                checked={selected.has(Number(o.id))}
+                onChange={() => toggle(o.id)}
+              />
+              <span>{o.name}</span>
+            </label>
+          ))}
+          {value.length > 0 && (
+            <div style={{ borderTop: '1px solid var(--border)', marginTop: 6, paddingTop: 6 }}>
+              <button
+                type="button"
+                className="btn sm"
+                onClick={() => onChange([])}
+                style={{ width: '100%' }}
+              >נקה בחירה</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function CardsPage() {
   const navigate = useNavigate()
 
   const [allCards, setAllCards]   = useState([])
   const [loading, setLoading]     = useState(true)
   const [errMsg, setErrMsg]       = useState(null)
+  const [types,   setTypes]       = useState([])
 
   // stats
   const [alertCount,    setAlertCount]    = useState(0)
@@ -26,6 +149,7 @@ export default function CardsPage() {
   const [status,    setStatus]    = useState('')
   const [city,      setCity]      = useState('')
   const [collector, setCollector] = useState('')
+  const [typeIds,   setTypeIds]   = useState([])     // array of selected box_type_id (numbers)
   const [statusTab, setStatusTab] = useState('active') // 'active' | 'all'
 
   // load cards once on mount
@@ -53,6 +177,11 @@ export default function CardsPage() {
       .then(d => setAlertCount(typeof d?.count === 'number' ? d.count : (Array.isArray(d?.items) ? d.items.length : 0)))
       .catch(() => {})
     reportsApi.getAll({ status: 'open' }).then(d => setOpenReports(Array.isArray(d) ? d.length : 0)).catch(() => {})
+  }, [])
+
+  // load box types (best-effort) — used by the multi-select type filter
+  useEffect(() => {
+    boxTypesApi.getAll().then(d => setTypes(Array.isArray(d) ? d : [])).catch(() => {})
   }, [])
 
   // distinct values for filter dropdowns
@@ -91,6 +220,10 @@ export default function CardsPage() {
       list = list.filter(c => Array.isArray(c.collector_ids)
         && c.collector_ids.some(id => Number(id) === target))
     }
+    if (typeIds.length > 0) {
+      const set = new Set(typeIds.map(Number))
+      list = list.filter(c => c.box_type_id != null && set.has(Number(c.box_type_id)))
+    }
     if (search) {
       const q = search.trim().toLowerCase()
       list = list.filter(c => {
@@ -101,7 +234,7 @@ export default function CardsPage() {
       })
     }
     return list
-  }, [allCards, statusTab, status, city, collector, search, labels])
+  }, [allCards, statusTab, status, city, collector, typeIds, search, labels])
 
   const activeCount = useMemo(
     () => allCards.filter(c => c.status === 'active').length,
@@ -109,7 +242,7 @@ export default function CardsPage() {
   )
 
   function resetFilters() {
-    setSearch(''); setStatus(''); setCity(''); setCollector('')
+    setSearch(''); setStatus(''); setCity(''); setCollector(''); setTypeIds([])
   }
 
   const sortAccessors = useMemo(() => ({
@@ -183,6 +316,22 @@ export default function CardsPage() {
               <option value="">כל הגובים</option>
               {collectors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
+          </div>
+          <div className="field">
+            <label>סוג קופה</label>
+            <MultiSelect
+              options={types}
+              value={typeIds}
+              onChange={setTypeIds}
+              allLabel="כל הסוגים"
+              presets={[
+                {
+                  label: 'כל קופות הרחוב',
+                  title: 'כל הסוגים שאינם מסומנים כ"חנות" (מוגדר בדף ההגדרות)',
+                  ids: types.filter(t => t.kind !== 'shop').map(t => t.id),
+                },
+              ]}
+            />
           </div>
           <button className="btn sm" onClick={resetFilters}>↺ איפוס</button>
         </div>
