@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from '@shared/context/AuthContext'
 import ProtectedRoute from '@shared/components/ProtectedRoute'
 import AdminDataStore from './context/AdminDataStore'
 import LoadingSplash from '@shared/components/LoadingSplash'
+import NavigationProgressBar from '@shared/components/NavigationProgressBar'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
 import CardDetailPage from './pages/CardDetailPage'
@@ -35,6 +36,7 @@ function App() {
     <AuthProvider>
       <AdminDataStore>
         <LoadingSplash>
+          <NavigationProgressBar />
           <Routes>
             {/* Public */}
             <Route path="/login" element={<LoginPage />} />

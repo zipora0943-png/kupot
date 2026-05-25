@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { boxes as boxesApi, cards as cardsApi, boxTypes as boxTypesApi } from '../api/endpoints'
+import { boxes as boxesApi } from '../api/endpoints'
+import { useData, useBootstrap } from '@shared/context/DataStoreContext'
 import { computeCardLabels } from '@shared/utils/cardLabel'
 import TaskModal from '../components/TaskModal'
 import BoxModal from '../components/BoxModal'
@@ -23,11 +24,19 @@ function formatDate(iso) {
 export default function BoxesPage() {
   const navigate = useNavigate()
 
-  const [allBoxes,   setAllBoxes]   = useState([])
-  const [allCards,   setAllCards]   = useState([])
-  const [types,      setTypes]      = useState([])
-  const [loading,    setLoading]    = useState(true)
-  const [errMsg,     setErrMsg]     = useState(null)
+  // Boxes, cards, and box-types now come from the central DataStore
+  // (populated at login, kept live via Socket.IO). Mutations below call
+  // the API directly — the NOTIFY trigger refreshes the store automatically.
+  const { data: boxesData, loading } = useData('boxes')
+  const { data: cardsData          } = useData('cards')
+  const bootstrap = useBootstrap()
+  const allBoxes = useMemo(() => (Array.isArray(boxesData) ? boxesData : []), [boxesData])
+  const allCards = useMemo(() => (Array.isArray(cardsData) ? cardsData : []), [cardsData])
+  const types    = useMemo(
+    () => (Array.isArray(bootstrap?.box_types) ? bootstrap.box_types : []),
+    [bootstrap],
+  )
+  const [errMsg, setErrMsg] = useState(null)
 
   const [activeTab,  setActiveTab]  = useState('no_card')
   const [search,     setSearch]     = useState('')
@@ -44,53 +53,10 @@ export default function BoxesPage() {
   // per-row "in flight" state for status mutations (mark unusable / restore)
   const [statusBusyId, setStatusBusyId] = useState(null)
 
-  function handleBoxCreated(saved) {
-    if (!saved) return
-    setAllBoxes(prev => [...prev, saved])
-  }
-
-  function handleBoxUpdated(saved) {
-    if (!saved) return
-    // PUT /api/boxes/:id returns the bare boxes row without the joined
-    // box_type_name — re-derive it from the loaded `types` list so the
-    // table cell updates immediately without a full refetch.
-    const typeName = saved.box_type_id != null
-      ? (types.find(t => t.id === saved.box_type_id)?.name ?? null)
-      : null
-    setAllBoxes(prev => prev.map(b =>
-      b.id === saved.id ? { ...b, ...saved, box_type_name: typeName } : b
-    ))
-  }
-
-  // load boxes + cards (cards needed to show last-card label/date for ex-active boxes)
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      setLoading(true)
-      setErrMsg(null)
-      try {
-        const [b, c] = await Promise.all([
-          boxesApi.getAll(),
-          cardsApi.getAll().catch(() => []),
-        ])
-        if (!cancelled) {
-          setAllBoxes(Array.isArray(b) ? b : [])
-          setAllCards(Array.isArray(c) ? c : [])
-        }
-      } catch (err) {
-        if (!cancelled) setErrMsg(err.message || 'שגיאה בטעינת קופות')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [])
-
-  // load box types (best-effort)
-  useEffect(() => {
-    boxTypesApi.getAll().then(d => setTypes(Array.isArray(d) ? d : [])).catch(() => {})
-  }, [])
+  // After modal save, the socket refresh will bring the new/updated row in;
+  // these callbacks are kept as no-ops for compatibility with the modal API.
+  function handleBoxCreated() { /* store refreshes via socket */ }
+  function handleBoxUpdated() { /* store refreshes via socket */ }
 
   // Map<cardId, label> across all cards
   const labels = useMemo(() => computeCardLabels(allCards), [allCards])
@@ -158,9 +124,8 @@ export default function BoxesPage() {
     setErrMsg(null)
     setStatusBusyId(box.id)
     try {
-      const updated = await boxesApi.setStatus(box.id, 'unusable', reason.trim() || undefined)
-      // server returns the updated box row
-      setAllBoxes(prev => prev.map(b => b.id === box.id ? { ...b, ...updated } : b))
+      await boxesApi.setStatus(box.id, 'unusable', reason.trim() || undefined)
+      // store refreshes via the boxes NOTIFY trigger
     } catch (err) {
       setErrMsg(err.message || 'שגיאה בעדכון סטטוס')
     } finally {
@@ -177,8 +142,8 @@ export default function BoxesPage() {
     setStatusBusyId(box.id)
     try {
       // restore to 'inactive' (no active card; admin can install via task)
-      const updated = await boxesApi.setStatus(box.id, 'inactive')
-      setAllBoxes(prev => prev.map(b => b.id === box.id ? { ...b, ...updated } : b))
+      await boxesApi.setStatus(box.id, 'inactive')
+      // store refreshes via the boxes NOTIFY trigger
     } catch (err) {
       setErrMsg(err.message || 'שגיאה בעדכון סטטוס')
     } finally {

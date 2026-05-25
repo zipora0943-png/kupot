@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { cards as cardsApi, alerts as alertsApi, reports as reportsApi, boxTypes as boxTypesApi } from '../api/endpoints'
+import { useData, useBootstrap } from '@shared/context/DataStoreContext'
 import { computeCardLabels } from '@shared/utils/cardLabel'
 import { exportCards } from '../utils/exportToCsv'
 import { useSortable, SortableTh } from '../utils/sortable.jsx'
@@ -135,14 +135,27 @@ function MultiSelect({ options, value, onChange, placeholder = 'בחר…', allL
 export default function CardsPage() {
   const navigate = useNavigate()
 
-  const [allCards, setAllCards]   = useState([])
-  const [loading, setLoading]     = useState(true)
-  const [errMsg, setErrMsg]       = useState(null)
-  const [types,   setTypes]       = useState([])
-
-  // stats
-  const [alertCount,    setAlertCount]    = useState(0)
-  const [openReports,   setOpenReports]   = useState(0)
+  // All four slices come from the central DataStore — populated at login,
+  // kept fresh via Socket.IO. No per-mount round-trips.
+  const { data: cardsData,    loading } = useData('cards')
+  const { data: alertsData            } = useData('alertsNoCollection')
+  const { data: reportsAll            } = useData('reports')
+  const bootstrap = useBootstrap()
+  const allCards = useMemo(() => (Array.isArray(cardsData) ? cardsData : []), [cardsData])
+  const types    = useMemo(
+    () => (Array.isArray(bootstrap?.box_types) ? bootstrap.box_types : []),
+    [bootstrap],
+  )
+  const alertCount = (() => {
+    const n = Number(alertsData?.count)
+    if (Number.isFinite(n)) return n
+    return Array.isArray(alertsData?.items) ? alertsData.items.length : 0
+  })()
+  const openReports = useMemo(
+    () => (Array.isArray(reportsAll) ? reportsAll.filter((r) => r.status === 'open').length : 0),
+    [reportsAll],
+  )
+  const errMsg = null
 
   // filters
   const [search,    setSearch]    = useState('')
@@ -151,38 +164,6 @@ export default function CardsPage() {
   const [collector, setCollector] = useState('')
   const [typeIds,   setTypeIds]   = useState([])     // array of selected box_type_id (numbers)
   const [statusTab, setStatusTab] = useState('active') // 'active' | 'all'
-
-  // load cards once on mount
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      setLoading(true)
-      setErrMsg(null)
-      try {
-        const data = await cardsApi.getAll()
-        if (!cancelled) setAllCards(Array.isArray(data) ? data : [])
-      } catch (err) {
-        if (!cancelled) setErrMsg(err.message || 'שגיאה בטעינת כרטסות')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [])
-
-  // load stats (best-effort, errors silenced)
-  useEffect(() => {
-    alertsApi.noCollection()
-      .then(d => setAlertCount(typeof d?.count === 'number' ? d.count : (Array.isArray(d?.items) ? d.items.length : 0)))
-      .catch(() => {})
-    reportsApi.getAll({ status: 'open' }).then(d => setOpenReports(Array.isArray(d) ? d.length : 0)).catch(() => {})
-  }, [])
-
-  // load box types (best-effort) — used by the multi-select type filter
-  useEffect(() => {
-    boxTypesApi.getAll().then(d => setTypes(Array.isArray(d) ? d : [])).catch(() => {})
-  }, [])
 
   // distinct values for filter dropdowns
   const cities = useMemo(() => {
