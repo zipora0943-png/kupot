@@ -11,33 +11,40 @@ import {
 function buildResources() {
   return {
     cards: {
+      label: 'כרטסות',
       fetch:  () => cards.getAll(),
       // Card listings include resolved collector names + status derived from
       // events, so changes to either should refresh the list.
       tables: ['cards', 'events', 'users', 'boxes'],
     },
     boxes: {
+      label: 'קופות',
       fetch:  () => boxes.getAll(),
       tables: ['boxes', 'box_types'],
     },
     envelopes: {
+      label: 'מעטפות',
       fetch:  () => envelopes.getAll(),
       tables: ['envelopes'],
     },
     tasks: {
+      label: 'משימות',
       fetch:  () => tasks.getAll(),
       tables: ['tasks', 'task_types', 'users', 'cards'],
     },
     reports: {
+      label: 'דיווחים',
       fetch:  () => reports.getAll(),
       tables: ['reports', 'report_types', 'users', 'cards'],
     },
     alertsNoCollection: {
+      label: 'התראות',
       fetch:  () => alerts.noCollection(),
       // Threshold lives in settings; collection state lives in events.
       tables: ['cards', 'events', 'settings'],
     },
     pendingEnvelopes: {
+      label: 'מעטפות ממתינות',
       fetch:  () => envelopes.getPending(),
       tables: ['envelopes'],
     },
@@ -45,6 +52,7 @@ function buildResources() {
     // we register it here so socket-driven user changes (rename, deactivate)
     // refresh the data immediately without a manual reload.
     users: {
+      label: 'משתמשים',
       fetch:  () => users.getAll(),
       tables: ['users'],
     },

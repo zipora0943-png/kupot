@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@shared/context/AuthContext'
 import ProtectedRoute from '@shared/components/ProtectedRoute'
 import AdminDataStore from './context/AdminDataStore'
+import LoadingSplash from '@shared/components/LoadingSplash'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
 import CardDetailPage from './pages/CardDetailPage'
@@ -33,26 +34,28 @@ function App() {
   return (
     <AuthProvider>
       <AdminDataStore>
-        <Routes>
-          {/* Public */}
-          <Route path="/login" element={<LoginPage />} />
+        <LoadingSplash>
+          <Routes>
+            {/* Public */}
+            <Route path="/login" element={<LoginPage />} />
 
-          {/* Protected — wrapped in app shell */}
-          <Route
-            element={
-              <ProtectedRoute>
-                <CashroomLockGuard>
-                  <Layout />
-                </CashroomLockGuard>
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<HomeRedirect />} />
-            <Route path="/cards/:id" element={<CardDetailPage />} />
-            {/* Sidebar screens are matched inside Layout via KeepAliveScreens. */}
-            <Route path="*" element={null} />
-          </Route>
-        </Routes>
+            {/* Protected — wrapped in app shell */}
+            <Route
+              element={
+                <ProtectedRoute>
+                  <CashroomLockGuard>
+                    <Layout />
+                  </CashroomLockGuard>
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<HomeRedirect />} />
+              <Route path="/cards/:id" element={<CardDetailPage />} />
+              {/* Sidebar screens are matched inside Layout via KeepAliveScreens. */}
+              <Route path="*" element={null} />
+            </Route>
+          </Routes>
+        </LoadingSplash>
       </AdminDataStore>
     </AuthProvider>
   )

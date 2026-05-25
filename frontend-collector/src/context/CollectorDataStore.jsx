@@ -9,22 +9,27 @@ import { cards, tasks, envelopes, reports, alerts } from '../api/endpoints'
 function buildResources() {
   return {
     cards: {
+      label: 'כרטסות',
       fetch:  () => cards.getAll(),
       tables: ['cards', 'events', 'boxes'],
     },
     tasks: {
+      label: 'משימות',
       fetch:  () => tasks.getAll(),
       tables: ['tasks', 'task_types', 'cards'],
     },
     envelopes: {
+      label: 'מעטפות',
       fetch:  () => envelopes.getAll(),
       tables: ['envelopes'],
     },
     reports: {
+      label: 'דיווחים',
       fetch:  () => reports.getAll(),
       tables: ['reports', 'report_types'],
     },
     alertsNoCollection: {
+      label: 'התראות',
       fetch:  () => alerts.noCollection(),
       // Threshold lives in settings; collection state derives from events.
       tables: ['cards', 'events', 'settings'],
@@ -33,10 +38,12 @@ function buildResources() {
     // store catches silently — wasteful but harmless. The cashroom screen
     // is the only consumer.
     pendingEnvelopes: {
+      label: 'מעטפות ממתינות',
       fetch:  () => envelopes.getPending(),
       tables: ['envelopes'],
     },
     recentEnteredEnvelopes: {
+      label: 'מעטפות אחרונות',
       fetch:  () => envelopes.getRecentEntered(20),
       tables: ['envelopes'],
     },

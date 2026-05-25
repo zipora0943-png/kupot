@@ -9,6 +9,7 @@ import { connect as connectSocket, disconnect as disconnectSocket } from '@share
 // Central client-side cache. Each "resource" has:
 //   - fetch:  () => Promise<any>            how to (re)load
 //   - tables: string[]                      which DB tables invalidate it
+//   - label:  string  (optional)            Hebrew label for the splash screen
 //
 // Lifecycle:
 //   1. After login → GET /api/initial-load (lookups + settings + users)
@@ -19,13 +20,19 @@ import { connect as connectSocket, disconnect as disconnectSocket } from '@share
 //   4. On reconnect (we may have missed events) → refetch everything.
 //
 // Pages read via `useData(name)`. The data is the latest snapshot. While the
-// store is hydrating for the first time, `ready` is false.
+// store is hydrating for the first time, `ready` is false. The splash screen
+// reads `useDataStoreProgress()` for a live load bar.
 
 const DataStoreContext = createContext(null)
 
 // How long to wait after the last invalidation before actually refetching.
 // Batches rapid bursts of NOTIFYs (e.g. a bulk import emits one event per row).
 const REFETCH_DEBOUNCE_MS = 200
+
+// Sentinel name used in `status` for the bootstrap (/api/initial-load) call —
+// the progress bar counts it together with the per-resource fetches.
+const BOOTSTRAP_KEY = '__bootstrap__'
+const BOOTSTRAP_LABEL = 'נתוני בסיס'
 
 export function DataStoreProvider({ resources = {}, children }) {
   const { token, user, isAuthenticated } = useAuth()
@@ -36,6 +43,8 @@ export function DataStoreProvider({ resources = {}, children }) {
   const [bootstrap, setBootstrap] = useState(null)
   const [ready, setReady]   = useState(false)
   const [error, setError]   = useState(null)
+  // Per-key load status: 'pending' | 'loaded' | 'error'. Includes BOOTSTRAP_KEY.
+  const [status, setStatus] = useState(() => initialStatus(resources))
 
   // Per-resource debounce timers (kept in a ref so changing them doesn't re-render).
   const timers = useRef({})
@@ -46,15 +55,17 @@ export function DataStoreProvider({ resources = {}, children }) {
   useEffect(() => { fetchersRef.current = resources }, [resources])
 
   // ---- single-resource refetch ----
-  const refetchOne = useCallback(async (name) => {
+  const refetchOne = useCallback(async (name, { trackStatus = false } = {}) => {
     const def = fetchersRef.current[name]
     if (!def?.fetch) return
+    if (trackStatus) setStatus((s) => ({ ...s, [name]: 'pending' }))
     try {
       const data = await def.fetch()
       setStore((prev) => ({ ...prev, [name]: data }))
+      if (trackStatus) setStatus((s) => ({ ...s, [name]: 'loaded' }))
     } catch (err) {
-      // Keep the previous snapshot; surface error for diagnostics only.
       console.warn(`[dataStore] refetch '${name}' failed:`, err.message)
+      if (trackStatus) setStatus((s) => ({ ...s, [name]: 'error' }))
     }
   }, [])
 
@@ -64,9 +75,11 @@ export function DataStoreProvider({ resources = {}, children }) {
   }, [refetchOne])
 
   // ---- full refetch (login, reconnect) ----
-  const refetchAll = useCallback(async () => {
+  // `tracked=true` updates per-resource status as each fetch settles, so the
+  // splash progress bar can fill in real time.
+  const refetchAll = useCallback(async ({ tracked = false } = {}) => {
     const names = Object.keys(fetchersRef.current)
-    await Promise.all(names.map((n) => refetchOne(n)))
+    await Promise.all(names.map((n) => refetchOne(n, { trackStatus: tracked })))
   }, [refetchOne])
 
   // ---- initial hydration after login ----
@@ -75,21 +88,33 @@ export function DataStoreProvider({ resources = {}, children }) {
       setReady(false)
       setBootstrap(null)
       setStore(emptyStoreFor(fetchersRef.current))
+      setStatus(initialStatus(fetchersRef.current))
       return
     }
 
     let cancelled = false
     setReady(false)
     setError(null)
+    setStatus(initialStatus(fetchersRef.current))
 
     async function hydrate() {
       try {
-        const [boot] = await Promise.all([
-          api.get('/initial-load').catch(() => null),
-          refetchAll(),
-        ])
+        const bootPromise = api.get('/initial-load')
+          .then((boot) => {
+            if (cancelled) return null
+            setBootstrap(boot)
+            setStatus((s) => ({ ...s, [BOOTSTRAP_KEY]: 'loaded' }))
+            return boot
+          })
+          .catch((err) => {
+            if (cancelled) return null
+            console.warn('[dataStore] /initial-load failed:', err.message)
+            setStatus((s) => ({ ...s, [BOOTSTRAP_KEY]: 'error' }))
+            return null
+          })
+
+        await Promise.all([bootPromise, refetchAll({ tracked: true })])
         if (cancelled) return
-        setBootstrap(boot)
         setReady(true)
       } catch (err) {
         if (cancelled) return
@@ -137,15 +162,32 @@ export function DataStoreProvider({ resources = {}, children }) {
     Object.values(timers.current).forEach(clearTimeout)
   }, [])
 
+  // ---- progress derived from status ----
+  // Stable array of {name, label, status} so the splash can list each item.
+  const progress = useMemo(() => {
+    const items = [
+      { name: BOOTSTRAP_KEY, label: BOOTSTRAP_LABEL, status: status[BOOTSTRAP_KEY] || 'pending' },
+      ...Object.entries(resources).map(([name, def]) => ({
+        name,
+        label: def.label || name,
+        status: status[name] || 'pending',
+      })),
+    ]
+    const total  = items.length
+    const loaded = items.filter((i) => i.status === 'loaded' || i.status === 'error').length
+    return { items, total, loaded }
+  }, [resources, status])
+
   const value = useMemo(() => ({
     store,
     bootstrap,
     ready,
     error,
+    progress,
     refetch: refetchOne,
     refetchAll,
     user,
-  }), [store, bootstrap, ready, error, refetchOne, refetchAll, user])
+  }), [store, bootstrap, ready, error, progress, refetchOne, refetchAll, user])
 
   return (
     <DataStoreContext.Provider value={value}>
@@ -157,6 +199,12 @@ export function DataStoreProvider({ resources = {}, children }) {
 function emptyStoreFor(resources) {
   const out = {}
   for (const k of Object.keys(resources)) out[k] = null
+  return out
+}
+
+function initialStatus(resources) {
+  const out = { [BOOTSTRAP_KEY]: 'pending' }
+  for (const k of Object.keys(resources)) out[k] = 'pending'
   return out
 }
 
@@ -191,4 +239,15 @@ export function useDataStoreReady() {
   const ctx = useContext(DataStoreContext)
   if (!ctx) throw new Error('useDataStoreReady must be used inside <DataStoreProvider>')
   return ctx.ready
+}
+
+/**
+ * Live progress of the initial hydration — used by LoadingSplash. Returns
+ *   { items: [{name, label, status: 'pending'|'loaded'|'error'}], total, loaded }
+ * `items` is stable in order and includes the bootstrap entry first.
+ */
+export function useDataStoreProgress() {
+  const ctx = useContext(DataStoreContext)
+  if (!ctx) throw new Error('useDataStoreProgress must be used inside <DataStoreProvider>')
+  return ctx.progress
 }

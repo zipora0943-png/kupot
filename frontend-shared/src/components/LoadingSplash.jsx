@@ -1,6 +1,6 @@
 import React from 'react'
 import { useAuth } from '../context/AuthContext'
-import { useDataStoreReady } from '../context/DataStoreContext'
+import { useDataStoreReady, useDataStoreProgress } from '../context/DataStoreContext'
 
 // Full-screen splash shown while the DataStore is hydrating (after login,
 // before /api/initial-load + all resource fetches settle). Returns `children`
@@ -10,16 +10,20 @@ import { useDataStoreReady } from '../context/DataStoreContext'
 //     <App />
 //   </LoadingSplash>
 //
-// Skipped on the login screen (the user isn't authenticated yet, so no fetch).
+// While loading, renders a progress bar that fills as each resource resolves,
+// plus a labelled list of items with ✓ / ⏳ / ✕ next to each.
 export default function LoadingSplash({ children }) {
   const { isAuthenticated, loading: authLoading } = useAuth()
   const storeReady = useDataStoreReady()
+  const progress = useDataStoreProgress()
 
-  // Show splash while: auth is restoring from storage, OR user is logged-in
-  // but the initial data load hasn't finished yet.
   const showSplash = authLoading || (isAuthenticated && !storeReady)
-
   if (!showSplash) return children
+
+  const total  = progress?.total  || 0
+  const loaded = progress?.loaded || 0
+  const pct    = total ? Math.round((loaded / total) * 100) : 0
+  const items  = progress?.items  || []
 
   return (
     <div
@@ -33,31 +37,87 @@ export default function LoadingSplash({ children }) {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 24,
+        gap: 18,
+        padding: '24px',
         background: '#f8fafc',
         fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
         color: '#0f172a',
+        direction: 'rtl',
       }}
     >
-      <div
-        aria-hidden="true"
-        style={{
-          width: 56,
-          height: 56,
-          border: '4px solid #cbd5e1',
-          borderTopColor: '#2563eb',
-          borderRadius: '50%',
-          animation: 'kupot-splash-spin 0.9s linear infinite',
-        }}
-      />
-      <div style={{ fontSize: 16, fontWeight: 500 }}>
-        טוען נתונים…
+      <div style={{ fontSize: 18, fontWeight: 600 }}>טוען נתונים…</div>
+
+      <div style={{ width: 'min(360px, 80vw)' }}>
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'relative',
+            width: '100%',
+            height: 10,
+            background: '#e2e8f0',
+            borderRadius: 999,
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              height: '100%',
+              width: `${pct}%`,
+              background: '#2563eb',
+              borderRadius: 999,
+              transition: 'width 250ms ease-out',
+            }}
+          />
+        </div>
+        <div style={{
+          marginTop: 6,
+          fontSize: 13,
+          color: '#475569',
+          display: 'flex',
+          justifyContent: 'space-between',
+        }}>
+          <span>{loaded}/{total}</span>
+          <span>{pct}%</span>
+        </div>
       </div>
-      <style>{`
-        @keyframes kupot-splash-spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
+
+      {items.length > 0 && (
+        <ul style={{
+          margin: 0,
+          padding: 0,
+          listStyle: 'none',
+          width: 'min(360px, 80vw)',
+          fontSize: 13,
+          color: '#334155',
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '4px 12px',
+        }}>
+          {items.map((it) => (
+            <li key={it.name} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{
+                display: 'inline-block',
+                width: 14,
+                textAlign: 'center',
+                color: it.status === 'loaded' ? '#16a34a'
+                     : it.status === 'error'  ? '#dc2626'
+                     :                          '#94a3b8',
+              }}>
+                {it.status === 'loaded' ? '✓'
+                 : it.status === 'error'  ? '✕'
+                 :                          '⏳'}
+              </span>
+              <span style={{
+                opacity: it.status === 'pending' ? 0.7 : 1,
+                textDecoration: it.status === 'error' ? 'line-through' : 'none',
+              }}>{it.label}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
