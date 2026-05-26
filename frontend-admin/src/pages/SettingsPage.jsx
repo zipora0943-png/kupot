@@ -87,6 +87,8 @@ export default function SettingsPage() {
 
   // Modal state — { which, item, prefillName? } where item===null means create
   const [modal, setModal] = useState(null)
+
+  const [citiesOpen, setCitiesOpen] = useState(false)
   function openModal(which, item = null, extra = {}) { setModal({ which, item, ...extra }) }
   function closeModal() { setModal(null) }
 
@@ -712,38 +714,84 @@ export default function SettingsPage() {
 
         {/* === CITIES & DISTRICTS === */}
         <div className="panel" style={{ gridColumn: 'span 2' }}>
-          <div className="panel-title">ערים ומחוזות</div>
-          <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 12 }}>
-            מילון ערים עם שיוך למחוז. שיוך גובה ל-"מחוז X" כולל אוטומטית את כל הערים שהוגדרו כאן עם המחוז הזה.
-            שינוי המחוז של עיר משפיע מיידית על הגובים המשויכים — ללא צורך בעדכון נוסף.
-          </div>
-          {cityList === null ? (
-            <div className="loading"><div className="spinner" /><span>טוען...</span></div>
-          ) : cityList.length === 0 ? (
-            <div className="empty">אין ערים מוגדרות</div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 0 }}>
-              {cityList.map(c => (
-                <div key={c.id} style={ITEM_ROW_STYLE}>
-                  <div>
-                    <div style={{ fontWeight: 600 }}>{c.name}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
-                      {c.district ? `מחוז: ${c.district}` : 'ללא מחוז'}
-                    </div>
+          <button
+            type="button"
+            onClick={() => setCitiesOpen(o => !o)}
+            aria-expanded={citiesOpen}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              width: '100%',
+              padding: 0,
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              font: 'inherit',
+              color: 'inherit',
+              textAlign: 'inherit',
+            }}
+          >
+            <span className="panel-title" style={{ margin: 0 }}>
+              ערים ומחוזות
+              {Array.isArray(cityList) && (
+                <span style={{ color: 'var(--text3)', fontWeight: 400, marginInlineStart: 8 }}>
+                  ({cityList.length})
+                </span>
+              )}
+            </span>
+            <span style={{
+              display: 'inline-block',
+              transition: 'transform 0.15s ease',
+              transform: citiesOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+              fontSize: 14,
+              color: 'var(--text2)',
+            }}>▶</span>
+          </button>
+
+          {citiesOpen && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 12 }}>
+                מילון ערים עם שיוך למחוז. שיוך גובה ל-"מחוז X" כולל אוטומטית את כל הערים שהוגדרו כאן עם המחוז הזה.
+                שינוי המחוז של עיר משפיע מיידית על הגובים המשויכים — ללא צורך בעדכון נוסף.
+              </div>
+              {cityList === null ? (
+                <div className="loading"><div className="spinner" /><span>טוען...</span></div>
+              ) : cityList.length === 0 ? (
+                <div className="empty">אין ערים מוגדרות</div>
+              ) : (
+                <div style={{
+                  maxHeight: 360,
+                  overflowY: 'auto',
+                  border: '1px solid var(--border, #eef0f3)',
+                  borderRadius: 6,
+                  padding: '0 10px',
+                }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0 16px' }}>
+                    {cityList.map(c => (
+                      <div key={c.id} style={ITEM_ROW_STYLE}>
+                        <div>
+                          <div style={{ fontWeight: 600 }}>{c.name}</div>
+                          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
+                            {c.district ? `מחוז: ${c.district}` : 'ללא מחוז'}
+                          </div>
+                        </div>
+                        <button
+                          className="btn sm"
+                          onClick={() => openModal('city', c)}
+                        >עריכה</button>
+                      </div>
+                    ))}
                   </div>
-                  <button
-                    className="btn sm"
-                    onClick={() => openModal('city', c)}
-                  >עריכה</button>
                 </div>
-              ))}
+              )}
+              <button
+                className="btn sm"
+                style={{ marginTop: 12 }}
+                onClick={() => openModal('city')}
+              >+ הוספת עיר</button>
             </div>
           )}
-          <button
-            className="btn sm"
-            style={{ marginTop: 12 }}
-            onClick={() => openModal('city')}
-          >+ הוספת עיר</button>
         </div>
 
         {/* === GLOBAL SETTINGS === */}
