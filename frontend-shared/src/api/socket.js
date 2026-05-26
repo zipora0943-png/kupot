@@ -9,10 +9,17 @@
 import { io } from 'socket.io-client'
 import { API_BASE } from './client'
 
-// Derive the socket server URL from API_BASE:
-//   '/api'                          → undefined  (relative — Vite proxies in dev)
-//   'http://host:port/api'          → 'http://host:port'
+// Derive the socket server URL.
+//   - VITE_SOCKET_URL is an explicit override (used when the WebSocket must
+//     bypass a filter/proxy that blocks WS but allows REST — e.g. NetFree
+//     blocks wss:// to the public domain, so admin builds point this at the
+//     server's raw IP:port instead).
+//   - Otherwise fall back to API_BASE with `/api` stripped:
+//       '/api'                          → undefined  (relative — Vite proxies in dev)
+//       'http://host:port/api'          → 'http://host:port'
 function deriveSocketUrl() {
+  const override = import.meta.env.VITE_SOCKET_URL
+  if (override) return override
   if (!API_BASE || API_BASE.startsWith('/')) return undefined
   return API_BASE.replace(/\/api\/?$/, '')
 }
