@@ -10,6 +10,7 @@ import TaskNotExecutedModal from '../components/TaskNotExecutedModal'
 import { useAuth } from '@shared/context/AuthContext'
 import { exportCsv, csvFilename } from '../utils/exportCsv'
 import { useSortable, SortableTh } from '../utils/sortable.jsx'
+import PaginatedTable from '../utils/PaginatedTable.jsx'
 
 const STATUS_LABELS = {
   open:         { label: 'פתוח',     pill: 'yellow' },
@@ -307,123 +308,121 @@ export default function TasksPage() {
         ) : filtered.length === 0 ? (
           <div className="empty">לא נמצאו משימות התואמות את הסינון</div>
         ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <SortableTh sortKey="type"     sort={sort} onToggle={toggle}>סוג</SortableTh>
-                  <SortableTh sortKey="iron"     sort={sort} onToggle={toggle}>קופה</SortableTh>
-                  <SortableTh sortKey="card"     sort={sort} onToggle={toggle}>כרטסת</SortableTh>
-                  <SortableTh sortKey="status"   sort={sort} onToggle={toggle}>סטטוס</SortableTh>
-                  <SortableTh sortKey="executed" sort={sort} onToggle={toggle}>תאריך ביצוע</SortableTh>
-                  <SortableTh sortKey="assigned" sort={sort} onToggle={toggle}>משויך</SortableTh>
-                  <SortableTh sortKey="source"   sort={sort} onToggle={toggle}>מקור</SortableTh>
-                  <th>פעולות</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map(t => {
-                  const st = STATUS_LABELS[t.status] || { label: t.status, pill: 'gray' }
-                  const cardLabel = t.card_id
-                    ? (labels.get(t.card_id) || `#${t.card_id}`)
-                    : null
-                  const sourceReport = reportByTaskId.get(t.id)
-                  const isDone = t.status === 'done' || t.status === 'cancelled' || t.status === 'not_executed'
-                  return (
-                    <tr key={t.id}>
-                      <td>
-                        {t.icon ? `${t.icon} ` : ''}
-                        {t.type_name || '—'}
-                      </td>
-                      <td><strong>{t.iron_number || '—'}</strong></td>
-                      <td>
-                        {cardLabel ? (
-                          <span
-                            className="clickable"
-                            style={{ color: 'var(--accent)', cursor: 'pointer' }}
-                            onClick={() => navigate(`/cards/${t.card_id}`)}
-                          >{cardLabel}</span>
-                        ) : '—'}
-                      </td>
-                      <td>
-                        <span
-                          className={'pill ' + st.pill}
-                          title={
-                            t.status === 'cancelled' && t.cancellation_reason
-                              ? `סיבת ביטול: ${t.cancellation_reason}`
-                            : t.status === 'not_executed' && t.not_executed_reason
-                              ? `סיבת אי-ביצוע: ${t.not_executed_reason}`
-                              : undefined
-                          }
-                        >{st.label}</span>
-                      </td>
-                      <td>
-                        {t.executed_at
-                          ? new Date(t.executed_at).toLocaleDateString('he-IL')
-                          : <span style={{ color: 'var(--text3)' }}>—</span>}
-                      </td>
-                      <td>{t.assigned_name || <span style={{ color: 'var(--text3)' }}>לא משויך</span>}</td>
-                      <td>
-                        {sourceReport
-                          ? <span style={{ color: 'var(--text2)' }}>דיווח #{sourceReport.id}</span>
-                          : <span style={{ color: 'var(--text3)' }}>ידני</span>}
-                      </td>
-                      <td className="actions" style={{ flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
-                        {isDone ? (
+          <PaginatedTable
+            data={sorted}
+            getRowKey={(t) => t.id}
+            header={(
+              <tr>
+                <SortableTh sortKey="type"     sort={sort} onToggle={toggle}>סוג</SortableTh>
+                <SortableTh sortKey="iron"     sort={sort} onToggle={toggle}>קופה</SortableTh>
+                <SortableTh sortKey="card"     sort={sort} onToggle={toggle}>כרטסת</SortableTh>
+                <SortableTh sortKey="status"   sort={sort} onToggle={toggle}>סטטוס</SortableTh>
+                <SortableTh sortKey="executed" sort={sort} onToggle={toggle}>תאריך ביצוע</SortableTh>
+                <SortableTh sortKey="assigned" sort={sort} onToggle={toggle}>משויך</SortableTh>
+                <SortableTh sortKey="source"   sort={sort} onToggle={toggle}>מקור</SortableTh>
+                <th>פעולות</th>
+              </tr>
+            )}
+            footer={(
+              <tr className="summary-row">
+                <td colSpan={8} style={{ textAlign: 'center', fontWeight: 600, background: 'var(--bg2, rgba(0,0,0,0.03))' }}>
+                  סה"כ: <strong>{filtered.length}</strong> משימות
+                  {' · '}
+                  הושלמו: <strong style={{ color: 'var(--green)' }}>{filteredBreakdown.done}</strong>
+                  {' · '}
+                  פתוחות: <strong style={{ color: 'var(--yellow)' }}>{filteredBreakdown.open}</strong>
+                  {' · '}
+                  בטיפול: <strong style={{ color: 'var(--accent)' }}>{filteredBreakdown.in_progress}</strong>
+                  {filteredBreakdown.not_executed > 0 && (
+                    <> {' · '} לא בוצעו: <strong style={{ color: 'var(--purple, #a855f7)' }}>{filteredBreakdown.not_executed}</strong></>
+                  )}
+                  {filteredBreakdown.cancelled > 0 && (
+                    <> {' · '} בוטלו: <strong style={{ color: 'var(--text2)' }}>{filteredBreakdown.cancelled}</strong></>
+                  )}
+                </td>
+              </tr>
+            )}
+            renderRow={(t) => {
+              const st = STATUS_LABELS[t.status] || { label: t.status, pill: 'gray' }
+              const cardLabel = t.card_id
+                ? (labels.get(t.card_id) || `#${t.card_id}`)
+                : null
+              const sourceReport = reportByTaskId.get(t.id)
+              const isDone = t.status === 'done' || t.status === 'cancelled' || t.status === 'not_executed'
+              return (
+                <>
+                  <td>
+                    {t.icon ? `${t.icon} ` : ''}
+                    {t.type_name || '—'}
+                  </td>
+                  <td><strong>{t.iron_number || '—'}</strong></td>
+                  <td>
+                    {cardLabel ? (
+                      <span
+                        className="clickable"
+                        style={{ color: 'var(--accent)', cursor: 'pointer' }}
+                        onClick={() => navigate(`/cards/${t.card_id}`)}
+                      >{cardLabel}</span>
+                    ) : '—'}
+                  </td>
+                  <td>
+                    <span
+                      className={'pill ' + st.pill}
+                      title={
+                        t.status === 'cancelled' && t.cancellation_reason
+                          ? `סיבת ביטול: ${t.cancellation_reason}`
+                        : t.status === 'not_executed' && t.not_executed_reason
+                          ? `סיבת אי-ביצוע: ${t.not_executed_reason}`
+                          : undefined
+                      }
+                    >{st.label}</span>
+                  </td>
+                  <td>
+                    {t.executed_at
+                      ? new Date(t.executed_at).toLocaleDateString('he-IL')
+                      : <span style={{ color: 'var(--text3)' }}>—</span>}
+                  </td>
+                  <td>{t.assigned_name || <span style={{ color: 'var(--text3)' }}>לא משויך</span>}</td>
+                  <td>
+                    {sourceReport
+                      ? <span style={{ color: 'var(--text2)' }}>דיווח #{sourceReport.id}</span>
+                      : <span style={{ color: 'var(--text3)' }}>ידני</span>}
+                  </td>
+                  <td className="actions" style={{ flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
+                    {isDone ? (
+                      <button
+                        className="btn sm"
+                        onClick={() => setDetailsTask(t)}
+                      >פרטי ביצוע</button>
+                    ) : (
+                      <>
+                        <button
+                          className="btn sm"
+                          onClick={() => openEdit(t)}
+                        >פרטים</button>
+                        <button
+                          className="btn sm success"
+                          onClick={() => setExecTask(t)}
+                        >אישור ביצוע</button>
+                        <button
+                          className="btn sm danger"
+                          onClick={() => setNotExecTask(t)}
+                          title="סגור את המשימה כלא בוצעה"
+                        >❌ לא בוצעה</button>
+                        {isAdmin && (
                           <button
-                            className="btn sm"
-                            onClick={() => setDetailsTask(t)}
-                          >פרטי ביצוע</button>
-                        ) : (
-                          <>
-                            <button
-                              className="btn sm"
-                              onClick={() => openEdit(t)}
-                            >פרטים</button>
-                            <button
-                              className="btn sm success"
-                              onClick={() => setExecTask(t)}
-                            >אישור ביצוע</button>
-                            <button
-                              className="btn sm danger"
-                              onClick={() => setNotExecTask(t)}
-                              title="סגור את המשימה כלא בוצעה"
-                            >❌ לא בוצעה</button>
-                            {isAdmin && (
-                              <button
-                                className="btn sm danger"
-                                onClick={() => setCancelTask(t)}
-                                title="העבר את המשימה לסטטוס בוטל"
-                              >🚫 בטל</button>
-                            )}
-                          </>
+                            className="btn sm danger"
+                            onClick={() => setCancelTask(t)}
+                            title="העבר את המשימה לסטטוס בוטל"
+                          >🚫 בטל</button>
                         )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-              <tfoot>
-                <tr className="summary-row">
-                  <td colSpan={8} style={{ textAlign: 'center', fontWeight: 600, background: 'var(--bg2, rgba(0,0,0,0.03))' }}>
-                    סה"כ: <strong>{filtered.length}</strong> משימות
-                    {' · '}
-                    הושלמו: <strong style={{ color: 'var(--green)' }}>{filteredBreakdown.done}</strong>
-                    {' · '}
-                    פתוחות: <strong style={{ color: 'var(--yellow)' }}>{filteredBreakdown.open}</strong>
-                    {' · '}
-                    בטיפול: <strong style={{ color: 'var(--accent)' }}>{filteredBreakdown.in_progress}</strong>
-                    {filteredBreakdown.not_executed > 0 && (
-                      <> {' · '} לא בוצעו: <strong style={{ color: 'var(--purple, #a855f7)' }}>{filteredBreakdown.not_executed}</strong></>
-                    )}
-                    {filteredBreakdown.cancelled > 0 && (
-                      <> {' · '} בוטלו: <strong style={{ color: 'var(--text2)' }}>{filteredBreakdown.cancelled}</strong></>
+                      </>
                     )}
                   </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+                </>
+              )
+            }}
+          />
         )}
       </div>
 

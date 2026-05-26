@@ -12,6 +12,7 @@ import { exportCsv, csvFilename } from '../utils/exportCsv'
 import MonthYearPicker from '../components/MonthYearPicker'
 import CardChoiceModal from '../components/CardChoiceModal'
 import { useSortable, SortableTh } from '../utils/sortable.jsx'
+import PaginatedTable from '../utils/PaginatedTable.jsx'
 
 const TABS = [
   { key: 'summary', label: 'סיכום כללי' },
@@ -282,78 +283,76 @@ function SummaryTab() {
                 <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'flex-end' }}>
                   <button className="btn sm" onClick={exportSummary}>📥 יצוא לאקסל</button>
                 </div>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <SortableTh sortKey="iron"         sort={sort} onToggle={toggle}>קופה</SortableTh>
-                      <SortableTh sortKey="card"         sort={sort} onToggle={toggle}>כרטסת</SortableTh>
-                      <SortableTh sortKey="name"         sort={sort} onToggle={toggle}>שם / מיקום</SortableTh>
-                      <SortableTh sortKey="city"         sort={sort} onToggle={toggle}>עיר</SortableTh>
-                      <SortableTh sortKey="neighborhood" sort={sort} onToggle={toggle}>שכונה</SortableTh>
-                      <SortableTh sortKey="collector"    sort={sort} onToggle={toggle}>גובה</SortableTh>
-                      <SortableTh sortKey="receipt"      sort={sort} onToggle={toggle}>קבלה</SortableTh>
-                      <SortableTh sortKey="total"        sort={sort} onToggle={toggle}>סה"כ</SortableTh>
-                      <SortableTh sortKey="count"        sort={sort} onToggle={toggle}>מעטפות</SortableTh>
-                      <SortableTh sortKey="avg"          sort={sort} onToggle={toggle}>ממוצע</SortableTh>
-                      <SortableTh sortKey="last"         sort={sort} onToggle={toggle}>גביה אחרונה</SortableTh>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedRows.map(r => {
-                      const total = Number(r.total_amount) || 0
-                      const count = Number(r.collection_count) || 0
-                      const avg = count ? Math.round(total / count) : 0
-                      const cardLabel = cardLabels.get(r.card_id) || (r.card_id ? `#${r.card_id}` : '—')
-                      return (
-                        <tr key={r.card_id ?? r.iron_number}>
-                          <td>
-                            {r.card_id ? (
-                              <strong
-                                className="clickable"
-                                style={{ color: 'var(--accent)', cursor: 'pointer' }}
-                                onClick={() => navigate(`/cards/${r.card_id}`)}
-                                title="פתיחת הכרטסת"
-                              >{r.iron_number}</strong>
-                            ) : (
-                              <strong>{r.iron_number}</strong>
-                            )}
-                          </td>
-                          <td>
-                            {r.card_id ? (
-                              <span
-                                className="clickable"
-                                style={{ color: 'var(--accent)', cursor: 'pointer' }}
-                                onClick={() => navigate(`/cards/${r.card_id}`)}
-                                title="פתיחת הכרטסת"
-                              >{cardLabel}</span>
-                            ) : (
-                              <span style={{ color: 'var(--text3)' }}>—</span>
-                            )}
-                          </td>
-                          <td>
-                            {r.custom_name
-                              ? <strong>{r.custom_name}</strong>
-                              : (r.street ? `${r.street}${r.building ? ' ' + r.building : ''}` : '—')}
-                          </td>
-                          <td>{r.city || '—'}</td>
-                          <td>{r.neighborhood || '—'}</td>
-                          <td>{r.collector_name || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
-                          <td>
-                            {r.receipt_required
-                              ? <span className="pill green">כן</span>
-                              : <span style={{ color: 'var(--text3)' }}>—</span>}
-                          </td>
-                          <td><strong>{formatMoney(total)}</strong></td>
-                          <td>{count}</td>
-                          <td>{count ? formatMoney(avg) : '—'}</td>
-                          <td>{r.last_collection_date ? formatDate(r.last_collection_date) : '—'}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <PaginatedTable
+                data={sortedRows}
+                getRowKey={(r) => r.card_id ?? r.iron_number}
+                header={(
+                  <tr>
+                    <SortableTh sortKey="iron"         sort={sort} onToggle={toggle}>קופה</SortableTh>
+                    <SortableTh sortKey="card"         sort={sort} onToggle={toggle}>כרטסת</SortableTh>
+                    <SortableTh sortKey="name"         sort={sort} onToggle={toggle}>שם / מיקום</SortableTh>
+                    <SortableTh sortKey="city"         sort={sort} onToggle={toggle}>עיר</SortableTh>
+                    <SortableTh sortKey="neighborhood" sort={sort} onToggle={toggle}>שכונה</SortableTh>
+                    <SortableTh sortKey="collector"    sort={sort} onToggle={toggle}>גובה</SortableTh>
+                    <SortableTh sortKey="receipt"      sort={sort} onToggle={toggle}>קבלה</SortableTh>
+                    <SortableTh sortKey="total"        sort={sort} onToggle={toggle}>סה"כ</SortableTh>
+                    <SortableTh sortKey="count"        sort={sort} onToggle={toggle}>מעטפות</SortableTh>
+                    <SortableTh sortKey="avg"          sort={sort} onToggle={toggle}>ממוצע</SortableTh>
+                    <SortableTh sortKey="last"         sort={sort} onToggle={toggle}>גביה אחרונה</SortableTh>
+                  </tr>
+                )}
+                renderRow={(r) => {
+                  const total = Number(r.total_amount) || 0
+                  const count = Number(r.collection_count) || 0
+                  const avg = count ? Math.round(total / count) : 0
+                  const cardLabel = cardLabels.get(r.card_id) || (r.card_id ? `#${r.card_id}` : '—')
+                  return (
+                    <>
+                      <td>
+                        {r.card_id ? (
+                          <strong
+                            className="clickable"
+                            style={{ color: 'var(--accent)', cursor: 'pointer' }}
+                            onClick={() => navigate(`/cards/${r.card_id}`)}
+                            title="פתיחת הכרטסת"
+                          >{r.iron_number}</strong>
+                        ) : (
+                          <strong>{r.iron_number}</strong>
+                        )}
+                      </td>
+                      <td>
+                        {r.card_id ? (
+                          <span
+                            className="clickable"
+                            style={{ color: 'var(--accent)', cursor: 'pointer' }}
+                            onClick={() => navigate(`/cards/${r.card_id}`)}
+                            title="פתיחת הכרטסת"
+                          >{cardLabel}</span>
+                        ) : (
+                          <span style={{ color: 'var(--text3)' }}>—</span>
+                        )}
+                      </td>
+                      <td>
+                        {r.custom_name
+                          ? <strong>{r.custom_name}</strong>
+                          : (r.street ? `${r.street}${r.building ? ' ' + r.building : ''}` : '—')}
+                      </td>
+                      <td>{r.city || '—'}</td>
+                      <td>{r.neighborhood || '—'}</td>
+                      <td>{r.collector_name || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
+                      <td>
+                        {r.receipt_required
+                          ? <span className="pill green">כן</span>
+                          : <span style={{ color: 'var(--text3)' }}>—</span>}
+                      </td>
+                      <td><strong>{formatMoney(total)}</strong></td>
+                      <td>{count}</td>
+                      <td>{count ? formatMoney(avg) : '—'}</td>
+                      <td>{r.last_collection_date ? formatDate(r.last_collection_date) : '—'}</td>
+                    </>
+                  )
+                }}
+              />
               </>
             )}
           </div>
@@ -551,34 +550,32 @@ function PerBoxTab() {
           {envs.length === 0 ? (
             <div className="empty">אין מעטפות בטווח שנבחר</div>
           ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <SortableTh sortKey="date"      sort={envSort} onToggle={envToggle}>תאריך</SortableTh>
-                    <SortableTh sortKey="envelope"  sort={envSort} onToggle={envToggle}>מעטפה</SortableTh>
-                    <SortableTh sortKey="amount"    sort={envSort} onToggle={envToggle}>סכום</SortableTh>
-                    <SortableTh sortKey="collector" sort={envSort} onToggle={envToggle}>גובה</SortableTh>
-                    <SortableTh sortKey="status"    sort={envSort} onToggle={envToggle}>סטטוס</SortableTh>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedEnvs.map(e => (
-                    <tr key={e.id}>
-                      <td>{formatDate(e.collected_at)}</td>
-                      <td><strong>{e.envelope_number}</strong></td>
-                      <td>{e.amount != null ? formatMoney(e.amount) : <span style={{ color: 'var(--text3)' }}>ממתין</span>}</td>
-                      <td>{e.collector_name || '—'}</td>
-                      <td>
-                        {e.status === 'entered'
-                          ? <span className="pill green">הוזן</span>
-                          : <span className="pill yellow">ממתין</span>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <PaginatedTable
+              data={sortedEnvs}
+              getRowKey={(e) => e.id}
+              header={(
+                <tr>
+                  <SortableTh sortKey="date"      sort={envSort} onToggle={envToggle}>תאריך</SortableTh>
+                  <SortableTh sortKey="envelope"  sort={envSort} onToggle={envToggle}>מעטפה</SortableTh>
+                  <SortableTh sortKey="amount"    sort={envSort} onToggle={envToggle}>סכום</SortableTh>
+                  <SortableTh sortKey="collector" sort={envSort} onToggle={envToggle}>גובה</SortableTh>
+                  <SortableTh sortKey="status"    sort={envSort} onToggle={envToggle}>סטטוס</SortableTh>
+                </tr>
+              )}
+              renderRow={(e) => (
+                <>
+                  <td>{formatDate(e.collected_at)}</td>
+                  <td><strong>{e.envelope_number}</strong></td>
+                  <td>{e.amount != null ? formatMoney(e.amount) : <span style={{ color: 'var(--text3)' }}>ממתין</span>}</td>
+                  <td>{e.collector_name || '—'}</td>
+                  <td>
+                    {e.status === 'entered'
+                      ? <span className="pill green">הוזן</span>
+                      : <span className="pill yellow">ממתין</span>}
+                  </td>
+                </>
+              )}
+            />
           )}
         </div>
       )}

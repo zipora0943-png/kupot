@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { envelopes as envelopesApi } from '../api/endpoints'
 import CashroomModal from '../components/CashroomModal'
+import PaginatedTable from '../utils/PaginatedTable.jsx'
 
 function formatDate(iso) {
   if (!iso) return '—'
@@ -199,37 +200,35 @@ export default function CashroomAdminPage() {
         ) : pending.length === 0 ? (
           <div className="empty">אין מעטפות ממתינות 🎉</div>
         ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>תאריך גביה</th>
-                  <th>מס' מעטפה</th>
-                  <th>קופה</th>
-                  <th>עיר</th>
-                  <th>גובה</th>
-                  <th>פעולה</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pending.map(e => (
-                  <tr key={e.id}>
-                    <td>{formatDate(e.collected_at)}</td>
-                    <td><strong>{e.envelope_number || '—'}</strong></td>
-                    <td>{e.iron_number || '—'}</td>
-                    <td>{e.city || '—'}</td>
-                    <td>{e.collector_name || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
-                    <td>
-                      <button
-                        className="btn sm primary"
-                        onClick={() => setOpenEnv(e)}
-                      >הזנת סכום</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <PaginatedTable
+            data={pending}
+            getRowKey={(e) => e.id}
+            header={(
+              <tr>
+                <th>תאריך גביה</th>
+                <th>מס' מעטפה</th>
+                <th>קופה</th>
+                <th>עיר</th>
+                <th>גובה</th>
+                <th>פעולה</th>
+              </tr>
+            )}
+            renderRow={(e) => (
+              <>
+                <td>{formatDate(e.collected_at)}</td>
+                <td><strong>{e.envelope_number || '—'}</strong></td>
+                <td>{e.iron_number || '—'}</td>
+                <td>{e.city || '—'}</td>
+                <td>{e.collector_name || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
+                <td>
+                  <button
+                    className="btn sm primary"
+                    onClick={() => setOpenEnv(e)}
+                  >הזנת סכום</button>
+                </td>
+              </>
+            )}
+          />
         )}
       </div>
 
@@ -249,48 +248,46 @@ export default function CashroomAdminPage() {
         ) : recent.length === 0 ? (
           <div className="empty">עדיין לא הוזנו מעטפות</div>
         ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>תאריך הזנה</th>
-                  <th>מס' מעטפה</th>
-                  <th>קופה</th>
-                  <th>עיר</th>
-                  <th>גובה</th>
-                  <th>סכום</th>
-                  <th>פעולה</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recent.map(e => {
-                  const editable = isToday(e.entered_at)
-                  return (
-                    <tr key={e.id}>
-                      <td>{formatDate(e.entered_at)}</td>
-                      <td><strong>{e.envelope_number || '—'}</strong></td>
-                      <td>{e.iron_number || '—'}</td>
-                      <td>{e.city || '—'}</td>
-                      <td>{e.collector_name || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
-                      <td>{formatMoney(e.amount) || '—'}</td>
-                      <td>
-                        {editable ? (
-                          <button
-                            className="btn sm"
-                            onClick={() => setOpenEnv(e)}
-                          >✏️ ערוך סכום</button>
-                        ) : (
-                          <span style={{ fontSize: 12, color: 'var(--text3)' }}>
-                            לא ניתן לתיקון
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <PaginatedTable
+            data={recent}
+            getRowKey={(e) => e.id}
+            header={(
+              <tr>
+                <th>תאריך הזנה</th>
+                <th>מס' מעטפה</th>
+                <th>קופה</th>
+                <th>עיר</th>
+                <th>גובה</th>
+                <th>סכום</th>
+                <th>פעולה</th>
+              </tr>
+            )}
+            renderRow={(e) => {
+              const editable = isToday(e.entered_at)
+              return (
+                <>
+                  <td>{formatDate(e.entered_at)}</td>
+                  <td><strong>{e.envelope_number || '—'}</strong></td>
+                  <td>{e.iron_number || '—'}</td>
+                  <td>{e.city || '—'}</td>
+                  <td>{e.collector_name || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
+                  <td>{formatMoney(e.amount) || '—'}</td>
+                  <td>
+                    {editable ? (
+                      <button
+                        className="btn sm"
+                        onClick={() => setOpenEnv(e)}
+                      >✏️ ערוך סכום</button>
+                    ) : (
+                      <span style={{ fontSize: 12, color: 'var(--text3)' }}>
+                        לא ניתן לתיקון
+                      </span>
+                    )}
+                  </td>
+                </>
+              )
+            }}
+          />
         )}
       </div>
 

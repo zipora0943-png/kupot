@@ -5,6 +5,7 @@ import ManualReportModal from '../../components/ManualReportModal'
 import CloseReportModal from '@shared/components/CloseReportModal'
 import ReportModal from '../../components/ReportModal'
 import { exportCsv, csvFilename } from '../../utils/exportCsv'
+import PaginatedTable from '../../utils/PaginatedTable.jsx'
 
 function formatDate(iso) {
   if (!iso) return '—'
@@ -80,61 +81,48 @@ export default function ReportsTab({ cardId, cardLabel }) {
       {!loading && errMsg && <div className="alert red">{errMsg}</div>}
       {!loading && !errMsg && list.length === 0 && <div className="empty">אין דיווחים לכרטסת זו</div>}
       {!loading && !errMsg && list.length > 0 && (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>תאריך</th>
-                <th>סוג</th>
-                <th>תיאור</th>
-                <th>מדווח</th>
-                <th>סטטוס</th>
-                {canCreate && <th>פעולות</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {list.map(r => {
-                const st = STATUS[r.status] || { label: r.status, cls: 'gray' }
-                return (
-                  <tr
-                    key={r.id}
-                    className="clickable"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setOpenReport(r)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        setOpenReport(r)
-                      }
-                    }}
-                  >
-                    <td>{formatDate(r.created_at)}</td>
-                    <td>{r.icon ? `${r.icon} ` : ''}{r.type_name || '—'}</td>
-                    <td style={{ maxWidth: 320 }}>{r.description || '—'}</td>
-                    <td>{r.reporter_name || '—'}</td>
-                    <td>
-                      <span
-                        className={'pill ' + st.cls}
-                        title={r.status === 'closed' && r.closure_reason ? `סיבת סגירה: ${r.closure_reason}` : undefined}
-                      >{st.label}</span>
-                    </td>
-                    {canCreate && (
-                      <td style={{ whiteSpace: 'nowrap' }}>
-                        {r.status === 'open' && (
-                          <button
-                            className="btn sm danger"
-                            onClick={(e) => { e.stopPropagation(); setCloseReport(r) }}
-                          >🚫 סגור דיווח</button>
-                        )}
-                      </td>
+        <PaginatedTable
+          data={list}
+          getRowKey={(r) => r.id}
+          onRowClick={(r) => setOpenReport(r)}
+          header={(
+            <tr>
+              <th>תאריך</th>
+              <th>סוג</th>
+              <th>תיאור</th>
+              <th>מדווח</th>
+              <th>סטטוס</th>
+              {canCreate && <th>פעולות</th>}
+            </tr>
+          )}
+          renderRow={(r) => {
+            const st = STATUS[r.status] || { label: r.status, cls: 'gray' }
+            return (
+              <>
+                <td>{formatDate(r.created_at)}</td>
+                <td>{r.icon ? `${r.icon} ` : ''}{r.type_name || '—'}</td>
+                <td style={{ maxWidth: 320 }}>{r.description || '—'}</td>
+                <td>{r.reporter_name || '—'}</td>
+                <td>
+                  <span
+                    className={'pill ' + st.cls}
+                    title={r.status === 'closed' && r.closure_reason ? `סיבת סגירה: ${r.closure_reason}` : undefined}
+                  >{st.label}</span>
+                </td>
+                {canCreate && (
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {r.status === 'open' && (
+                      <button
+                        className="btn sm danger"
+                        onClick={(e) => { e.stopPropagation(); setCloseReport(r) }}
+                      >🚫 סגור דיווח</button>
                     )}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+                  </td>
+                )}
+              </>
+            )
+          }}
+        />
       )}
 
       {showModal && (

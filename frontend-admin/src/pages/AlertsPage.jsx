@@ -7,6 +7,7 @@ import CloseReportModal from '@shared/components/CloseReportModal'
 import { useAuth } from '@shared/context/AuthContext'
 import { exportCsv, csvFilename } from '../utils/exportCsv'
 import { useSortable, SortableTh } from '../utils/sortable.jsx'
+import PaginatedTable from '../utils/PaginatedTable.jsx'
 
 function formatDate(iso) {
   if (!iso) return '—'
@@ -255,82 +256,80 @@ export default function AlertsPage() {
           {filteredItems.length === 0 ? (
             <div className="empty">לא נמצאו קופות התואמות את הסינון</div>
           ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <SortableTh sortKey="name"      sort={ncSort} onToggle={ncToggle}>קופה / שם</SortableTh>
-                  <SortableTh sortKey="card"      sort={ncSort} onToggle={ncToggle}>כרטסת</SortableTh>
-                  <SortableTh sortKey="city"      sort={ncSort} onToggle={ncToggle}>עיר</SortableTh>
-                  <SortableTh sortKey="collector" sort={ncSort} onToggle={ncToggle}>גובה</SortableTh>
-                  <SortableTh sortKey="last"      sort={ncSort} onToggle={ncToggle}>גביה אחרונה</SortableTh>
-                  <SortableTh sortKey="days"      sort={ncSort} onToggle={ncToggle}>ימים</SortableTh>
-                  <SortableTh sortKey="threshold" sort={ncSort} onToggle={ncToggle}>סף התראה</SortableTh>
-                  <th>פעולה</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedItems.map(it => {
-                  const cardLabel = labels.get(it.card_id) || `${it.iron_number || it.box_id}`
-                  const isPersonal = it.alert_days_personal != null
-                  const lastDate = it.last_collection || it.opened_at
-                  const noCollectionEver = !it.last_collection
-                  return (
-                    <tr key={it.card_id}>
-                      <td>
-                        {it.custom_name ? (
-                          <>
-                            <strong>{it.custom_name}</strong>{' '}
-                            <span style={{ color: 'var(--text3)', fontSize: 11 }}>
-                              {it.iron_number || it.box_id}
-                            </span>
-                          </>
-                        ) : (
-                          <strong>{it.iron_number || it.box_id}</strong>
-                        )}
-                      </td>
-                      <td>
-                        <span
-                          className="clickable"
-                          style={{ color: 'var(--accent)', cursor: 'pointer' }}
-                          onClick={() => navigate(`/cards/${it.card_id}`)}
-                        >{cardLabel}</span>
-                      </td>
-                      <td>{it.city || '—'}</td>
-                      <td>{it.collector_name || <span style={{ color: 'var(--text3)' }}>לא משויך</span>}</td>
-                      <td>
-                        {noCollectionEver ? (
-                          <span style={{ color: 'var(--text3)' }}>
-                            מעולם לא — נפתח {formatDate(it.opened_at)}
-                          </span>
-                        ) : (
-                          formatDate(lastDate)
-                        )}
-                      </td>
-                      <td><strong style={{ color: 'var(--red)' }}>{it.days_since}</strong></td>
-                      <td>
-                        {isPersonal ? (
-                          <span style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 600 }}>
-                            אישי ({it.alert_days_personal})
-                          </span>
-                        ) : (
-                          <span style={{ color: 'var(--text3)', fontSize: 12 }}>
-                            גלובלי ({globalThreshold})
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        <button
-                          className="btn sm"
-                          onClick={() => navigate(`/cards/${it.card_id}`)}
-                        >כרטסת</button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <PaginatedTable
+            data={sortedItems}
+            getRowKey={(it) => it.card_id}
+            header={(
+              <tr>
+                <SortableTh sortKey="name"      sort={ncSort} onToggle={ncToggle}>קופה / שם</SortableTh>
+                <SortableTh sortKey="card"      sort={ncSort} onToggle={ncToggle}>כרטסת</SortableTh>
+                <SortableTh sortKey="city"      sort={ncSort} onToggle={ncToggle}>עיר</SortableTh>
+                <SortableTh sortKey="collector" sort={ncSort} onToggle={ncToggle}>גובה</SortableTh>
+                <SortableTh sortKey="last"      sort={ncSort} onToggle={ncToggle}>גביה אחרונה</SortableTh>
+                <SortableTh sortKey="days"      sort={ncSort} onToggle={ncToggle}>ימים</SortableTh>
+                <SortableTh sortKey="threshold" sort={ncSort} onToggle={ncToggle}>סף התראה</SortableTh>
+                <th>פעולה</th>
+              </tr>
+            )}
+            renderRow={(it) => {
+              const cardLabel = labels.get(it.card_id) || `${it.iron_number || it.box_id}`
+              const isPersonal = it.alert_days_personal != null
+              const lastDate = it.last_collection || it.opened_at
+              const noCollectionEver = !it.last_collection
+              return (
+                <>
+                  <td>
+                    {it.custom_name ? (
+                      <>
+                        <strong>{it.custom_name}</strong>{' '}
+                        <span style={{ color: 'var(--text3)', fontSize: 11 }}>
+                          {it.iron_number || it.box_id}
+                        </span>
+                      </>
+                    ) : (
+                      <strong>{it.iron_number || it.box_id}</strong>
+                    )}
+                  </td>
+                  <td>
+                    <span
+                      className="clickable"
+                      style={{ color: 'var(--accent)', cursor: 'pointer' }}
+                      onClick={() => navigate(`/cards/${it.card_id}`)}
+                    >{cardLabel}</span>
+                  </td>
+                  <td>{it.city || '—'}</td>
+                  <td>{it.collector_name || <span style={{ color: 'var(--text3)' }}>לא משויך</span>}</td>
+                  <td>
+                    {noCollectionEver ? (
+                      <span style={{ color: 'var(--text3)' }}>
+                        מעולם לא — נפתח {formatDate(it.opened_at)}
+                      </span>
+                    ) : (
+                      formatDate(lastDate)
+                    )}
+                  </td>
+                  <td><strong style={{ color: 'var(--red)' }}>{it.days_since}</strong></td>
+                  <td>
+                    {isPersonal ? (
+                      <span style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 600 }}>
+                        אישי ({it.alert_days_personal})
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--text3)', fontSize: 12 }}>
+                        גלובלי ({globalThreshold})
+                      </span>
+                    )}
+                  </td>
+                  <td>
+                    <button
+                      className="btn sm"
+                      onClick={() => navigate(`/cards/${it.card_id}`)}
+                    >כרטסת</button>
+                  </td>
+                </>
+              )
+            }}
+          />
           )}
           </>
         )}
@@ -393,43 +392,41 @@ export default function AlertsPage() {
           {filteredReports.length === 0 ? (
             <div className="empty">לא נמצאו דיווחים התואמים את הסינון</div>
           ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <SortableTh sortKey="iron" sort={repSort} onToggle={repToggle}>קופה</SortableTh>
-                  <SortableTh sortKey="type" sort={repSort} onToggle={repToggle}>סוג</SortableTh>
-                  <SortableTh sortKey="desc" sort={repSort} onToggle={repToggle}>תיאור</SortableTh>
-                  <SortableTh sortKey="days" sort={repSort} onToggle={repToggle}>ימים פתוח</SortableTh>
-                  <th>פעולה</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedReports.map(r => (
-                  <tr key={r.id}>
-                    <td><strong>{r.iron_number || '—'}</strong></td>
-                    <td>{r.icon ? `${r.icon} ` : ''}{r.type_name || '—'}</td>
-                    <td>{r.description || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
-                    <td>{daysSince(r.created_at) ?? '—'}</td>
-                    <td className="actions">
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        <button
-                          className="btn sm warn"
-                          onClick={() => setOpenReport(r)}
-                        >טיפול</button>
-                        {isAdmin && (
-                          <button
-                            className="btn sm danger"
-                            onClick={() => setCloseReport(r)}
-                          >🚫 סגור דיווח</button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <PaginatedTable
+            data={sortedReports}
+            getRowKey={(r) => r.id}
+            header={(
+              <tr>
+                <SortableTh sortKey="iron" sort={repSort} onToggle={repToggle}>קופה</SortableTh>
+                <SortableTh sortKey="type" sort={repSort} onToggle={repToggle}>סוג</SortableTh>
+                <SortableTh sortKey="desc" sort={repSort} onToggle={repToggle}>תיאור</SortableTh>
+                <SortableTh sortKey="days" sort={repSort} onToggle={repToggle}>ימים פתוח</SortableTh>
+                <th>פעולה</th>
+              </tr>
+            )}
+            renderRow={(r) => (
+              <>
+                <td><strong>{r.iron_number || '—'}</strong></td>
+                <td>{r.icon ? `${r.icon} ` : ''}{r.type_name || '—'}</td>
+                <td>{r.description || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
+                <td>{daysSince(r.created_at) ?? '—'}</td>
+                <td className="actions">
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <button
+                      className="btn sm warn"
+                      onClick={() => setOpenReport(r)}
+                    >טיפול</button>
+                    {isAdmin && (
+                      <button
+                        className="btn sm danger"
+                        onClick={() => setCloseReport(r)}
+                      >🚫 סגור דיווח</button>
+                    )}
+                  </div>
+                </td>
+              </>
+            )}
+          />
           )}
           </>
         )}

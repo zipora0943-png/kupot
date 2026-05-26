@@ -4,6 +4,7 @@ import { useData } from '@shared/context/DataStoreContext'
 import { computeCardLabels } from '@shared/utils/cardLabel'
 import CashroomModal from '../components/CashroomModal'
 import { exportEnvelopes } from '../utils/exportToCsv'
+import PaginatedTable from '../utils/PaginatedTable.jsx'
 
 const STATUS_LABELS = {
   pending: { label: 'ממתין', pill: 'yellow' },
@@ -210,69 +211,67 @@ export default function EnvelopesPage() {
         ) : filtered.length === 0 ? (
           <div className="empty">לא נמצאו מעטפות התואמות את הסינון</div>
         ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>תאריך גביה</th>
-                  <th>מס' מעטפה</th>
-                  <th>קופה</th>
-                  <th>כרטסת</th>
-                  <th>עיר</th>
-                  <th>גובה</th>
-                  <th>סכום</th>
-                  <th>סטטוס</th>
-                  <th>פעולה</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(e => {
-                  const st = STATUS_LABELS[e.status] || { label: e.status, pill: 'gray' }
-                  const label = labels.get(e.card_id) || `#${e.card_id}`
-                  const money = formatMoney(e.amount)
-                  return (
-                    <tr key={e.id}>
-                      <td>{formatDate(e.collected_at)}</td>
-                      <td><strong>{e.envelope_number || '—'}</strong></td>
-                      <td>{e.iron_number || '—'}</td>
-                      <td>
-                        <span
-                          className="clickable"
-                          style={{ color: 'var(--accent)', cursor: 'pointer' }}
-                          onClick={() => navigate(`/cards/${e.card_id}`)}
-                        >{label}</span>
-                      </td>
-                      <td>{e.city || '—'}</td>
-                      <td>{e.collector_name || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
-                      <td>
-                        {money
-                          ? money
-                          : <span style={{ color: 'var(--text3)' }}>ממתין</span>}
-                      </td>
-                      <td><span className={'pill ' + st.pill}>{st.label}</span></td>
-                      <td className="actions">
-                        {e.status === 'pending' ? (
-                          <button
-                            className="btn sm primary"
-                            onClick={() => setOpenEnv(e)}
-                          >הזנת סכום</button>
-                        ) : (
-                          <button
-                            className="btn sm"
-                            onClick={() => setOpenEnv(e)}
-                          >פרטים</button>
-                        )}
-                        <button
-                          className="btn sm"
-                          onClick={() => navigate(`/cards/${e.card_id}`)}
-                        >כרטסת</button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <PaginatedTable
+            data={filtered}
+            getRowKey={(e) => e.id}
+            header={(
+              <tr>
+                <th>תאריך גביה</th>
+                <th>מס' מעטפה</th>
+                <th>קופה</th>
+                <th>כרטסת</th>
+                <th>עיר</th>
+                <th>גובה</th>
+                <th>סכום</th>
+                <th>סטטוס</th>
+                <th>פעולה</th>
+              </tr>
+            )}
+            renderRow={(e) => {
+              const st = STATUS_LABELS[e.status] || { label: e.status, pill: 'gray' }
+              const label = labels.get(e.card_id) || `#${e.card_id}`
+              const money = formatMoney(e.amount)
+              return (
+                <>
+                  <td>{formatDate(e.collected_at)}</td>
+                  <td><strong>{e.envelope_number || '—'}</strong></td>
+                  <td>{e.iron_number || '—'}</td>
+                  <td>
+                    <span
+                      className="clickable"
+                      style={{ color: 'var(--accent)', cursor: 'pointer' }}
+                      onClick={() => navigate(`/cards/${e.card_id}`)}
+                    >{label}</span>
+                  </td>
+                  <td>{e.city || '—'}</td>
+                  <td>{e.collector_name || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
+                  <td>
+                    {money
+                      ? money
+                      : <span style={{ color: 'var(--text3)' }}>ממתין</span>}
+                  </td>
+                  <td><span className={'pill ' + st.pill}>{st.label}</span></td>
+                  <td className="actions">
+                    {e.status === 'pending' ? (
+                      <button
+                        className="btn sm primary"
+                        onClick={() => setOpenEnv(e)}
+                      >הזנת סכום</button>
+                    ) : (
+                      <button
+                        className="btn sm"
+                        onClick={() => setOpenEnv(e)}
+                      >פרטים</button>
+                    )}
+                    <button
+                      className="btn sm"
+                      onClick={() => navigate(`/cards/${e.card_id}`)}
+                    >כרטסת</button>
+                  </td>
+                </>
+              )
+            }}
+          />
         )}
       </div>
 

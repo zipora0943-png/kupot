@@ -224,6 +224,16 @@ tr.clickable { cursor: pointer; transition: background .15s; }
 tr.clickable:hover td { background: var(--surface3); }
 tr:last-child td { border-bottom: none; }
 
+/* ===== PAGINATION BAR ===== */
+.pagination-bar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; margin-top: 8px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
 /* ===== PILLS ===== */
 .pill {
   display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 9999px;

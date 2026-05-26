@@ -8,6 +8,7 @@ import CloseReportModal from '@shared/components/CloseReportModal'
 import { exportReports } from '../utils/exportToCsv'
 import { useAuth } from '@shared/context/AuthContext'
 import { useSortable, SortableTh } from '../utils/sortable.jsx'
+import PaginatedTable from '../utils/PaginatedTable.jsx'
 
 const STATUS_LABELS = {
   open:      { label: 'פתוח',  pill: 'yellow' },
@@ -180,76 +181,74 @@ export default function ReportsPage() {
         ) : filtered.length === 0 ? (
           <div className="empty">לא נמצאו דיווחים התואמים את הסינון</div>
         ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <SortableTh sortKey="date"     sort={sort} onToggle={toggle}>תאריך</SortableTh>
-                  <SortableTh sortKey="iron"     sort={sort} onToggle={toggle}>קופה</SortableTh>
-                  <SortableTh sortKey="card"     sort={sort} onToggle={toggle}>כרטסת</SortableTh>
-                  <SortableTh sortKey="type"     sort={sort} onToggle={toggle}>סוג</SortableTh>
-                  <SortableTh sortKey="desc"     sort={sort} onToggle={toggle}>תיאור</SortableTh>
-                  <SortableTh sortKey="reporter" sort={sort} onToggle={toggle}>גובה</SortableTh>
-                  <SortableTh sortKey="status"   sort={sort} onToggle={toggle}>סטטוס</SortableTh>
-                  <th>פעולה</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map(r => {
-                  const st = STATUS_LABELS[r.status] || { label: r.status, pill: 'gray' }
-                  const cardLabel = r.card_id ? (labels.get(r.card_id) || `#${r.card_id}`) : null
-                  return (
-                    <tr key={r.id}>
-                      <td>{formatDate(r.created_at)}</td>
-                      <td><strong>{r.iron_number || '—'}</strong></td>
-                      <td>
-                        {cardLabel ? (
-                          <span
-                            className="clickable"
-                            style={{ color: 'var(--accent)', cursor: 'pointer' }}
-                            onClick={() => navigate(`/cards/${r.card_id}`)}
-                          >{cardLabel}</span>
-                        ) : '—'}
-                      </td>
-                      <td>
-                        {r.icon ? `${r.icon} ` : ''}
-                        {r.type_name || '—'}
-                      </td>
-                      <td>{r.description || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
-                      <td>{r.reporter_name || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
-                      <td>
-                        <span
-                          className={'pill ' + st.pill}
-                          title={r.status === 'closed' && r.closure_reason ? `סיבת סגירה: ${r.closure_reason}` : undefined}
-                        >{st.label}</span>
-                      </td>
-                      <td className="actions" style={{ flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
-                        {r.status === 'open' ? (
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'nowrap' }}>
-                            <button
-                              className="btn sm warn"
-                              onClick={() => setOpenReport(r)}
-                            >טיפול / המרה</button>
-                            {canCreate && (
-                              <button
-                                className="btn sm danger"
-                                onClick={() => setCloseReport(r)}
-                              >🚫 סגור דיווח</button>
-                            )}
-                          </div>
-                        ) : (
+          <PaginatedTable
+            data={sorted}
+            getRowKey={(r) => r.id}
+            header={(
+              <tr>
+                <SortableTh sortKey="date"     sort={sort} onToggle={toggle}>תאריך</SortableTh>
+                <SortableTh sortKey="iron"     sort={sort} onToggle={toggle}>קופה</SortableTh>
+                <SortableTh sortKey="card"     sort={sort} onToggle={toggle}>כרטסת</SortableTh>
+                <SortableTh sortKey="type"     sort={sort} onToggle={toggle}>סוג</SortableTh>
+                <SortableTh sortKey="desc"     sort={sort} onToggle={toggle}>תיאור</SortableTh>
+                <SortableTh sortKey="reporter" sort={sort} onToggle={toggle}>גובה</SortableTh>
+                <SortableTh sortKey="status"   sort={sort} onToggle={toggle}>סטטוס</SortableTh>
+                <th>פעולה</th>
+              </tr>
+            )}
+            renderRow={(r) => {
+              const st = STATUS_LABELS[r.status] || { label: r.status, pill: 'gray' }
+              const cardLabel = r.card_id ? (labels.get(r.card_id) || `#${r.card_id}`) : null
+              return (
+                <>
+                  <td>{formatDate(r.created_at)}</td>
+                  <td><strong>{r.iron_number || '—'}</strong></td>
+                  <td>
+                    {cardLabel ? (
+                      <span
+                        className="clickable"
+                        style={{ color: 'var(--accent)', cursor: 'pointer' }}
+                        onClick={() => navigate(`/cards/${r.card_id}`)}
+                      >{cardLabel}</span>
+                    ) : '—'}
+                  </td>
+                  <td>
+                    {r.icon ? `${r.icon} ` : ''}
+                    {r.type_name || '—'}
+                  </td>
+                  <td>{r.description || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
+                  <td>{r.reporter_name || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
+                  <td>
+                    <span
+                      className={'pill ' + st.pill}
+                      title={r.status === 'closed' && r.closure_reason ? `סיבת סגירה: ${r.closure_reason}` : undefined}
+                    >{st.label}</span>
+                  </td>
+                  <td className="actions" style={{ flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
+                    {r.status === 'open' ? (
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'nowrap' }}>
+                        <button
+                          className="btn sm warn"
+                          onClick={() => setOpenReport(r)}
+                        >טיפול / המרה</button>
+                        {canCreate && (
                           <button
-                            className="btn sm"
-                            onClick={() => setOpenReport(r)}
-                          >פתיחה</button>
+                            className="btn sm danger"
+                            onClick={() => setCloseReport(r)}
+                          >🚫 סגור דיווח</button>
                         )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+                      </div>
+                    ) : (
+                      <button
+                        className="btn sm"
+                        onClick={() => setOpenReport(r)}
+                      >פתיחה</button>
+                    )}
+                  </td>
+                </>
+              )
+            }}
+          />
         )}
       </div>
 

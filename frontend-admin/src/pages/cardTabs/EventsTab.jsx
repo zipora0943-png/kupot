@@ -3,6 +3,7 @@ import { events as eventsApi } from '../../api/endpoints'
 import { useAuth } from '@shared/context/AuthContext'
 import ManualEventModal from '../../components/ManualEventModal'
 import { exportCsv, csvFilename } from '../../utils/exportCsv'
+import PaginatedTable from '../../utils/PaginatedTable.jsx'
 
 function formatDate(iso) {
   if (!iso) return '—'
@@ -88,31 +89,29 @@ export default function EventsTab({ cardId, cardLabel }) {
       {!loading && errMsg && <div className="alert red">{errMsg}</div>}
       {!loading && !errMsg && list.length === 0 && <div className="empty">אין אירועים לכרטסת זו</div>}
       {!loading && !errMsg && list.length > 0 && (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>תאריך</th>
-                <th>סוג</th>
-                <th>תיאור</th>
-                <th>משתמש</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map(e => {
-                const t = EVENT_TYPE[e.event_type] || { label: e.event_type, cls: 'gray' }
-                return (
-                  <tr key={e.id}>
-                    <td>{formatDate(e.created_at)}</td>
-                    <td><span className={'pill ' + t.cls}>{t.label}</span></td>
-                    <td>{e.description || '—'}</td>
-                    <td>{e.user_name || '—'}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        <PaginatedTable
+          data={list}
+          getRowKey={(e) => e.id}
+          header={(
+            <tr>
+              <th>תאריך</th>
+              <th>סוג</th>
+              <th>תיאור</th>
+              <th>משתמש</th>
+            </tr>
+          )}
+          renderRow={(e) => {
+            const t = EVENT_TYPE[e.event_type] || { label: e.event_type, cls: 'gray' }
+            return (
+              <>
+                <td>{formatDate(e.created_at)}</td>
+                <td><span className={'pill ' + t.cls}>{t.label}</span></td>
+                <td>{e.description || '—'}</td>
+                <td>{e.user_name || '—'}</td>
+              </>
+            )
+          }}
+        />
       )}
 
       {showModal && (

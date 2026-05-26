@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { boxes as boxesApi } from '../api/endpoints'
 import { useData, useBootstrap } from '@shared/context/DataStoreContext'
@@ -6,6 +6,7 @@ import { computeCardLabels } from '@shared/utils/cardLabel'
 import TaskModal from '../components/TaskModal'
 import BoxModal from '../components/BoxModal'
 import { exportBoxes } from '../utils/exportToCsv'
+import PaginatedTable from '../utils/PaginatedTable.jsx'
 
 // 'no_card' merges legacy 'uninstalled' + 'inactive' (admin treats them as one).
 const STATUS_TABS = [
@@ -252,182 +253,167 @@ export default function BoxesPage() {
           ) : filtered.length === 0 ? (
             <div className="empty">לא נמצאו קופות</div>
           ) : activeTab === 'no_card' ? (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>מספר קופה</th>
-                    <th>סוג</th>
-                    <th>כרטסת אחרונה</th>
-                    <th>תאריך סגירת כרטסת</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map(b => {
-                    const last = lastClosedByBox.get(b.id)
-                    const lastLabel = last ? (labels.get(last.id) || `#${last.id}`) : '—'
-                    const busy = statusBusyId === b.id
-                    return (
-                      <tr key={b.id}>
-                        <td><strong>{b.iron_number || '—'}</strong></td>
-                        <td>{b.box_type_name || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
-                        <td>
-                          {last ? (
-                            <span
-                              className="clickable"
-                              style={{ color: 'var(--accent)', cursor: 'pointer' }}
-                              onClick={() => navigate(`/cards/${last.id}`)}
-                            >{lastLabel}</span>
-                          ) : <span style={{ color: 'var(--text3)' }}>—</span>}
-                        </td>
-                        <td>{last ? formatDate(last.closed_at) : <span style={{ color: 'var(--text3)' }}>—</span>}</td>
-                        <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          <button
-                            className="btn sm primary"
-                            onClick={() => setInstallBoxId(b.id)}
-                            disabled={busy}
-                          >צור משימת התקנה</button>
-                          <button
-                            className="btn sm"
-                            onClick={() => setEditingBox(b)}
-                            disabled={busy}
-                            title="עריכת פרטי הקופה (מספר, סוג, הערות)"
-                          >✏️ עריכה</button>
-                          <button
-                            className="btn sm"
-                            onClick={() => handleMarkUnusable(b)}
-                            disabled={busy}
-                            title="העברת הקופה לסטטוס לא-שמישה (תיעלם מרשימות הגביה)"
-                          >{busy ? '...' : 'סמן כלא שמישה'}</button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <PaginatedTable
+              data={filtered}
+              getRowKey={(b) => b.id}
+              header={(
+                <tr>
+                  <th>מספר קופה</th>
+                  <th>סוג</th>
+                  <th>כרטסת אחרונה</th>
+                  <th>תאריך סגירת כרטסת</th>
+                  <th></th>
+                </tr>
+              )}
+              renderRow={(b) => {
+                const last = lastClosedByBox.get(b.id)
+                const lastLabel = last ? (labels.get(last.id) || `#${last.id}`) : '—'
+                const busy = statusBusyId === b.id
+                return (
+                  <>
+                    <td><strong>{b.iron_number || '—'}</strong></td>
+                    <td>{b.box_type_name || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
+                    <td>
+                      {last ? (
+                        <span
+                          className="clickable"
+                          style={{ color: 'var(--accent)', cursor: 'pointer' }}
+                          onClick={() => navigate(`/cards/${last.id}`)}
+                        >{lastLabel}</span>
+                      ) : <span style={{ color: 'var(--text3)' }}>—</span>}
+                    </td>
+                    <td>{last ? formatDate(last.closed_at) : <span style={{ color: 'var(--text3)' }}>—</span>}</td>
+                    <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <button
+                        className="btn sm primary"
+                        onClick={() => setInstallBoxId(b.id)}
+                        disabled={busy}
+                      >צור משימת התקנה</button>
+                      <button
+                        className="btn sm"
+                        onClick={() => setEditingBox(b)}
+                        disabled={busy}
+                        title="עריכת פרטי הקופה (מספר, סוג, הערות)"
+                      >✏️ עריכה</button>
+                      <button
+                        className="btn sm"
+                        onClick={() => handleMarkUnusable(b)}
+                        disabled={busy}
+                        title="העברת הקופה לסטטוס לא-שמישה (תיעלם מרשימות הגביה)"
+                      >{busy ? '...' : 'סמן כלא שמישה'}</button>
+                    </td>
+                  </>
+                )
+              }}
+            />
           ) : activeTab === 'active' ? (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>מספר קופה</th>
-                    <th>סוג</th>
-                    <th>כרטסת פעילה</th>
-                    <th>כתובת</th>
-                    <th>פעולות</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map(b => {
-                    const active = activeCardByBox.get(b.id)
-                    const activeLabel = active ? (labels.get(active.id) || `#${active.id}`) : '—'
-                    const address = active
-                      ? [active.city, active.neighborhood, active.street && `${active.street}${active.building ? ' ' + active.building : ''}`]
-                          .filter(Boolean).join(', ')
-                      : ''
-                    const busy = statusBusyId === b.id
-                    const goToCard = () => { if (active) navigate(`/cards/${active.id}`) }
-                    return (
-                      <tr
-                        key={b.id}
-                        className={active ? 'clickable' : undefined}
-                        role={active ? 'button' : undefined}
-                        tabIndex={active ? 0 : undefined}
-                        onClick={active ? goToCard : undefined}
-                        onKeyDown={active ? (e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            goToCard()
-                          }
-                        } : undefined}
-                      >
-                        <td><strong>{b.iron_number || '—'}</strong></td>
-                        <td>{b.box_type_name || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
-                        <td>
-                          {active
-                            ? <span style={{ fontWeight: 500, color: 'var(--accent)' }}>{activeLabel}</span>
-                            : <span style={{ color: 'var(--text3)' }}>—</span>}
-                        </td>
-                        <td>{address || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
-                        <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          <button
-                            className="btn sm"
-                            onClick={(e) => { e.stopPropagation(); setEditingBox(b) }}
-                            disabled={busy}
-                            title="עריכת פרטי הקופה (מספר, סוג, הערות)"
-                          >✏️ עריכה</button>
-                          <button
-                            className="btn sm danger"
-                            onClick={(e) => { e.stopPropagation(); handleMarkUnusable(b) }}
-                            disabled={busy}
-                            title="סוגר את הכרטסת הפעילה ומסמן את הקופה כלא-שמישה"
-                          >{busy ? '...' : '🚫 סמן כלא שמישה'}</button>
-                          <button
-                            className="btn sm"
-                            onClick={(e) => { e.stopPropagation(); if (active) navigate(`/cards/${active.id}`) }}
-                            disabled={busy || !active}
-                            title="פתיחת תצוגת הכרטסת המלאה"
-                          >📇 עבור לתצוגת כרטסת</button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <PaginatedTable
+              data={filtered}
+              getRowKey={(b) => b.id}
+              onRowClick={(b) => {
+                const active = activeCardByBox.get(b.id)
+                if (active) navigate(`/cards/${active.id}`)
+              }}
+              header={(
+                <tr>
+                  <th>מספר קופה</th>
+                  <th>סוג</th>
+                  <th>כרטסת פעילה</th>
+                  <th>כתובת</th>
+                  <th>פעולות</th>
+                </tr>
+              )}
+              renderRow={(b) => {
+                const active = activeCardByBox.get(b.id)
+                const activeLabel = active ? (labels.get(active.id) || `#${active.id}`) : '—'
+                const address = active
+                  ? [active.city, active.neighborhood, active.street && `${active.street}${active.building ? ' ' + active.building : ''}`]
+                      .filter(Boolean).join(', ')
+                  : ''
+                const busy = statusBusyId === b.id
+                return (
+                  <>
+                    <td><strong>{b.iron_number || '—'}</strong></td>
+                    <td>{b.box_type_name || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
+                    <td>
+                      {active
+                        ? <span style={{ fontWeight: 500, color: 'var(--accent)' }}>{activeLabel}</span>
+                        : <span style={{ color: 'var(--text3)' }}>—</span>}
+                    </td>
+                    <td>{address || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
+                    <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <button
+                        className="btn sm"
+                        onClick={(e) => { e.stopPropagation(); setEditingBox(b) }}
+                        disabled={busy}
+                        title="עריכת פרטי הקופה (מספר, סוג, הערות)"
+                      >✏️ עריכה</button>
+                      <button
+                        className="btn sm danger"
+                        onClick={(e) => { e.stopPropagation(); handleMarkUnusable(b) }}
+                        disabled={busy}
+                        title="סוגר את הכרטסת הפעילה ומסמן את הקופה כלא-שמישה"
+                      >{busy ? '...' : '🚫 סמן כלא שמישה'}</button>
+                      <button
+                        className="btn sm"
+                        onClick={(e) => { e.stopPropagation(); if (active) navigate(`/cards/${active.id}`) }}
+                        disabled={busy || !active}
+                        title="פתיחת תצוגת הכרטסת המלאה"
+                      >📇 עבור לתצוגת כרטסת</button>
+                    </td>
+                  </>
+                )
+              }}
+            />
           ) : (
             // unusable tab
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>מספר קופה</th>
-                    <th>סוג</th>
-                    <th>כרטסת אחרונה</th>
-                    <th>הערות</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map(b => {
-                    const last = lastClosedByBox.get(b.id)
-                    const lastLabel = last ? (labels.get(last.id) || `#${last.id}`) : '—'
-                    const busy = statusBusyId === b.id
-                    return (
-                      <tr key={b.id}>
-                        <td><strong>{b.iron_number || '—'}</strong></td>
-                        <td>{b.box_type_name || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
-                        <td>
-                          {last ? (
-                            <span
-                              className="clickable"
-                              style={{ color: 'var(--accent)', cursor: 'pointer' }}
-                              onClick={() => navigate(`/cards/${last.id}`)}
-                            >{lastLabel}</span>
-                          ) : <span style={{ color: 'var(--text3)' }}>—</span>}
-                        </td>
-                        <td>{b.notes || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
-                        <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          <button
-                            className="btn sm"
-                            onClick={() => setEditingBox(b)}
-                            disabled={busy}
-                            title="עריכת פרטי הקופה (מספר, סוג, הערות)"
-                          >✏️ עריכה</button>
-                          <button
-                            className="btn sm primary"
-                            onClick={() => handleRestoreUsable(b)}
-                            disabled={busy}
-                          >{busy ? '...' : 'החזר לשימוש'}</button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <PaginatedTable
+              data={filtered}
+              getRowKey={(b) => b.id}
+              header={(
+                <tr>
+                  <th>מספר קופה</th>
+                  <th>סוג</th>
+                  <th>כרטסת אחרונה</th>
+                  <th>הערות</th>
+                  <th></th>
+                </tr>
+              )}
+              renderRow={(b) => {
+                const last = lastClosedByBox.get(b.id)
+                const lastLabel = last ? (labels.get(last.id) || `#${last.id}`) : '—'
+                const busy = statusBusyId === b.id
+                return (
+                  <>
+                    <td><strong>{b.iron_number || '—'}</strong></td>
+                    <td>{b.box_type_name || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
+                    <td>
+                      {last ? (
+                        <span
+                          className="clickable"
+                          style={{ color: 'var(--accent)', cursor: 'pointer' }}
+                          onClick={() => navigate(`/cards/${last.id}`)}
+                        >{lastLabel}</span>
+                      ) : <span style={{ color: 'var(--text3)' }}>—</span>}
+                    </td>
+                    <td>{b.notes || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
+                    <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <button
+                        className="btn sm"
+                        onClick={() => setEditingBox(b)}
+                        disabled={busy}
+                        title="עריכת פרטי הקופה (מספר, סוג, הערות)"
+                      >✏️ עריכה</button>
+                      <button
+                        className="btn sm primary"
+                        onClick={() => handleRestoreUsable(b)}
+                        disabled={busy}
+                      >{busy ? '...' : 'החזר לשימוש'}</button>
+                    </td>
+                  </>
+                )
+              }}
+            />
           )
         )}
       </div>

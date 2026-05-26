@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useData, useBootstrap } from '@shared/context/DataStoreContext'
 import { computeCardLabels } from '@shared/utils/cardLabel'
 import { exportCards } from '../utils/exportToCsv'
 import { useSortable, SortableTh } from '../utils/sortable.jsx'
+import PaginatedTable from '../utils/PaginatedTable.jsx'
 
 const STATUS_LABELS = {
   active: { label: 'פעילה',     pill: 'green' },
@@ -240,6 +241,70 @@ export default function CardsPage() {
   }), [labels])
   const { sorted, sort, toggle } = useSortable(filtered, sortAccessors)
 
+  // Single page-level handler: every place that needs to open a card calls it
+  // with the card id. Stable reference (useCallback) so child components don't
+  // re-render unnecessarily.
+  const openCard = useCallback((id) => navigate(`/cards/${id}`), [navigate])
+
+  const header = (
+    <tr>
+      <SortableTh sortKey="iron"         sort={sort} onToggle={toggle}>קופה</SortableTh>
+      <SortableTh sortKey="card"         sort={sort} onToggle={toggle}>כרטסת</SortableTh>
+      <SortableTh sortKey="city"         sort={sort} onToggle={toggle}>עיר</SortableTh>
+      <SortableTh sortKey="neighborhood" sort={sort} onToggle={toggle}>שכונה</SortableTh>
+      <SortableTh sortKey="street"       sort={sort} onToggle={toggle}>רחוב</SortableTh>
+      <SortableTh sortKey="building"     sort={sort} onToggle={toggle}>בנין</SortableTh>
+      <SortableTh sortKey="collector"    sort={sort} onToggle={toggle}>גובה</SortableTh>
+      <SortableTh sortKey="last"         sort={sort} onToggle={toggle}>גביה אחרונה</SortableTh>
+      <SortableTh sortKey="status"       sort={sort} onToggle={toggle}>סטטוס</SortableTh>
+      <SortableTh sortKey="flags"        sort={sort} onToggle={toggle}>סימונים</SortableTh>
+      <th></th>
+    </tr>
+  )
+
+  const renderRow = (c) => {
+    const st = STATUS_LABELS[c.status] || { label: c.status, pill: 'gray' }
+    const label = labels.get(c.id) || `#${c.id}`
+    const cardLabel = c.custom_name
+      ? <><strong>{c.custom_name}</strong> <span style={{ fontSize: 11, color: 'var(--text3)' }}>{label}</span></>
+      : <strong>{label}</strong>
+    const lastCollection = c.last_collection_at
+      ? new Date(c.last_collection_at).toLocaleDateString('he-IL')
+      : <span style={{ color: 'var(--text3)' }}>—</span>
+    return (
+      <>
+        <td><strong>{c.iron_number || '—'}</strong></td>
+        <td>{cardLabel}</td>
+        <td>{c.city || '—'}</td>
+        <td>{c.neighborhood || '—'}</td>
+        <td>{c.street || '—'}</td>
+        <td>{c.building || '—'}</td>
+        <td>{c.collector_name || <span style={{ color: 'var(--text3)' }}>לא משויך</span>}</td>
+        <td>{lastCollection}</td>
+        <td><span className={'pill ' + st.pill}>{st.label}</span></td>
+        <td>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {c.has_open_report && (
+              <span className="pill yellow" title="יש דיווח פתוח על הכרטסת">⚠ דיווח פתוח</span>
+            )}
+            {c.has_open_task && (
+              <span className="pill blue" title="יש משימה פתוחה על הכרטסת">📋 משימה פתוחה</span>
+            )}
+            {!c.has_open_report && !c.has_open_task && (
+              <span style={{ color: 'var(--text3)' }}>—</span>
+            )}
+          </div>
+        </td>
+        <td>
+          <button
+            className="btn sm primary"
+            onClick={(e) => { e.stopPropagation(); openCard(c.id) }}
+          >פתיחה</button>
+        </td>
+      </>
+    )
+  }
+
   return (
     <div className="screen">
       <div className="page-header">
@@ -343,69 +408,13 @@ export default function CardsPage() {
         ) : filtered.length === 0 ? (
           <div className="empty">לא נמצאו כרטסות התואמות את הסינון</div>
         ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <SortableTh sortKey="iron"         sort={sort} onToggle={toggle}>קופה</SortableTh>
-                  <SortableTh sortKey="card"         sort={sort} onToggle={toggle}>כרטסת</SortableTh>
-                  <SortableTh sortKey="city"         sort={sort} onToggle={toggle}>עיר</SortableTh>
-                  <SortableTh sortKey="neighborhood" sort={sort} onToggle={toggle}>שכונה</SortableTh>
-                  <SortableTh sortKey="street"       sort={sort} onToggle={toggle}>רחוב</SortableTh>
-                  <SortableTh sortKey="building"     sort={sort} onToggle={toggle}>בנין</SortableTh>
-                  <SortableTh sortKey="collector"    sort={sort} onToggle={toggle}>גובה</SortableTh>
-                  <SortableTh sortKey="last"         sort={sort} onToggle={toggle}>גביה אחרונה</SortableTh>
-                  <SortableTh sortKey="status"       sort={sort} onToggle={toggle}>סטטוס</SortableTh>
-                  <SortableTh sortKey="flags"        sort={sort} onToggle={toggle}>סימונים</SortableTh>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map(c => {
-                  const st = STATUS_LABELS[c.status] || { label: c.status, pill: 'gray' }
-                  const label = labels.get(c.id) || `#${c.id}`
-                  const cardLabel = c.custom_name
-                    ? <><strong>{c.custom_name}</strong> <span style={{ fontSize: 11, color: 'var(--text3)' }}>{label}</span></>
-                    : <strong>{label}</strong>
-                  const lastCollection = c.last_collection_at
-                    ? new Date(c.last_collection_at).toLocaleDateString('he-IL')
-                    : <span style={{ color: 'var(--text3)' }}>—</span>
-                  return (
-                    <tr key={c.id} className="clickable" onClick={() => navigate(`/cards/${c.id}`)}>
-                      <td><strong>{c.iron_number || '—'}</strong></td>
-                      <td>{cardLabel}</td>
-                      <td>{c.city || '—'}</td>
-                      <td>{c.neighborhood || '—'}</td>
-                      <td>{c.street || '—'}</td>
-                      <td>{c.building || '—'}</td>
-                      <td>{c.collector_name || <span style={{ color: 'var(--text3)' }}>לא משויך</span>}</td>
-                      <td>{lastCollection}</td>
-                      <td><span className={'pill ' + st.pill}>{st.label}</span></td>
-                      <td>
-                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                          {c.has_open_report && (
-                            <span className="pill yellow" title="יש דיווח פתוח על הכרטסת">⚠ דיווח פתוח</span>
-                          )}
-                          {c.has_open_task && (
-                            <span className="pill blue" title="יש משימה פתוחה על הכרטסת">📋 משימה פתוחה</span>
-                          )}
-                          {!c.has_open_report && !c.has_open_task && (
-                            <span style={{ color: 'var(--text3)' }}>—</span>
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        <button
-                          className="btn sm primary"
-                          onClick={(e) => { e.stopPropagation(); navigate(`/cards/${c.id}`) }}
-                        >פתיחה</button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <PaginatedTable
+            data={sorted}
+            header={header}
+            renderRow={renderRow}
+            onRowClick={(c) => openCard(c.id)}
+            getRowKey={(c) => c.id}
+          />
         )}
       </div>
     </div>

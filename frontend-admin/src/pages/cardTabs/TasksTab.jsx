@@ -6,6 +6,7 @@ import CancelTaskModal from '../../components/CancelTaskModal'
 import TaskNotExecutedModal from '../../components/TaskNotExecutedModal'
 import { useAuth } from '@shared/context/AuthContext'
 import { exportCsv, csvFilename } from '../../utils/exportCsv'
+import PaginatedTable from '../../utils/PaginatedTable.jsx'
 
 function formatDate(iso) {
   if (!iso) return '—'
@@ -97,78 +98,65 @@ export default function TasksTab({ cardId, boxId }) {
       ) : list.length === 0 ? (
         <div className="empty">אין משימות לכרטסת זו</div>
       ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>תאריך</th>
-                <th>סוג</th>
-                <th>סטטוס</th>
-                <th>משויך</th>
-                <th>נוצר ע"י</th>
-                <th>הערות</th>
-                {isAdmin && <th>פעולות</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {list.map(t => {
-                const st = STATUS[t.status] || { label: t.status, cls: 'gray' }
-                const isFinal = t.status === 'done' || t.status === 'cancelled' || t.status === 'not_executed'
-                return (
-                  <tr
-                    key={t.id}
-                    className="clickable"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => openTask(t)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        openTask(t)
-                      }
-                    }}
-                  >
-                    <td>{formatDate(t.created_at)}</td>
-                    <td>{t.icon ? `${t.icon} ` : ''}{t.type_name || '—'}</td>
-                    <td>
-                      <span
-                        className={'pill ' + st.cls}
-                        title={
-                          t.status === 'cancelled' && t.cancellation_reason
-                            ? `סיבת ביטול: ${t.cancellation_reason}`
-                          : t.status === 'not_executed' && t.not_executed_reason
-                            ? `סיבת אי-ביצוע: ${t.not_executed_reason}`
-                            : undefined
-                        }
-                      >{st.label}</span>
-                    </td>
-                    <td>{t.assigned_name || <span style={{ color: 'var(--text3)' }}>לא משויך</span>}</td>
-                    <td>{t.created_by_name || '—'}</td>
-                    <td style={{ maxWidth: 300 }}>{t.notes || '—'}</td>
-                    {isAdmin && (
-                      <td className="actions" style={{ flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
-                        {!isFinal && (
-                          <>
-                            <button
-                              className="btn sm danger"
-                              onClick={(e) => { e.stopPropagation(); setNotExecTask(t) }}
-                              title="סגור את המשימה כלא בוצעה"
-                            >❌ לא בוצעה</button>
-                            <button
-                              className="btn sm danger"
-                              onClick={(e) => { e.stopPropagation(); setCancelTask(t) }}
-                              title="העבר את המשימה לסטטוס בוטל"
-                            >🚫 בטל</button>
-                          </>
-                        )}
-                      </td>
+        <PaginatedTable
+          data={list}
+          getRowKey={(t) => t.id}
+          onRowClick={(t) => openTask(t)}
+          header={(
+            <tr>
+              <th>תאריך</th>
+              <th>סוג</th>
+              <th>סטטוס</th>
+              <th>משויך</th>
+              <th>נוצר ע"י</th>
+              <th>הערות</th>
+              {isAdmin && <th>פעולות</th>}
+            </tr>
+          )}
+          renderRow={(t) => {
+            const st = STATUS[t.status] || { label: t.status, cls: 'gray' }
+            const isFinal = t.status === 'done' || t.status === 'cancelled' || t.status === 'not_executed'
+            return (
+              <>
+                <td>{formatDate(t.created_at)}</td>
+                <td>{t.icon ? `${t.icon} ` : ''}{t.type_name || '—'}</td>
+                <td>
+                  <span
+                    className={'pill ' + st.cls}
+                    title={
+                      t.status === 'cancelled' && t.cancellation_reason
+                        ? `סיבת ביטול: ${t.cancellation_reason}`
+                      : t.status === 'not_executed' && t.not_executed_reason
+                        ? `סיבת אי-ביצוע: ${t.not_executed_reason}`
+                        : undefined
+                    }
+                  >{st.label}</span>
+                </td>
+                <td>{t.assigned_name || <span style={{ color: 'var(--text3)' }}>לא משויך</span>}</td>
+                <td>{t.created_by_name || '—'}</td>
+                <td style={{ maxWidth: 300 }}>{t.notes || '—'}</td>
+                {isAdmin && (
+                  <td className="actions" style={{ flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
+                    {!isFinal && (
+                      <>
+                        <button
+                          className="btn sm danger"
+                          onClick={(e) => { e.stopPropagation(); setNotExecTask(t) }}
+                          title="סגור את המשימה כלא בוצעה"
+                        >❌ לא בוצעה</button>
+                        <button
+                          className="btn sm danger"
+                          onClick={(e) => { e.stopPropagation(); setCancelTask(t) }}
+                          title="העבר את המשימה לסטטוס בוטל"
+                        >🚫 בטל</button>
+                      </>
                     )}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+                  </td>
+                )}
+              </>
+            )
+          }}
+        />
       )}
 
       <TaskModal

@@ -3,6 +3,7 @@ import { envelopes as envelopesApi } from '../../api/endpoints'
 import CreateEnvelopeModal from '../../components/CreateEnvelopeModal'
 import CashroomModal from '../../components/CashroomModal'
 import { exportCsv, csvFilename } from '../../utils/exportCsv'
+import PaginatedTable from '../../utils/PaginatedTable.jsx'
 
 function formatDate(iso) {
   if (!iso) return '—'
@@ -98,9 +99,10 @@ export default function EnvelopesTab({ cardId, boxId }) {
       {list.length === 0 ? (
         <div className="empty">אין מעטפות לכרטסת זו</div>
       ) : (
-      <div className="table-wrap">
-        <table>
-          <thead>
+        <PaginatedTable
+          data={list}
+          getRowKey={(e) => e.id}
+          header={(
             <tr>
               <th>תאריך גביה</th>
               <th>מס' מעטפה</th>
@@ -110,30 +112,27 @@ export default function EnvelopesTab({ cardId, boxId }) {
               <th>הערות</th>
               <th>פעולה</th>
             </tr>
-          </thead>
-          <tbody>
-            {list.map(e => {
-              const st = STATUS[e.status] || { label: e.status, cls: 'gray' }
-              return (
-                <tr key={e.id}>
-                  <td>{formatDate(e.collected_at)}</td>
-                  <td><strong>{e.envelope_number}</strong></td>
-                  <td>{formatAmount(e.amount)}</td>
-                  <td>{e.collected_by_name || '—'}</td>
-                  <td><span className={'pill ' + st.cls}>{st.label}</span></td>
-                  <td>{e.notes || '—'}</td>
-                  <td className="actions">
-                    <button
-                      className="btn sm"
-                      onClick={() => setOpenEnv(e)}
-                    >{e.status === 'entered' ? '✏️ ערוך סכום' : 'פרטים'}</button>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+          )}
+          renderRow={(e) => {
+            const st = STATUS[e.status] || { label: e.status, cls: 'gray' }
+            return (
+              <>
+                <td>{formatDate(e.collected_at)}</td>
+                <td><strong>{e.envelope_number}</strong></td>
+                <td>{formatAmount(e.amount)}</td>
+                <td>{e.collected_by_name || '—'}</td>
+                <td><span className={'pill ' + st.cls}>{st.label}</span></td>
+                <td>{e.notes || '—'}</td>
+                <td className="actions">
+                  <button
+                    className="btn sm"
+                    onClick={() => setOpenEnv(e)}
+                  >{e.status === 'entered' ? '✏️ ערוך סכום' : 'פרטים'}</button>
+                </td>
+              </>
+            )
+          }}
+        />
       )}
 
       {showCreateModal && (
