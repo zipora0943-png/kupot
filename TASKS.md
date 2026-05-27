@@ -65,6 +65,22 @@ _(אין משימה בביצוע)_
 **קבצים ששונו:** רשימה
 -->
 
+### 55. תיקון: מודאל אימות GPS לא הופיע לכרטסות בלי קואורדינטות (1.0.11) — 2026-05-27
+**מה נעשה:** באג שהתגלה אחרי העלאת 1.0.10 — בעת לחיצה על "💰 בצע גביה", המסך **קופץ ישר לסריקה** בלי להציג את המודאל המאוחד (משימה 52), במקרים בהם הכרטסת לא geocoded (אין `latitude`/`longitude`).
+
+**שורש הבעיה:** ב-`backend/src/routes/cards.js:761-767` (endpoint `POST /api/cards/:id/verify-location`), כשלכרטסת אין coordinates השרת מחזיר אופטימי `within_radius: true` (יחד עם `card_geocoded: false`) — בכוונה לא לחסום את הגובה. הקליינט שלי במשימה 52 בדק `result.within_radius` **לפני** `result.card_geocoded`, אז הסעיף `if (result.within_radius) navigate('/scan/...')` רץ ראשון והניווט קרה בלי מודאל. ה-`if (!result.card_geocoded)` שלמטה — לעולם לא רץ.
+
+**הפתרון:** סדר הבדיקות הופך — `card_geocoded` קודם, ורק אם הכרטסת geocoded — בודקים `within_radius`. בכרטסת בלי coords עכשיו תמיד מופיע המודאל "לא הצלחנו לאמת" (kind=`unavailable`) עם 3 הכפתורים.
+
+**Release 1.0.11:** `package.json: 1.0.10 → 1.0.11`, `build.gradle: versionCode 11 → 12, versionName "1.0.10" → "1.0.11"`. APK שמו עכשיו `collector-1.0.11.apk` (לפי משימה 54).
+
+**קבצים ששונו (3):**
+- `frontend-collector/src/pages/CollectionPage.jsx` — החלפת סדר 2 ה-`if`-ים ב-`runVerification` + הערה למה.
+- `frontend-collector/package.json` — version 1.0.11.
+- `frontend-collector/android/app/build.gradle` — versionCode 12, versionName "1.0.11".
+
+---
+
 ### 54. תיקון: שמות קבצי APK לפי גרסה במקום hex אקראי — 2026-05-27
 **מה נעשה:** באג ב-`backend/src/routes/version.js` שגרם לכל APK שהועלה דרך `POST /api/version/collector` להישמר בשם של hex אקראי (`collector-415fea25.apk`) במקום שם של גרסה (`collector-1.0.10.apk`). הסיבה: `multer.diskStorage.filename` מופעל **לפני** שה-text fields של ה-multipart-payload נפרסים, אז `req.body.version` תמיד undefined ב-callback הזה — והקוד נופל ל-fallback של `crypto.randomBytes(4).toString('hex')`.
 
