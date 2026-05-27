@@ -23,7 +23,13 @@ const MAX_APK_BYTES = Number.parseInt(process.env.MAX_APK_BYTES, 10) || 50 * 102
 const apkStorage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, DOWNLOADS_DIR),
   filename:    (req, file, cb) => {
-    const version = (req.body && req.body.version) || crypto.randomBytes(4).toString('hex');
+    // multer fires this BEFORE the text fields of the multipart payload are
+    // parsed, so req.body.version is undefined here. release.cjs uploads the
+    // file with originalname `collector-X.Y.Z.apk`, so we read the version
+    // from there. Falls back to random hex for direct/manual uploads that
+    // don't follow the convention.
+    const m = /^collector-(\d+\.\d+\.\d+)\.apk$/i.exec(file.originalname || '');
+    const version = m ? m[1] : (req.body && req.body.version) || crypto.randomBytes(4).toString('hex');
     const safe = String(version).replace(/[^a-zA-Z0-9._-]/g, '');
     cb(null, `collector-${safe}.apk`);
   },
