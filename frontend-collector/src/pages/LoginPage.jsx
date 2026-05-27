@@ -1,7 +1,12 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { useAuth } from '@shared/context/AuthContext'
+import { API_BASE } from '@shared/api/client'
 import { defaultPathForRole } from '../utils/defaultPath'
+
+// Strip the trailing /api so we can build absolute URLs from server-relative
+// paths the API returns (e.g. apk_url: "/downloads/foo.apk").
+const STATIC_BASE = API_BASE.replace(/\/api\/?$/, '')
 
 export default function LoginPage() {
   const { login, user, isAuthenticated, loading: authLoading } = useAuth()
@@ -12,6 +17,20 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [errMsg, setErrMsg] = useState(null)
+  // Latest APK manifest — sourced from /api/version/collector (same manifest
+  // the in-app update flow uses) so the download link auto-tracks every release
+  // without a separate file to maintain. Best-effort: if it fails the section
+  // just doesn't render.
+  const [appInfo, setAppInfo] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`${STATIC_BASE}/api/version/collector`, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (!cancelled) setAppInfo(d) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   if (!authLoading && isAuthenticated) {
     // Cashroom users always go straight to the cashroom screen — even if they
@@ -82,6 +101,24 @@ export default function LoginPage() {
             {submitting ? 'מתחבר...' : 'התחברות'}
           </button>
         </form>
+
+        {appInfo && appInfo.apk_url && (
+          <div className="apk-download" style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)', textAlign: 'center' }}>
+            <a
+              href={`${STATIC_BASE}${appInfo.apk_url}`}
+              download={appInfo.apk_url.split('/').pop()}
+              className="btn"
+              style={{ display: 'inline-block', textDecoration: 'none' }}
+            >
+              📥 הורד גירסה אחרונה ({appInfo.version})
+            </a>
+            {appInfo.release_notes && (
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 8, lineHeight: 1.4 }}>
+                {appInfo.release_notes}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
