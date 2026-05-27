@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@shared/context/AuthContext'
 import { useData } from '@shared/context/DataStoreContext'
 import TaskModal from '../components/TaskModal'
+import SelfReportTaskModal from '../components/SelfReportTaskModal'
 import ReportModal from '../components/ReportModal'
 import CloseReportModal from '@shared/components/CloseReportModal'
 
@@ -25,6 +26,9 @@ export default function TasksAlertsPage() {
   const location = useLocation()
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
+  // Task 50: collector with this permission gets a "+ דווח על משימה שביצעתי" button.
+  const canSelfReport = user?.role === 'collector' && !!user?.permissions?.can_self_report_tasks
+  const [selfReportOpen, setSelfReportOpen] = useState(false)
   const initialTab = location.state?.tab === 'alerts'
     ? 'alerts'
     : location.state?.tab === 'tasks'
@@ -77,6 +81,18 @@ export default function TasksAlertsPage() {
             onClick={() => setCreateOpen(true)}
           >
             ➕ צור משימה
+          </button>
+        </div>
+      )}
+
+      {canSelfReport && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <button
+            type="button"
+            className="btn primary"
+            onClick={() => setSelfReportOpen(true)}
+          >
+            ➕ דווח על משימה שביצעתי
           </button>
         </div>
       )}
@@ -190,6 +206,14 @@ export default function TasksAlertsPage() {
         />
       )}
 
+      {canSelfReport && (
+        <SelfReportTaskModal
+          open={selfReportOpen}
+          onClose={() => setSelfReportOpen(false)}
+          onSaved={() => { setSelfReportOpen(false); refetchTasks() }}
+        />
+      )}
+
       {isAdmin && (
         <ReportModal
           open={!!openReport}
@@ -220,7 +244,8 @@ function TasksList({ list, loading, error, onClick, hideEmpty, sectionTitle }) {
       {sectionTitle && <div className="simple-row-section-title">{sectionTitle}</div>}
       {list.map((t) => {
         const title = `${t.icon || '📋'} ${t.type_name || 'משימה'}`
-        const boxLabel = t.iron_number ? `קופה #${t.iron_number}` : ''
+        // Task 48: deferred-box installation tasks have no iron_number yet.
+        const boxLabel = t.iron_number ? `קופה #${t.iron_number}` : (t.opens_card ? 'קופה חדשה (יוזן בביצוע)' : '')
         const due = t.due_date ? `יעד: ${formatDate(t.due_date)}` : ''
         const meta = [boxLabel, due].filter(Boolean).join(' · ')
         return (

@@ -48,6 +48,7 @@
 
 **ממתין:** המשתמשת בודקת רישום דומיין (נכון ל-2026-05-10). לא להתחיל בלי דומיין.
 
+
 ---
 
 ## 🔄 בביצוע
@@ -63,6 +64,79 @@ _(אין משימה בביצוע)_
 **מה נעשה:** סיכום קצר
 **קבצים ששונו:** רשימה
 -->
+
+### 52. גובה — מיקום שגוי: 2 אפשרויות במקום textarea חובה — 2026-05-27
+**מה נעשה:** עד היום כשהגובה היה מחוץ לרדיוס של הכתובת הרשומה, המודאל `radiusWarning` כפה עליו לכתוב סיבה חופשית (≥5 תווים) כדי להמשיך. עכשיו המודאל מציג **2 כפתורים מקבילים**:
+- **"✓ המשך"** — לחיצה אחת, ללא טקסט. נרשם `location_override` עם reason קבוע `"המשך ללא דיווח מיקום שגוי"` (שומר על audit trail עם distance + GPS + user + timestamp), ואז ניווט ל-`/scan/:id`.
+- **"📝 דווח על מיקום שגוי"** — מנווט ל-`/report/:id?reason=address&next=scan`. אחרי שליחת הדיווח — `ReportFormPage` קורא את `next=scan` ומנווט ישירות ל-`/scan/${cardId}` במקום חזרה ל-`/collection/${cardId}`, כך שהגביה ממשיכה ברצף.
+
+אותו דפוס הוחל גם על שני המודאלים הנוספים שמטפלים בכשל GPS:
+- `geoUnavailable` (GPS לא זמין בעת לחיצה על "בצע גביה" מתוך הכרטסת) — נוסף כפתור "📝 דווח על מיקום שגוי" שלישי לצד "המשך" + "ביטול".
+- `confirmCard` (lookup ידני + GPS נכשל) — היה כבר עם 2 כפתורים; הקישור עודכן עם `&next=scan` ושם הכפתור אוחד ל-"📝 דווח על מיקום שגוי".
+
+**שיקול עיצובי:** ה-`MIN_REASON_LENGTH=5` בבק-אנד (`locationOverrides.js`) לא נגע. הקבוע העברי "המשך ללא דיווח מיקום שגוי" מספיק כדי לעבור את הוולידציה, כך שאין צורך בשינוי שרת. ה-audit נשמר במלואו: גם כשהגובה לוחץ "המשך" ב-1-click, נרשמת שורה ב-`location_overrides` עם המרחק המדויק והקואורדינטות. ה-admin יוכל להבחין בקלות בין דיווחים פרואקטיביים (טבלת `reports`, תיאור "כתובת שגויה: ...") לבין dismissals (`location_overrides` עם הטקסט הקבוע).
+
+**בדיקה ידנית מומלצת (באנדרואיד):**
+1. גובה נכנס לכרטסת → "💰 בצע גביה" כשהוא רחוק מהכתובת → רואה 2 כפתורים.
+2. לחיצה "✓ המשך" → ישר לסריקה. ב-DB: שורה חדשה ב-`location_overrides` עם הסיבה הקבועה.
+3. חזרה והפעם "📝 דווח על מיקום שגוי" → עמוד דיווח עם "כתובת שגויה: " ב-textarea → שליחה → ישר לסריקה (לא חזרה לעמוד הכרטסת).
+4. כיבוי הרשאת מיקום במכשיר → "בצע גביה" → מודאל `geoUnavailable` עם 3 הכפתורים.
+
+**קבצים ששונו (2):**
+- `frontend-collector/src/pages/CollectionPage.jsx` — הסרת `overrideReason` state ו-textarea; שינוי `submitOverride` → `continueWithoutReport` (auto-reason); 2 כפתורים במודאל `radiusWarning`; הוספת כפתור דיווח במודאל `geoUnavailable`; עדכון קישור דיווח ב-`confirmCard` עם `&next=scan`.
+- `frontend-collector/src/pages/ReportFormPage.jsx` — קריאת `next` query param; ניווט אחרי הצלחה ל-`/scan/${cardId}` כש-`next === 'scan'`, אחרת התנהגות קודמת.
+
+---
+
+### 50. הרשאת גובה לדיווח עצמי על משימה (JSONB permissions) — 2026-05-27
+**מה נעשה:** הוספתי הרשאה חדשה ברמת משתמש שמאפשרת לגובה ליצור משימה ולדווח עליה כמבוצעת באותה פעולה — לדוגמה התקנה עצמית של קופה או החלפת מנעול שבוצעה בשטח ללא מעורבות מנהל. DB: עמודה חדשה `users.permissions JSONB NOT NULL DEFAULT '{}'`, נטענת idempotent ב-`schema.sql`. הסכמה גמישה לעתיד; כרגע מטופל מפתח אחד: `can_self_report_tasks: boolean`. Backend: ב-`auth.js` (login + /me) ו-`users.js` (list/create/update + PUBLIC_COLUMNS) הוספתי קריאה/כתיבה של `permissions`. ב-users הוספתי `validatePermissions` שמסנן מפתחות לא ידועים ומאמת טיפוסים (Boolean) — כך שגם אם הקליינט שולח אשפה לא יישבר ה-DB. ב-`POST /api/tasks` שיניתי את ה-gate: admin ממשיך כרגיל; collector מקבל אישור רק אם `permissions.can_self_report_tasks=true`. עבור collector — `assigned_to=created_by=req.user.id` כפוי; משימות `grants_temporary_access` (גביה) חסומות (מקרה שימוש לא הגיוני); ואם הבקשה כללה `self_report:true`, אחרי ה-INSERT מופעל `completeTask` באופן מיידי, וה-endpoint מחזיר את ה-task המלא אחרי לחזרה (כולל היצירה של ה-box+card למשימת התקנה — תלוי בנושא 48). שגיאות מ-completeTask ממופות ל-status codes ברורים עם `task_id` כדי שה-UI יוכל לכוון את המשתמש לתקן ולהריץ /complete ידנית. Frontend admin: ב-`UserModal` הוסף state חדש `canSelfReportTasks`, צ'קבוקס "🔐 הרשאות מיוחדות — יכול לדווח על משימות שביצע בעצמו" שמוצג רק לגובים, ובניית `permissions` payload בשמירה (מתאפסת ל-`{}` בתפקיד שאינו collector). Frontend collector: רכיב חדש `SelfReportTaskModal` שמתאים את הזרימה לגובה — בוחר סוג משימה (פילטר אוטומטי לסוגי "גביה"), אם opens_card מבקש iron_number+סוג קופה+מיקום, אחרת בוחר קופה קיימת; שולח עם `self_report:true`. ב-`TasksAlertsPage` הוספתי `canSelfReport` (תלוי ב-`user.permissions.can_self_report_tasks`) וכפתור "➕ דווח על משימה שביצעתי" שפותח את ה-modal. הערה: משתמשים שכבר מחוברים (token תקף) צריכים להתנתק ולהתחבר מחדש כדי להוריד את ה-permissions לתוך ה-localStorage. כל ה-57 unit tests עוברים.
+
+**קבצים ששונו:**
+- backend/src/db/schema.sql (ALTER TABLE users ADD COLUMN permissions JSONB NOT NULL DEFAULT '{}')
+- backend/src/routes/auth.js (login + /me מחזירים permissions)
+- backend/src/routes/users.js (PUBLIC_COLUMNS + validatePermissions + POST/PUT מקבלים permissions)
+- backend/src/routes/tasks.js (POST / — גובה עם can_self_report_tasks; self_report=true → completeTask מיידי)
+- frontend-admin/src/components/UserModal.jsx (state canSelfReportTasks + checkbox + payload permissions)
+- frontend-collector/src/components/SelfReportTaskModal.jsx (חדש — טופס יצירה+ביצוע משולב לגובה)
+- frontend-collector/src/pages/TasksAlertsPage.jsx (canSelfReport + כפתור + מודאל)
+
+---
+
+### 49. יצירת קופה ב-BoxesPage פותחת גם כרטסת (שדות חובה) — 2026-05-27
+**מה נעשה:** הפכתי את `POST /api/boxes` לפעולה משולבת — יוצרת קופה ופותחת לה כרטסת ראשונה באותה טרנזקציה. הזרימה החדשה: ה-endpoint מקבל בנוסף ל-`iron_number`/`box_type_id`/`notes` גם את פרטי הכרטסת (`city` כשדה חובה, ו-`neighborhood`/`street`/`building`/`location_notes`/`custom_name`/`installation_type`/`alert_days_personal`/`receipt_required`/`receipt_details` כאופציונליים). הקופה נוצרת עם `status='active'` ישירות, וקריאה ל-`openCard` עם `EVENT.INSTALLATION` באותה client מבטיחה ROLLBACK אטומי במידה ויש כשל. אם `iron_number` כפול (23505) → 409; `box_type_id` לא תקין (23503) → 400. הקריאה מחזירה את ה-box המעודכן עם `card` בתוכו. ב-frontend: `BoxModal` קיבל מצב create מורחב עם בלוק "📇 פרטי הכרטסת" — שדות עיר/שכונה/רחוב/בניין דרך `LocationCombobox`, הערות מיקום, שם מותאם, סוג התקנה, טווח התראה אישי, וצ'קבוקס "דרוש קבלה" עם שדה פרטים תלוי-מצב. מצב edit נשאר ללא שינוי (עורכים שדות כרטסת מ-`CardDetailPage`). הוולידציה: `city` חובה במצב create. שאר הזרימות (`PUT /api/boxes/:id`, `PATCH /:id/status`) לא נגעו ועובדות כרגיל. כל ה-57 unit tests עוברים. הערה: 2 integration tests משתמשות ב-`insertBox` בעבודה ישירה מול ה-DB (לא דרך ה-endpoint) — לא מושפעות.
+
+**קבצים ששונו:**
+- backend/src/routes/boxes.js (POST / מורחב: לקבל פרטי כרטסת + להריץ openCard באותה טרנזקציה)
+- frontend-admin/src/components/BoxModal.jsx (state חדש + בלוק "פרטי הכרטסת" במצב create + ולידציית עיר)
+
+---
+
+### 48. משימת התקנה ללא מספר קופה — הזנה מאוחרת בעת הביצוע — 2026-05-27
+**מה נעשה:** הפכתי את `tasks.box_id` ל-nullable כך שאפשר ליצור משימת התקנה (opens_card) ללא בחירה מראש של קופה — מספר הברזל וסוג הקופה יוזנו בעת לחיצה על "אישור ביצוע", והקופה והכרטסת ייווצרו באותה טרנזקציה. הזרימה: ב-`POST /api/tasks` (admin) מתירים כעת `box_id=null` רק כש-task_type.opens_card=true (משימות שאינן התקנה עדיין מחייבות קופה קיימת + כרטסת פעילה). ב-`completeTask` (cardLogic.js) הוספתי בלוק שמתבצע לפני openCard: אם `task.box_id IS NULL`, נדרשים `iron_number` ו-`box_type_id` ב-body, ה-box נוצר עם `status='active'`, ה-task מתעדכן ל-box_id החדש, ואז הזרימה ממשיכה כרגיל. הוספתי טיפול בשגיאות (409 על iron_number כפול, 400 על box_type_id לא תקין/iron_number חסר). ב-frontend: ב-`TaskModal` מסתירים את שדה הקופה כשנבחר סוג opens_card ומציגים הודעה ("מספר הקופה וסוג הקופה יוזנו בעת אישור הביצוע"). ב-`TaskExecModal` (גם admin וגם collector) מציגים בלוק "🆕 פרטי הקופה החדשה" עם שדות `מספר ברזל` + `סוג קופה` (select מתוך `boxTypes.getAll()`) — שני השדות חובה כשאין `task.box_id`. JOIN-ים ל-`boxes` ב-`fetchTaskWithType` וב-`GET /api/tasks` הומרו ל-`LEFT JOIN` כדי לתמוך ב-tasks ללא קופה. כל ה-57 unit tests עוברים.
+
+**קבצים ששונו:**
+- backend/src/db/schema.sql (ALTER TABLE tasks ALTER COLUMN box_id DROP NOT NULL)
+- backend/src/routes/tasks.js (LEFT JOIN על boxes; box_id אופציונלי ב-POST; שגיאות חדשות ב-/complete)
+- backend/src/logic/cardLogic.js (בלוק יצירת קופה ב-completeTask כש-task.box_id null)
+- frontend-admin/src/components/TaskModal.jsx (הסתרת שדה הקופה לעיצוב opens_card + alert info)
+- frontend-admin/src/components/TaskExecModal.jsx (בלוק "פרטי הקופה החדשה" + iron_number/box_type_id ב-body)
+- frontend-collector/src/components/TaskExecModal.jsx (אותו דבר לגובה)
+- frontend-collector/src/pages/TasksAlertsPage.jsx (תווית "קופה חדשה (יוזן בביצוע)" ברשימה)
+
+---
+
+### 51. החלפת מספר קופה בכרטסת — 2026-05-27
+**מה נעשה:** הוספתי endpoint `POST /api/cards/:id/swap-box` שמחליף את הקופה הפיזית מאחורי כרטסת פעילה ושומר את כל היסטוריית הכרטסת (מעטפות/אירועים/גביות). הלוגיקה בטרנזקציה: לוודא שהכרטסת פעילה, לאתר את הקופה החדשה לפי `iron_number`, לדחות אם זו אותה קופה או אם יש לקופה החדשה כרטסת פעילה, לעדכן `cards.box_id`, להעביר את הקופה החדשה ל-`active`, את הישנה ל-`unusable` (החלטת מוצר), וליצור event `box_swapped` בכרטסת עם תיאור "החלפת קופה <ישן> → <חדש>" + סיבה אופציונלית. הוספתי קבוע `EVENT.BOX_SWAPPED` ב-`cardLogic.js` ולייבל "החלפת קופה" (pill סגול) ב-`EventsTab`. ב-frontend: `cards.swapBox(id, body)` ב-`endpoints.js`, רכיב חדש `SwapBoxModal.jsx`, וכפתור "🔁 החלף קופה" ב-`CardDetailPage` (admin בלבד, רק על כרטסת פעילה). הטסטים — 57/57 unit עוברים.
+
+**קבצים ששונו:**
+- backend/src/logic/cardLogic.js (EVENT.BOX_SWAPPED)
+- backend/src/routes/cards.js (POST /:id/swap-box)
+- frontend-admin/src/api/endpoints.js (cards.swapBox)
+- frontend-admin/src/components/SwapBoxModal.jsx (חדש)
+- frontend-admin/src/pages/CardDetailPage.jsx (state + כפתור + מודאל)
+- frontend-admin/src/pages/cardTabs/EventsTab.jsx (תווית box_swapped)
+
+---
 
 ### 47. עמוד משימות (admin) — מסנן "התקנות (כולל העברה)", מסנן חודש ביצוע, שורת סיכום — 2026-05-14
 **מה נעשה:** העשרת עמוד המשימות של ה-admin כך שניתן יהיה לענות על השאלה "כמה התקנות בוצעו בחודש X על ידי גובה X":

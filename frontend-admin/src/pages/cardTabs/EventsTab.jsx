@@ -25,6 +25,7 @@ const EVENT_TYPE = {
   reopen:          { label: 'פתיחה מחדש',     cls: 'green'  },
   amount_changed:  { label: 'שינוי סכום',     cls: 'yellow' },
   report_closed:   { label: 'סגירת דיווח',    cls: 'gray'   },
+  box_swapped:     { label: 'החלפת קופה',     cls: 'purple' },
   other:           { label: 'אחר',            cls: 'gray'   },
 }
 

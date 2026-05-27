@@ -249,6 +249,19 @@ ALTER TABLE tasks ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
 -- report is closed via POST /api/reports/:id/close (without converting to task).
 ALTER TABLE reports ADD COLUMN IF NOT EXISTS closure_reason TEXT;
 
+-- Task 48: installation tasks may be created without a box. The iron_number +
+-- box_type are entered at execution time (the box and card are created in the
+-- same transaction as completeTask). Relax the NOT NULL constraint on tasks.box_id.
+ALTER TABLE tasks ALTER COLUMN box_id DROP NOT NULL;
+
+-- Task 50: per-user permissions JSONB (extensible without schema changes).
+-- Current keys:
+--   can_self_report_tasks (boolean) — when TRUE on a collector user, allows
+--     POST /api/tasks for that collector with status='done' (the task is
+--     created + completed in the same transaction). Default {} = no extra
+--     permissions beyond the role itself.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions JSONB NOT NULL DEFAULT '{}';
+
 -- Task 46: collectors can close a task as 'not_executed' with a free-text reason.
 -- Refresh the status CHECK constraint and add the reason column (idempotent).
 ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check;

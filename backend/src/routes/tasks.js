@@ -12,12 +12,14 @@ const VALID_STATUSES = ['open', 'in_progress', 'done', 'cancelled', 'not_execute
 
 // ─── helpers ──────────────────────────────────────────────────────
 async function fetchTaskWithType(taskId) {
+  // Task 48: tasks.box_id can be NULL when an installation was created without
+  // a box (iron_number entered at execute time). Use LEFT JOIN on boxes.
   const { rows } = await pool.query(
     `SELECT t.*, tt.opens_card, tt.closes_card, tt.name AS type_name, tt.icon,
             b.iron_number, u.name AS assigned_name, cb.name AS created_by_name
        FROM tasks t
        JOIN task_types tt ON tt.id = t.task_type_id
-       JOIN boxes b ON b.id = t.box_id
+       LEFT JOIN boxes b  ON b.id  = t.box_id
        LEFT JOIN users u  ON u.id  = t.assigned_to
        LEFT JOIN users cb ON cb.id = t.created_by
       WHERE t.id = $1`,
@@ -32,11 +34,13 @@ async function fetchTaskWithType(taskId) {
 router.get('/', async (req, res, next) => {
   const { status, assigned_to, box_id, task_type_id } = req.query;
 
+  // Task 48: tasks.box_id can be NULL when an installation was created without
+  // a box (iron_number entered at execute time). Use LEFT JOIN on boxes.
   let q = `SELECT t.*, tt.name AS type_name, tt.icon, tt.opens_card, tt.closes_card,
                   b.iron_number, u.name AS assigned_name, cb.name AS created_by_name
              FROM tasks t
              JOIN task_types tt ON tt.id = t.task_type_id
-             JOIN boxes b ON b.id = t.box_id
+             LEFT JOIN boxes b  ON b.id  = t.box_id
              LEFT JOIN users u  ON u.id  = t.assigned_to
              LEFT JOIN users cb ON cb.id = t.created_by
             WHERE 1=1`;
@@ -92,23 +96,57 @@ router.get('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /api/tasks  — admin only
+// POST /api/tasks
+//   - admin: full access (create any task, assign to anyone)
+//   - collector with permissions.can_self_report_tasks=true (task 50):
+//     may create a task assigned to themselves and have it executed
+//     immediately. assigned_to/created_by are forced to req.user.id.
+//     A `self_report` flag in the body triggers completeTask() right after
+//     INSERT so the same call records the work (installation, lock change,
+//     etc.) without an admin in the loop.
 // For non-installation tasks (task_type.opens_card === false), the active card
 // of the target box is auto-resolved and persisted as task.card_id.
 // If no active card exists for such tasks, creation is blocked (409).
-router.post('/', requireRole('admin'), async (req, res, next) => {
+// Task 48: for opens_card tasks (installation/transfer), box_id may be NULL.
+// In that case the iron_number + box_type are entered when /complete is called
+// (or — when self_report=true — within the same call).
+router.post('/', async (req, res, next) => {
+  // ── Authorization gate (task 50): admins always allowed; collectors only
+  // when they hold the can_self_report_tasks permission.
+  let selfReporter = false;
+  if (req.user.role === 'admin') {
+    // ok
+  } else if (req.user.role === 'collector') {
+    const { rows: u } = await pool.query(
+      `SELECT permissions FROM users WHERE id = $1 AND active = TRUE`,
+      [req.user.id]
+    );
+    if (!u[0] || !u[0].permissions?.can_self_report_tasks) {
+      return res.status(403).json({ error: 'Insufficient permissions to create tasks' });
+    }
+    selfReporter = true;
+  } else {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
   const {
     box_id, task_type_id, assigned_to, notes, image_path,
     new_city, new_neighborhood, new_street, new_building, new_location_notes,
+    // Task 50 (self_report): if true and creator is a collector with permission,
+    // the task is created AND completed in the same call.
+    self_report,
+    // Forwarded to completeTask when self_report is set:
+    iron_number, box_type_id, execution_notes, execution_image,
   } = req.body || {};
 
-  const bid = Number(box_id);
   const ttid = Number(task_type_id);
-  if (!Number.isInteger(bid))  return res.status(400).json({ error: 'box_id required' });
   if (!Number.isInteger(ttid)) return res.status(400).json({ error: 'task_type_id required' });
 
+  // Collectors cannot assign tasks to others — force self.
   let aid = null;
-  if (assigned_to !== undefined && assigned_to !== null) {
+  if (selfReporter) {
+    aid = req.user.id;
+  } else if (assigned_to !== undefined && assigned_to !== null) {
     aid = Number(assigned_to);
     if (!Number.isInteger(aid)) return res.status(400).json({ error: 'Invalid assigned_to' });
   }
@@ -119,11 +157,27 @@ router.post('/', requireRole('admin'), async (req, res, next) => {
 
   try {
     const { rows: typeRows } = await pool.query(
-      `SELECT opens_card FROM task_types WHERE id = $1`,
+      `SELECT opens_card, closes_card, grants_temporary_access FROM task_types WHERE id = $1`,
       [ttid]
     );
     if (!typeRows[0]) return res.status(400).json({ error: 'Invalid task_type_id' });
     const opensCard = !!typeRows[0].opens_card;
+
+    // Collectors self-reporting cannot use the "גביה" task type (which grants
+    // temporary access) — that's a managed flow, not a self-report.
+    if (selfReporter && typeRows[0].grants_temporary_access) {
+      return res.status(400).json({ error: 'Cannot self-report this task type' });
+    }
+
+    // Task 48: box_id is optional for opens_card (installation), required otherwise.
+    let bid = null;
+    if (box_id !== undefined && box_id !== null && box_id !== '') {
+      bid = Number(box_id);
+      if (!Number.isInteger(bid)) return res.status(400).json({ error: 'Invalid box_id' });
+    }
+    if (!opensCard && bid == null) {
+      return res.status(400).json({ error: 'box_id required for non-installation tasks' });
+    }
 
     let cardId = null;
     if (!opensCard) {
@@ -147,7 +201,40 @@ router.post('/', requireRole('admin'), async (req, res, next) => {
        new_city ?? null, new_neighborhood ?? null, new_street ?? null,
        new_building ?? null, new_location_notes ?? null]
     );
-    res.status(201).json(rows[0]);
+    const created = rows[0];
+
+    // ── Task 50: when self_report is requested, immediately run the lifecycle.
+    // completeTask() handles both opens_card (with iron_number + box_type_id when
+    // task.box_id is NULL) and non-lifecycle (generic TASK_DONE event).
+    if (self_report && selfReporter) {
+      try {
+        await completeTask(created.id, {
+          new_city: new_city ?? null,
+          new_neighborhood: new_neighborhood ?? null,
+          new_street: new_street ?? null,
+          new_building: new_building ?? null,
+          new_location_notes: new_location_notes ?? null,
+          iron_number, box_type_id,
+          execution_notes: execution_notes ?? null,
+          execution_image: execution_image ?? null,
+        }, req.user.id);
+      } catch (err) {
+        // Task created but not completed — surface a specific error so the UI
+        // can prompt the collector to fix the data (e.g. duplicate iron_number)
+        // and call /complete separately. The task is left in 'open' state.
+        if (/^Task not found$/.test(err.message))         return res.status(500).json({ error: err.message, task_id: created.id });
+        if (/city is required/.test(err.message))         return res.status(400).json({ error: err.message, task_id: created.id });
+        if (/iron_number is required/.test(err.message))  return res.status(400).json({ error: err.message, task_id: created.id });
+        if (/iron_number already exists/.test(err.message)) return res.status(409).json({ error: err.message, task_id: created.id });
+        if (/Invalid box_type_id/.test(err.message))      return res.status(400).json({ error: err.message, task_id: created.id });
+        if (/already has an active card/.test(err.message)) return res.status(409).json({ error: err.message, task_id: created.id });
+        return next(err);
+      }
+      const finalTask = await fetchTaskWithType(created.id);
+      return res.status(201).json(finalTask);
+    }
+
+    res.status(201).json(created);
   } catch (err) {
     if (err.code === '23503') return res.status(400).json({ error: 'Invalid box_id, task_type_id, or assigned_to' });
     next(err);
@@ -223,6 +310,8 @@ router.put('/:id', requireRole('admin'), async (req, res, next) => {
 
 // POST /api/tasks/:id/complete  — full lifecycle: open/close cards, create events
 // Allowed for: admin, OR the collector assigned to the task.
+// Task 48: when task.box_id is NULL (deferred installation), body MUST include
+// iron_number (and optionally box_type_id) so the box can be created.
 router.post('/:id/complete', requireRole('admin', 'collector'), async (req, res, next) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
@@ -247,6 +336,10 @@ router.post('/:id/complete', requireRole('admin', 'collector'), async (req, res,
     if (/^Task not found$/.test(err.message))         return res.status(404).json({ error: err.message });
     if (/already (completed|cancelled)/.test(err.message)) return res.status(409).json({ error: err.message });
     if (/city is required/.test(err.message))         return res.status(400).json({ error: err.message });
+    if (/iron_number is required/.test(err.message))  return res.status(400).json({ error: err.message });
+    if (/iron_number already exists/.test(err.message)) return res.status(409).json({ error: err.message });
+    if (/Invalid box_type_id/.test(err.message))      return res.status(400).json({ error: err.message });
+    if (/Task without box must be/.test(err.message)) return res.status(400).json({ error: err.message });
     if (/already has an active card/.test(err.message)) return res.status(409).json({ error: err.message });
     next(err);
   }

@@ -2,7 +2,7 @@ const router = require('express').Router();
 const pool   = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
 const { requireRole }  = require('../middleware/roles');
-const { closeActiveCardForBox, EVENT } = require('../logic/cardLogic');
+const { openCard, closeActiveCardForBox, EVENT } = require('../logic/cardLogic');
 const { getBoxesForCollector, isBoxAssignedToCollector } = require('../logic/userAssignment');
 
 router.use(authenticate);
@@ -87,28 +87,71 @@ router.get('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /api/boxes  — admin only
+// POST /api/boxes  — admin only.
+// Task 49: every new box also opens its first card in the same transaction.
+// `city` is required (same rule as completeTask for installation tasks);
+// the box is created with status='active' (not 'uninstalled') because a
+// card is opened immediately.
 router.post('/', requireRole('admin'), async (req, res, next) => {
-  const { iron_number, box_type_id, notes } = req.body || {};
+  const {
+    iron_number, box_type_id, notes,
+    // card fields
+    city, neighborhood, street, building, location_notes,
+    custom_name, alert_days_personal,
+    receipt_required, receipt_details, installation_type,
+  } = req.body || {};
+
   if (typeof iron_number !== 'string' || !iron_number.trim()) {
     return res.status(400).json({ error: 'iron_number required' });
   }
   if (box_type_id !== undefined && box_type_id !== null) {
     if (!Number.isInteger(Number(box_type_id))) return res.status(400).json({ error: 'Invalid box_type_id' });
   }
+  if (typeof city !== 'string' || !city.trim()) {
+    return res.status(400).json({ error: 'city required (כל יצירת קופה פותחת גם כרטסת)' });
+  }
 
+  const client = await pool.connect();
   try {
-    const { rows } = await pool.query(
-      `INSERT INTO boxes (iron_number, box_type_id, notes)
-       VALUES ($1, $2, $3) RETURNING *`,
+    await client.query('BEGIN');
+    const { rows: boxRows } = await client.query(
+      `INSERT INTO boxes (iron_number, box_type_id, notes, status)
+       VALUES ($1, $2, $3, 'active') RETURNING *`,
       [iron_number.trim(),
        box_type_id != null ? Number(box_type_id) : null,
        typeof notes === 'string' ? notes : null]
     );
-    res.status(201).json(rows[0]);
+    const box = boxRows[0];
+
+    const card = await openCard(
+      box.id,
+      {
+        city: city.trim(),
+        neighborhood: typeof neighborhood === 'string' ? neighborhood.trim() || null : null,
+        street: typeof street === 'string' ? street.trim() || null : null,
+        building: typeof building === 'string' ? building.trim() || null : null,
+        location_notes: typeof location_notes === 'string' ? location_notes.trim() || null : null,
+        custom_name: typeof custom_name === 'string' ? custom_name.trim() || null : null,
+        alert_days_personal: alert_days_personal === '' || alert_days_personal == null
+                              ? null
+                              : Number(alert_days_personal),
+        receipt_required: !!receipt_required,
+        receipt_details: typeof receipt_details === 'string' ? receipt_details.trim() || null : null,
+        installation_type: typeof installation_type === 'string' ? installation_type.trim() || null : null,
+      },
+      req.user.id,
+      client,
+      EVENT.INSTALLATION,
+    );
+    await client.query('COMMIT');
+    res.status(201).json({ ...box, card });
   } catch (err) {
+    await client.query('ROLLBACK');
     if (err.code === '23505') return res.status(409).json({ error: 'iron_number already exists' });
+    if (err.code === '23503') return res.status(400).json({ error: 'Invalid box_type_id' });
     next(err);
+  } finally {
+    client.release();
   }
 });
 

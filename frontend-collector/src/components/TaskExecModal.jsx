@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Modal from '@shared/components/Modal'
 import LocationCombobox from './LocationCombobox'
-import { tasks as tasksApi, uploads as uploadsApi } from '../api/endpoints'
+import { tasks as tasksApi, uploads as uploadsApi, boxTypes as boxTypesApi } from '../api/endpoints'
 
 /**
  * Confirm-execution modal for a task. Mirrors the admin TaskExecModal:
@@ -17,6 +17,11 @@ export default function TaskExecModal({ open, task, onClose, onSuccess, onReport
   const [newStreet,       setNewStreet]       = useState('')
   const [newBuilding,     setNewBuilding]     = useState('')
   const [newLocationNotes,setNewLocationNotes]= useState('')
+  // Task 48: when task.box_id is NULL the installer enters the iron_number
+  // and box_type now (the backend creates the box in the same transaction).
+  const [ironNumber,  setIronNumber]  = useState('')
+  const [boxTypeId,   setBoxTypeId]   = useState('')
+  const [boxTypesList, setBoxTypesList] = useState([])
   const [submitting, setSubmitting] = useState(false)
   const [errMsg, setErrMsg] = useState(null)
 
@@ -24,6 +29,8 @@ export default function TaskExecModal({ open, task, onClose, onSuccess, onReport
   const [imagePreview, setImagePreview] = useState(null)
   const fileInputRef   = useRef(null)
   const cameraInputRef = useRef(null)
+
+  const needsBox = !!task && task.box_id == null
 
   useEffect(() => {
     if (!open || !task) return
@@ -33,11 +40,22 @@ export default function TaskExecModal({ open, task, onClose, onSuccess, onReport
     setNewStreet(task.new_street || '')
     setNewBuilding(task.new_building || '')
     setNewLocationNotes(task.new_location_notes || '')
+    setIronNumber('')
+    setBoxTypeId('')
     setImageFile(null)
     setImagePreview(null)
     setErrMsg(null)
     setSubmitting(false)
   }, [open, task])
+
+  useEffect(() => {
+    if (!open || !needsBox) return
+    let cancelled = false
+    boxTypesApi.getAll()
+      .then(d => { if (!cancelled) setBoxTypesList(Array.isArray(d) ? d : []) })
+      .catch(() => { if (!cancelled) setBoxTypesList([]) })
+    return () => { cancelled = true }
+  }, [open, needsBox])
 
   useEffect(() => {
     if (!imagePreview) return
@@ -87,6 +105,11 @@ export default function TaskExecModal({ open, task, onClose, onSuccess, onReport
     if (!task) return
     setErrMsg(null)
 
+    if (needsBox) {
+      if (!ironNumber.trim()) return setErrMsg('יש להזין מספר ברזל לקופה')
+      if (!boxTypeId)         return setErrMsg('יש לבחור סוג קופה')
+    }
+
     if (needsLocation && !newCity.trim()) {
       setErrMsg('עיר היא שדה חובה למשימה זו')
       return
@@ -94,6 +117,10 @@ export default function TaskExecModal({ open, task, onClose, onSuccess, onReport
 
     const body = {
       execution_notes: executionNotes.trim() || null,
+    }
+    if (needsBox) {
+      body.iron_number = ironNumber.trim()
+      body.box_type_id = Number(boxTypeId)
     }
     if (needsLocation) {
       body.new_city          = newCity.trim()
@@ -127,7 +154,11 @@ export default function TaskExecModal({ open, task, onClose, onSuccess, onReport
       footer={
         <>
           <div style={{ fontSize: 12, color: 'var(--text3)' }}>
-            {task ? <>קופה <strong>{task.iron_number || task.box_id}</strong></> : null}
+            {task ? (
+              task.iron_number || task.box_id
+                ? <>קופה <strong>{task.iron_number || task.box_id}</strong></>
+                : <>קופה חדשה (יוזן בביצוע)</>
+            ) : null}
           </div>
           <div className="actions">
             <button
@@ -170,6 +201,43 @@ export default function TaskExecModal({ open, task, onClose, onSuccess, onReport
             </div>
             <div style={{ color: 'var(--text2)' }}>{lifecycleHint}</div>
           </div>
+
+          {needsBox && (
+            <div style={{
+              background: 'var(--bg2, #f9fafb)',
+              border: '1px solid var(--border, #e5e7eb)',
+              borderRadius: 10,
+              padding: 12,
+              marginBottom: 14,
+            }}>
+              <div style={{
+                fontSize: 12, fontWeight: 700,
+                color: 'var(--text2)', marginBottom: 8,
+              }}>🆕 פרטי הקופה החדשה</div>
+              <div className="modal-row">
+                <div className="field">
+                  <label>מספר ברזל *</label>
+                  <input
+                    value={ironNumber}
+                    onChange={(e) => setIronNumber(e.target.value)}
+                    placeholder="לדוגמה: 100482"
+                  />
+                </div>
+                <div className="field">
+                  <label>סוג קופה *</label>
+                  <select
+                    value={boxTypeId}
+                    onChange={(e) => setBoxTypeId(e.target.value)}
+                  >
+                    <option value="">— בחר —</option>
+                    {boxTypesList.map(bt => (
+                      <option key={bt.id} value={bt.id}>{bt.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
 
           {needsLocation && (
             <div style={{

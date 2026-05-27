@@ -198,6 +198,8 @@ export default function UserModal({ open, user, onClose, onSaved, onDeactivated 
   const [active,   setActive]   = useState(true)
   const [assignments, setAssignments] = useState([])
   const [exclusions,  setExclusions]  = useState([])
+  // Task 50: per-user permissions JSONB (currently only can_self_report_tasks)
+  const [canSelfReportTasks, setCanSelfReportTasks] = useState(false)
 
   // password handling: required on create; optional toggle on edit
   const [password, setPassword] = useState('')
@@ -228,12 +230,14 @@ export default function UserModal({ open, user, onClose, onSaved, onDeactivated 
       setActive(user.active !== false)
       setAssignments(Array.isArray(user.area_assignments) ? user.area_assignments : [])
       setExclusions (Array.isArray(user.area_exclusions)  ? user.area_exclusions  : [])
+      setCanSelfReportTasks(!!user.permissions?.can_self_report_tasks)
       setPassword('')
       setChangePw(false)
     } else {
       setName(''); setUsername(''); setRole('collector')
       setActive(true)
       setAssignments([]); setExclusions([])
+      setCanSelfReportTasks(false)
       setPassword('')
       setChangePw(true) // create mode always requires password
     }
@@ -252,6 +256,13 @@ export default function UserModal({ open, user, onClose, onSaved, onDeactivated 
 
     setSubmitting(true)
     try {
+      // Task 50: permissions are only meaningful for collector role; for
+      // other roles we always send `{}` so toggling role doesn't leave a
+      // stale flag attached.
+      const permissions = role === 'collector'
+        ? { can_self_report_tasks: !!canSelfReportTasks }
+        : {}
+
       let saved
       if (isEdit) {
         const patch = {
@@ -261,6 +272,7 @@ export default function UserModal({ open, user, onClose, onSaved, onDeactivated 
           active,
           area_assignments: assignments,
           area_exclusions:  exclusions,
+          permissions,
         }
         if (changePw && password) patch.password = password
         // don't send a role-change for self (backend rejects it anyway)
@@ -277,6 +289,7 @@ export default function UserModal({ open, user, onClose, onSaved, onDeactivated 
           role,
           area_assignments: assignments,
           area_exclusions:  exclusions,
+          permissions,
         })
       }
       onSaved?.(saved)
@@ -399,6 +412,31 @@ export default function UserModal({ open, user, onClose, onSaved, onDeactivated 
           </div>
         )}
       </div>
+
+      {role === 'collector' && (
+        <div style={{
+          background: 'var(--bg2, #f9fafb)',
+          border: '1px solid var(--border, #e5e7eb)',
+          borderRadius: 10,
+          padding: 12,
+          marginBottom: 12,
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text2)', marginBottom: 8 }}>
+            🔐 הרשאות מיוחדות
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14 }}>
+            <input
+              type="checkbox"
+              checked={canSelfReportTasks}
+              onChange={(e) => setCanSelfReportTasks(e.target.checked)}
+            />
+            יכול לדווח על משימות שביצע בעצמו
+          </label>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4, marginInlineStart: 24 }}>
+            הגובה יוכל ליצור משימה (התקנה / החלפת מנעול וכו') ולסמן אותה כמבוצעת ללא מעורבות מנהל.
+          </div>
+        </div>
+      )}
 
       {showAreas && (
         <>

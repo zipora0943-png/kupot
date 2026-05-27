@@ -165,13 +165,19 @@ export default function TaskModal({ open, task, defaults, onClose, onSaved }) {
   const lockBox  = !!defaults?.lockBox  && !isEdit
   const lockType = !!defaults?.lockType && !isEdit
 
+  // Task 48: installation tasks (opens_card) may be created without a box.
+  // The iron_number + box_type are entered later at execution time. So we hide
+  // the box field entirely when the selected type opens a card.
+  const opensCard = !!selectedType?.opens_card
+  const boxFieldHidden = !isEdit && opensCard
+
   // Block submit when a non-installation task is selected for a box without an active card.
   const blockedByMissingCard = !isEdit && requiresActiveCard && activeCard === null
 
   async function handleSubmit() {
     setErrMsg(null)
     if (!taskTypeId)          return setErrMsg('יש לבחור סוג משימה')
-    if (!boxId)               return setErrMsg('יש לבחור קופה')
+    if (!boxFieldHidden && !boxId) return setErrMsg('יש לבחור קופה')
     if (blockedByMissingCard) return setErrMsg('אין כרטסת פעילה לקופה זו — לא ניתן ליצור משימה מסוג זה')
     if (grantsTempAccess && !isEdit && !assignedTo) {
       return setErrMsg('משימת גביה דורשת הקצאה לגובה — חובה לבחור משויך')
@@ -199,7 +205,8 @@ export default function TaskModal({ open, task, defaults, onClose, onSaved }) {
       } else {
         const body = {
           task_type_id: Number(taskTypeId),
-          box_id:       Number(boxId),
+          // Task 48: installation tasks may be created without a box.
+          box_id:       boxFieldHidden ? null : Number(boxId),
           assigned_to:  assignedTo ? Number(assignedTo) : null,
           notes:        notes.trim() || null,
           image_path:   uploadedPath,
@@ -256,16 +263,24 @@ export default function TaskModal({ open, task, defaults, onClose, onSaved }) {
             ))}
           </select>
         </div>
-        <div className="field">
-          <label>קופה *</label>
-          <BoxNumberAutocomplete
-            boxes={allBoxes}
-            value={boxId}
-            onChange={(id) => setBoxId(id === '' ? '' : String(id))}
-            disabled={lockBox || isEdit}
-          />
-        </div>
+        {!boxFieldHidden && (
+          <div className="field">
+            <label>קופה *</label>
+            <BoxNumberAutocomplete
+              boxes={allBoxes}
+              value={boxId}
+              onChange={(id) => setBoxId(id === '' ? '' : String(id))}
+              disabled={lockBox || isEdit}
+            />
+          </div>
+        )}
       </div>
+
+      {boxFieldHidden && (
+        <div className="alert info" style={{ marginBottom: 12 }}>
+          🆕 משימת התקנה ללא קופה מוגדרת מראש. מספר הקופה וסוג הקופה יוזנו בעת אישור הביצוע.
+        </div>
+      )}
 
       <div className="modal-row">
         <div className="field">

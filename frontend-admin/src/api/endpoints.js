@@ -70,6 +70,11 @@ export const cards = {
   update: (id, data)     => api.put(`/cards/${id}`, data),
   close: (id, reason)    => api.post(`/cards/${id}/close`, { reason }),
   reopen: (id, reason)   => api.post(`/cards/${id}/reopen`, { reason }),
+  // Task 51: swap the underlying box of an active card. The card itself
+  // (envelopes/events/history) stays put — only box_id is reassigned to a
+  // different box. Old box is always marked 'unusable' (product decision).
+  swapBox: (id, { iron_number, reason }) =>
+    api.post(`/cards/${id}/swap-box`, { iron_number, reason }),
   history: (id)          => api.get(`/cards/${id}/history`),
   // Distinct location values for autocomplete combobox (task 26).
   // params: { level: 'city'|'neighborhood'|'street', city?, neighborhood? }
@@ -106,6 +111,11 @@ export const cards = {
       coords && typeof coords.lat === 'number' && typeof coords.lng === 'number'
         ? { lat: coords.lat, lng: coords.lng }
         : undefined),
+  // Approximate centre of the card's city/neighborhood — used to seed the
+  // manual-pin map when the precise address didn't geocode. Returns { lat, lng }
+  // or 404 if even the city couldn't be located. NOT validated against the
+  // city, admin manually drags from there.
+  localityCenter: (id) => api.get(`/cards/${id}/locality-center`),
   // Task 61: batch — re-geocode every card whose geocode_status is not 'ok'.
   // When `city` is supplied, the batch is scoped to that city only.
   geocodeMissing: (city)  => api.post('/cards/geocode-missing', city ? { city } : undefined),

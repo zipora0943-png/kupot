@@ -1,6 +1,21 @@
 const pool = require('../db/pool');
 const { findCollectorForLocation } = require('./userAssignment');
 
+// Excel-column-style index → letter: 0 → 'A', …, 25 → 'Z', 26 → 'AA', …
+// Must match the DB function `idx_to_card_letter` (schema.sql) so backfill
+// and runtime allocation produce identical strings.
+function letterFromIndex(idx) {
+  if (!Number.isFinite(idx) || idx < 0) return '';
+  let s = '';
+  let n = idx;
+  while (true) {
+    s = String.fromCharCode(65 + (n % 26)) + s;
+    n = Math.floor(n / 26) - 1;
+    if (n < 0) break;
+  }
+  return s;
+}
+
 const EVENT = {
   INSTALLATION:   'installation',
   REMOVAL:        'removal',
@@ -15,6 +30,7 @@ const EVENT = {
   TASK_CANCELLED: 'task_cancelled',
   TASK_NOT_EXECUTED: 'task_not_executed',
   REPORT_CLOSED:  'report_closed',
+  BOX_SWAPPED:    'box_swapped',
   OTHER:          'other',
 };
 
@@ -52,17 +68,26 @@ async function openCard(boxId, location, userId, client, eventType = EVENT.INSTA
     );
   }
 
+  // Next sequential letter for this box (A, B, C, …). Counted from existing
+  // rows; the unique (box_id, card_letter) index catches any race.
+  const { rows: countRows } = await db.query(
+    `SELECT COUNT(*)::int AS cnt FROM cards WHERE box_id = $1`,
+    [boxId]
+  );
+  const cardLetter = letterFromIndex(countRows[0].cnt);
+
   const { rows } = await db.query(
     `INSERT INTO cards
        (box_id, city, neighborhood, street, building, location_notes,
         collector_id, custom_name, alert_days_personal,
-        receipt_required, receipt_details, installation_type, status, opened_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'active',NOW())
+        receipt_required, receipt_details, installation_type,
+        card_letter, status, opened_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'active',NOW())
      RETURNING *`,
     [boxId, city, neighborhood, street, building, location_notes,
      resolvedCollectorId, custom_name, alert_days_personal,
      receipt_required || false, receipt_details,
-     installation_type || null]
+     installation_type || null, cardLetter]
   );
   const card = rows[0];
 
@@ -170,11 +195,43 @@ async function completeTask(taskId, executionData, userId) {
       new_city, new_neighborhood, new_street, new_building, new_location_notes,
       collector_id,
       override_location,
+      // Task 48: when a deferred-box installation is being completed.
+      iron_number, box_type_id,
     } = executionData || {};
 
     // ── Validation: opens_card task requires city, unless admin overrides
     if (task.opens_card && !new_city && !override_location) {
       throw new Error('city is required for installation/transfer tasks');
+    }
+
+    // ── Task 48: task created without a box (opens_card only).
+    // Create the box now from iron_number + box_type_id, then attach to the task.
+    if (task.box_id == null) {
+      if (!task.opens_card) {
+        throw new Error('Task without box must be an installation/transfer type');
+      }
+      const iron = typeof iron_number === 'string' ? iron_number.trim() : '';
+      if (!iron) throw new Error('iron_number is required to create the box');
+      let btid = null;
+      if (box_type_id !== undefined && box_type_id !== null && box_type_id !== '') {
+        btid = Number(box_type_id);
+        if (!Number.isInteger(btid)) throw new Error('Invalid box_type_id');
+      }
+      let newBoxId;
+      try {
+        const { rows: newBoxRows } = await client.query(
+          `INSERT INTO boxes (iron_number, box_type_id, status)
+           VALUES ($1, $2, 'active') RETURNING id`,
+          [iron, btid]
+        );
+        newBoxId = newBoxRows[0].id;
+      } catch (err) {
+        if (err.code === '23505') throw new Error('iron_number already exists');
+        if (err.code === '23503') throw new Error('Invalid box_type_id');
+        throw err;
+      }
+      await client.query(`UPDATE tasks SET box_id = $1 WHERE id = $2`, [newBoxId, taskId]);
+      task.box_id = newBoxId;
     }
 
     // mark task done

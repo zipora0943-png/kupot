@@ -10,8 +10,31 @@ const VALID_ROLES = ['admin', 'collector', 'cashroom'];
 const MIN_PASSWORD_LEN = 6;
 
 const PUBLIC_COLUMNS = `
-  id, name, username, role, area_assignments, area_exclusions, active, created_at
+  id, name, username, role, area_assignments, area_exclusions, active, permissions, created_at
 `;
+
+// Task 50: permissions JSONB has a strict schema. Keys are validated against
+// this whitelist; unknown keys are stripped. Values must match the expected type.
+const PERMISSION_SPEC = {
+  can_self_report_tasks: 'boolean',
+};
+
+function validatePermissions(perms) {
+  if (perms === undefined || perms === null) return { ok: true, value: undefined };
+  if (typeof perms !== 'object' || Array.isArray(perms)) {
+    return { ok: false, error: 'permissions must be a JSON object' };
+  }
+  const cleaned = {};
+  for (const [k, v] of Object.entries(perms)) {
+    const expected = PERMISSION_SPEC[k];
+    if (!expected) continue; // ignore unknown
+    if (expected === 'boolean' && typeof v !== 'boolean') {
+      return { ok: false, error: `permissions.${k} must be boolean` };
+    }
+    cleaned[k] = v;
+  }
+  return { ok: true, value: cleaned };
+}
 
 // ─── helpers ──────────────────────────────────────────────────────
 function validateRole(role) {
@@ -61,7 +84,7 @@ router.get('/:id', async (req, res, next) => {
 
 // POST /api/users
 router.post('/', async (req, res, next) => {
-  const { name, username, password, role, area_assignments, area_exclusions } = req.body || {};
+  const { name, username, password, role, area_assignments, area_exclusions, permissions } = req.body || {};
   if (typeof name !== 'string' || !name.trim())          return res.status(400).json({ error: 'name required' });
   if (typeof username !== 'string' || !username.trim())  return res.status(400).json({ error: 'username required' });
   if (typeof password !== 'string' || password.length < MIN_PASSWORD_LEN) {
@@ -70,16 +93,19 @@ router.post('/', async (req, res, next) => {
   if (!validateRole(role))            return res.status(400).json({ error: 'role must be admin / collector / cashroom' });
   if (!validateRules(area_assignments)) return res.status(400).json({ error: 'area_assignments must be an array' });
   if (!validateRules(area_exclusions))  return res.status(400).json({ error: 'area_exclusions must be an array' });
+  const permCheck = validatePermissions(permissions);
+  if (!permCheck.ok) return res.status(400).json({ error: permCheck.error });
 
   try {
     const hash = await bcrypt.hash(password, 10);
     const { rows } = await pool.query(
-      `INSERT INTO users (name, username, password_hash, role, area_assignments, area_exclusions)
-       VALUES ($1,$2,$3,$4,$5,$6)
+      `INSERT INTO users (name, username, password_hash, role, area_assignments, area_exclusions, permissions)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
        RETURNING ${PUBLIC_COLUMNS}`,
       [name.trim(), username.trim(), hash, role,
        JSON.stringify(area_assignments || []),
-       JSON.stringify(area_exclusions  || [])]
+       JSON.stringify(area_exclusions  || []),
+       JSON.stringify(permCheck.value || {})]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -93,7 +119,7 @@ router.put('/:id', async (req, res, next) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
 
-  const { name, username, password, role, area_assignments, area_exclusions, active } = req.body || {};
+  const { name, username, password, role, area_assignments, area_exclusions, active, permissions } = req.body || {};
 
   // ── Self-protection: admin cannot demote, deactivate, or strip their own role
   const isSelf = id === req.user.id;
@@ -122,6 +148,8 @@ router.put('/:id', async (req, res, next) => {
     return res.status(400).json({ error: 'area_exclusions must be an array' });
   if (active !== undefined && typeof active !== 'boolean')
     return res.status(400).json({ error: 'active must be boolean' });
+  const permCheck = validatePermissions(permissions);
+  if (!permCheck.ok) return res.status(400).json({ error: permCheck.error });
 
   // ── Build dynamic UPDATE — only fields that were sent
   const sets = [];
@@ -136,6 +164,7 @@ router.put('/:id', async (req, res, next) => {
   if (area_assignments !== undefined) { params.push(JSON.stringify(area_assignments)); sets.push(`area_assignments = $${params.length}`); }
   if (area_exclusions !== undefined)  { params.push(JSON.stringify(area_exclusions));  sets.push(`area_exclusions = $${params.length}`); }
   if (active !== undefined)           { params.push(active);          sets.push(`active = $${params.length}`); }
+  if (permissions !== undefined)      { params.push(JSON.stringify(permCheck.value || {})); sets.push(`permissions = $${params.length}`); }
 
   if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
 

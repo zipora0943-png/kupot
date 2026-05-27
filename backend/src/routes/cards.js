@@ -8,7 +8,7 @@ const {
   buildLocationClause, temporaryAccessClause,
   RESOLVED_COLLECTORS_LATERAL,
 } = require('../logic/userAssignment');
-const { geocodeCard, geocodeMissingCards, retryCardWithStreet } = require('../services/geocoding');
+const { geocodeCard, geocodeMissingCards, retryCardWithStreet, geocodeLocalityCenter } = require('../services/geocoding');
 const { haversineMeters } = require('../services/distance');
 
 // Radius (meters) within which the collector is considered "at" the card location.
@@ -170,7 +170,8 @@ router.get('/geocode-pending', requireRole('admin'), async (req, res, next) => {
                FROM cards c
                JOIN boxes b ON b.id = c.box_id
               WHERE c.status = 'active'
-                AND (c.geocode_status IS NULL OR c.geocode_status <> 'ok')`;
+                AND (c.geocode_status IS NULL
+                     OR c.geocode_status NOT IN ('ok', 'neighborhood_center'))`;
   if (!includeNotFound) {
     sql += ` AND (c.geocode_status IS NULL OR c.geocode_status <> 'not_found')`;
   }
@@ -496,6 +497,104 @@ router.post('/:id/reopen', requireRole('admin'), async (req, res, next) => {
   }
 });
 
+// POST /api/cards/:id/swap-box  — admin: swap the underlying box of an active
+// card. The card itself (envelopes, events, all history) stays put — only
+// `cards.box_id` is reassigned to a different box. Used when the physical box
+// is damaged or replaced. The new box must exist and have no active card; the
+// old box is always marked 'unusable' (per product decision). A `box_swapped`
+// event is logged on the card with old → new iron numbers and an optional reason.
+router.post('/:id/swap-box', requireRole('admin'), async (req, res, next) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+
+  const { iron_number, reason } = req.body || {};
+  if (typeof iron_number !== 'string' || !iron_number.trim()) {
+    return res.status(400).json({ error: 'iron_number required' });
+  }
+  if (reason !== undefined && reason !== null && typeof reason !== 'string') {
+    return res.status(400).json({ error: 'reason must be string or null' });
+  }
+  const newIron = iron_number.trim();
+  const trimmedReason = typeof reason === 'string' ? reason.trim() : '';
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: cardRows } = await client.query(
+      `SELECT c.id, c.box_id, c.status, b.iron_number AS old_iron
+         FROM cards c
+         JOIN boxes b ON b.id = c.box_id
+        WHERE c.id = $1
+        FOR UPDATE`,
+      [id]
+    );
+    if (!cardRows[0]) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Card not found' });
+    }
+    const card = cardRows[0];
+    if (card.status !== 'active') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'ניתן להחליף קופה רק לכרטסת פעילה' });
+    }
+
+    const { rows: newBoxRows } = await client.query(
+      `SELECT id, iron_number, status FROM boxes WHERE iron_number = $1 FOR UPDATE`,
+      [newIron]
+    );
+    if (!newBoxRows[0]) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: `קופה עם מספר ברזל ${newIron} לא נמצאה` });
+    }
+    const newBox = newBoxRows[0];
+
+    if (newBox.id === card.box_id) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'הקופה החדשה היא הקופה הנוכחית של הכרטסת' });
+    }
+
+    const { rows: conflictRows } = await client.query(
+      `SELECT id FROM cards WHERE box_id = $1 AND status = 'active' LIMIT 1`,
+      [newBox.id]
+    );
+    if (conflictRows[0]) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'לקופה החדשה יש כבר כרטסת פעילה' });
+    }
+
+    await client.query(`UPDATE cards SET box_id = $1 WHERE id = $2`, [newBox.id, id]);
+    await client.query(`UPDATE boxes SET status = 'active'   WHERE id = $1`, [newBox.id]);
+    await client.query(`UPDATE boxes SET status = 'unusable' WHERE id = $1`, [card.box_id]);
+
+    const description = trimmedReason
+      ? `החלפת קופה ${card.old_iron} → ${newBox.iron_number}: ${trimmedReason}`
+      : `החלפת קופה ${card.old_iron} → ${newBox.iron_number}`;
+    await client.query(
+      `INSERT INTO events (card_id, event_type, description, user_id) VALUES ($1,$2,$3,$4)`,
+      [id, EVENT.BOX_SWAPPED, description, req.user.id]
+    );
+
+    await client.query('COMMIT');
+
+    const { rows: updated } = await pool.query(
+      `SELECT c.*, b.iron_number, b.status AS box_status, bt.name AS box_type_name
+         FROM cards c
+         JOIN boxes b ON b.id = c.box_id
+         LEFT JOIN box_types bt ON bt.id = b.box_type_id
+        WHERE c.id = $1`,
+      [id]
+    );
+    res.json(updated[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    if (err.code === '23505') return res.status(409).json({ error: 'Box already has an active card' });
+    next(err);
+  } finally {
+    client.release();
+  }
+});
+
 // GET /api/cards/:id/history  — all cards for the same box
 router.get('/:id/history', async (req, res, next) => {
   const id = Number(req.params.id);
@@ -545,6 +644,32 @@ router.post('/:id/geocode', requireRole('admin'), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/cards/:id/locality-center  — admin: approximate centre of the
+// card's city/neighborhood, used to seed the manual-pin map when the precise
+// address didn't geocode (typical in חרדי neighborhoods of Bnei Brak where
+// Google's Hebrew index is incomplete). Result is NOT validated against the
+// city — it's only for UI centring; admin then drags the pin to the real spot
+// and calls /approve-geocode with lat/lng.
+router.get('/:id/locality-center', requireRole('admin'), async (req, res, next) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    const { rows } = await pool.query(
+      `SELECT city, neighborhood FROM cards WHERE id = $1`,
+      [id],
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Card not found' });
+    const result = await geocodeLocalityCenter({
+      city: rows[0].city,
+      neighborhood: rows[0].neighborhood,
+    });
+    if (result.status !== 'ok') {
+      return res.status(404).json({ error: 'Could not geocode locality', status: result.status });
+    }
+    res.json({ lat: result.lat, lng: result.lng });
+  } catch (err) { next(err); }
+});
+
 // POST /api/cards/:id/approve-geocode  — admin: mark the stored coordinates
 // as visually confirmed on the map. Resets to FALSE automatically whenever
 // the card is re-geocoded.
@@ -591,7 +716,7 @@ router.post('/:id/approve-geocode', requireRole('admin'), async (req, res, next)
                 geocode_approved_by = $1,
                 geocode_approved_at = NOW()
           WHERE id = $2
-            AND geocode_status = 'ok'
+            AND geocode_status IN ('ok', 'neighborhood_center')
           RETURNING id, latitude, longitude, geocode_status,
                     geocode_approved, geocode_approved_at`,
         [req.user.id, id],

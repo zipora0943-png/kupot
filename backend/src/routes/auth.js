@@ -36,9 +36,16 @@ router.post('/login', async (req, res, next) => {
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 
+    // Task 50: include user.permissions so the client knows which optional
+    // collector capabilities (e.g. can_self_report_tasks) are enabled.
+    const { rows: permRows } = await pool.query(
+      `SELECT permissions FROM users WHERE id = $1`, [user.id]
+    );
+    const permissions = permRows[0]?.permissions || {};
+
     res.json({
       token,
-      user: { id: user.id, name: user.name, role: user.role },
+      user: { id: user.id, name: user.name, role: user.role, permissions },
     });
   } catch (err) { next(err); }
 });
@@ -47,7 +54,7 @@ router.post('/login', async (req, res, next) => {
 router.get('/me', authenticate, async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, name, username, role, area_assignments, area_exclusions, active
+      `SELECT id, name, username, role, area_assignments, area_exclusions, active, permissions
          FROM users WHERE id = $1`,
       [req.user.id]
     );
