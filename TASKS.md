@@ -65,6 +65,42 @@ _(אין משימה בביצוע)_
 **קבצים ששונו:** רשימה
 -->
 
+### 54. תיקון: שמות קבצי APK לפי גרסה במקום hex אקראי — 2026-05-27
+**מה נעשה:** באג ב-`backend/src/routes/version.js` שגרם לכל APK שהועלה דרך `POST /api/version/collector` להישמר בשם של hex אקראי (`collector-415fea25.apk`) במקום שם של גרסה (`collector-1.0.10.apk`). הסיבה: `multer.diskStorage.filename` מופעל **לפני** שה-text fields של ה-multipart-payload נפרסים, אז `req.body.version` תמיד undefined ב-callback הזה — והקוד נופל ל-fallback של `crypto.randomBytes(4).toString('hex')`.
+
+**הפתרון:** במקום להסתמך על `req.body.version`, לקרוא את הגרסה מ-`file.originalname`. ה-release script (`frontend-collector/scripts/release.cjs:91-92`) כבר שולח את הקובץ עם `originalname='collector-X.Y.Z.apk'` — מספיק regex `^collector-(\d+\.\d+\.\d+)\.apk$` כדי לחלץ. ה-fallback ל-hex אקראי נשמר למקרי upload ידני שלא עוקבים אחר ה-convention.
+
+**תיקון רטרואקטיבי של 1.0.10:** הקובץ הראשון של 1.0.10 שכבר עלה (`collector-415fea25.apk`) קיבל rename ידני בפרוד ל-`collector-1.0.10.apk`, ו-`PUT /api/version/collector` עדכן את ה-`apk_url` במניפסט. הכתובת הישנה מחזירה 404 (לא נשארה zombie URL), הכתובת החדשה עובדת.
+
+**קבצים ששונו (1):**
+- `backend/src/routes/version.js` — regex על `file.originalname` ב-`filename` callback של multer.
+
+---
+
+### 53. גובה — קישור הורדה ב-login עוקב אחרי /api/version + Release 1.0.10 — 2026-05-27
+**מה נעשה:** עד היום הקישור "📥 הורד גירסה אחרונה (X)" בעמוד login של הגובה (`http://178.105.96.70:5001/login`) נטען מקובץ ידני `/downloads/latest.json`, שאף script לא כתב אליו אוטומטית. התוצאה: הקישור הציג גרסה ישנה (`1.0.4`) חודשים אחרי שהגרסה האמיתית התקדמה ל-1.0.8 — בלי שאף אחד שם לב.
+
+**הפתרון:** ה-LoginPage קורא עכשיו מ-`/api/version/collector` (אותו manifest שה-update flow בתוך האפליקציה משתמש בו). כל release עתידי דרך `npm run release` יעדכן אוטומטית גם את הקישור — אין יותר קובץ ידני לתחזק. השדות במניפסט שונים (`apk_url` במקום `url`, `release_notes` במקום `notes`) ולכן ה-JSX עודכן בהתאם, וגם נוסף guard `appInfo.apk_url` כדי לא לרנדר את הסקציה כשאין APK.
+
+**Release 1.0.10:**
+- `frontend-collector/package.json`: 1.0.8 → 1.0.10 (דילגנו על 1.0.9).
+- `frontend-collector/android/app/build.gradle`: versionCode 10 → 11, versionName "1.0.8" → "1.0.10".
+- בנייה מקומית של APK (`gradlew assembleDebug`, 4.88 MB, JDK 21 + Android SDK ב-`C:\android-dev\`).
+- העלאה לפרוד דרך `npm run release -- --no-bump --notes=...` (JWT נוצר ב-prod עם `jsonwebtoken` ב-shell, פג תוך 30 דקות).
+- מניפסט עודכן: `{version: 1.0.10, min_supported_version: 1.0.10, apk_url: /downloads/collector-1.0.10.apk}`.
+
+**שיקול:** `min_supported_version=1.0.10` (default של ה-script כשלא מציינים `--min`) → כל המשתמשים בגרסה ישנה יותר מקבלים modal חוסם של "עדכון חובה". להחליש ל-soft-update צריך `PUT /api/version/collector` עם `min_supported_version` קטן יותר (לדוגמה `1.0.4`).
+
+**deploy לפרוד:**
+- `ssh root@178.105.96.70` → `git checkout -- frontend-collector/src/pages/LoginPage.jsx` (שינוי uncommitted על prod של הפיצ'ר המקורי הוחלף בגרסה ה-committed שמשתמשת ב-API) → `git pull` (fast-forward `b32188b..f1d4cd6`) → `cd frontend-collector && npm run build` → `pm2 reload kupot-collector`.
+
+**קבצים ששונו (3):**
+- `frontend-collector/src/pages/LoginPage.jsx` — `fetch('/api/version/collector')` במקום `/downloads/latest.json`; שדות API במקום שדות latest.json; guard על `apk_url`.
+- `frontend-collector/package.json` — version 1.0.10.
+- `frontend-collector/android/app/build.gradle` — versionCode 11, versionName "1.0.10".
+
+---
+
 ### 52. גובה — מודאל מאוחד לכל כשל אימות GPS (3 אפשרויות, דיווח inline) — 2026-05-27
 **מה נעשה:** עד היום היו 3 מודאלים נפרדים שטיפלו במצבי כשל GPS שונים: `radiusWarning` (מחוץ לרדיוס — textarea חובה + "המשך"), `geoUnavailable` (GPS לא זמין בכרטסת — "המשך" / "ביטול"), `confirmCard` (lookup ידני + GPS נכשל — "אשר" / "דיווח"). השינוי: **מודאל יחיד מאוחד** שנפתח בכל מצב של כשל אימות, עם 3 אפשרויות תמידיות, כשהדיווח נעשה **inline בתוך אותו מודאל** ללא ניווט לעמוד דיווח נפרד.
 
