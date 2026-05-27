@@ -113,15 +113,20 @@ export default function CollectionPage() {
         return
       }
 
-      if (result.within_radius) {
-        navigate(`/scan/${targetCard.id}`)
-        return
-      }
-
+      // Check card_geocoded BEFORE within_radius — the API optimistically
+      // returns within_radius:true when the card has no stored coords (to
+      // avoid blocking the collector), but per product spec the collector
+      // should be shown the unified modal so they consciously acknowledge
+      // the unverified state.
       if (!result.card_geocoded) {
         openVerifyFailure({
           card: targetCard, kind: 'unavailable', lat: pos.lat, lng: pos.lng,
         })
+        return
+      }
+
+      if (result.within_radius) {
+        navigate(`/scan/${targetCard.id}`)
         return
       }
 
