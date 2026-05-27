@@ -1,7 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { Geolocation } from '@capacitor/geolocation'
-import { cards as cardsApi, locationOverrides as overridesApi } from '../api/endpoints'
+import {
+  cards as cardsApi,
+  locationOverrides as overridesApi,
+  reports as reportsApi,
+} from '../api/endpoints'
 import { useData } from '@shared/context/DataStoreContext'
 import { computeCardLabels } from '@shared/utils/cardLabel'
 import Modal from '@shared/components/Modal'
@@ -53,14 +57,21 @@ export default function CollectionPage() {
   const [boxNumberInput, setBoxNumberInput] = useState('')
   const [lookupLoading, setLookupLoading] = useState(false)
   const [lookupError, setLookupError] = useState(null)
-  const [confirmCard, setConfirmCard] = useState(null)
 
-  // Task 58 — GPS verification state
+  // Task 58/52 — unified GPS verification failure modal.
+  // verifyFailure shape: { card, kind: 'out_of_radius'|'unavailable', distance, lat, lng }
+  // reportMode: when true, the modal switches from the 3-button view to the
+  // inline report-writing view (textarea + create-and-scan / cancel).
   const [verifying, setVerifying] = useState(false)
-  const [geoUnavailable, setGeoUnavailable] = useState(null) // { card, message }
-  const [radiusWarning, setRadiusWarning] = useState(null)   // { card, distance, lat, lng }
-  const [overrideReason, setOverrideReason] = useState('')
+  const [verifyFailure, setVerifyFailure] = useState(null)
   const [overrideSubmitting, setOverrideSubmitting] = useState(false)
+  const [reportMode, setReportMode] = useState(false)
+  const [reportText, setReportText] = useState('')
+  const [reportSubmitting, setReportSubmitting] = useState(false)
+  const [reportError, setReportError] = useState(null)
+
+  const CONTINUE_WITHOUT_REPORT_REASON = 'המשך ללא דיווח מיקום שגוי'
+  const REPORT_PREFIX = 'כתובת שגויה: '
 
   const [toast, setToast] = useState(null)
 
@@ -80,37 +91,25 @@ export default function CollectionPage() {
   }, [card])
 
   // Run the GPS check before navigating to the scanner.
-  // GPS verification is the primary path; the address-confirmation modal is
-  // only shown as a fallback when verification cannot be performed.
-  //
-  // source: 'lookup'  → manual box-number entry; user hasn't seen the address yet,
-  //                     so fall back to the address-confirmation modal.
-  // source: 'in-card' → user is already on /collection/:cardId and sees the address;
-  //                     fall back to a smaller "couldn't verify, continue?" prompt
-  //                     when GPS fails, and proceed straight to scan when the card
-  //                     has no stored coordinates (no value in re-showing the page).
-  async function runVerification(targetCard, source) {
+  // Every failure path (no GPS, API error, no card coords, out of radius) opens
+  // the same unified modal — kind differentiates the message; data is recorded
+  // only when we actually have GPS coordinates.
+  async function runVerification(targetCard) {
     if (!targetCard) return
     setVerifying(true)
     try {
       const pos = await getDevicePosition()
       if (!pos.ok) {
-        if (source === 'lookup') {
-          setConfirmCard(targetCard)
-        } else {
-          setGeoUnavailable({ card: targetCard, message: pos.error })
-        }
+        openVerifyFailure({ card: targetCard, kind: 'unavailable' })
         return
       }
       let result
       try {
         result = await cardsApi.verifyLocation(targetCard.id, pos.lat, pos.lng)
-      } catch (err) {
-        if (source === 'lookup') {
-          setConfirmCard(targetCard)
-        } else {
-          setGeoUnavailable({ card: targetCard, message: err?.message || 'verify_failed' })
-        }
+      } catch {
+        openVerifyFailure({
+          card: targetCard, kind: 'unavailable', lat: pos.lat, lng: pos.lng,
+        })
         return
       }
 
@@ -120,51 +119,95 @@ export default function CollectionPage() {
       }
 
       if (!result.card_geocoded) {
-        // No coordinates for this card — verification couldn't be performed.
-        if (source === 'lookup') {
-          setConfirmCard(targetCard)
-        } else {
-          navigate(`/scan/${targetCard.id}`)
-        }
+        openVerifyFailure({
+          card: targetCard, kind: 'unavailable', lat: pos.lat, lng: pos.lng,
+        })
         return
       }
 
-      // Outside radius — prompt for a reason.
-      setRadiusWarning({
+      openVerifyFailure({
         card: targetCard,
+        kind: 'out_of_radius',
         distance: result.distance_meters ?? null,
         lat: pos.lat,
         lng: pos.lng,
       })
-      setOverrideReason('')
     } finally {
       setVerifying(false)
     }
   }
 
-  async function submitOverride() {
-    if (!radiusWarning) return
-    const reason = overrideReason.trim()
-    if (reason.length < 5) return
+  function openVerifyFailure(payload) {
+    setReportMode(false)
+    setReportText(REPORT_PREFIX)
+    setReportError(null)
+    setVerifyFailure({
+      card: payload.card,
+      kind: payload.kind,
+      distance: payload.distance ?? null,
+      lat: payload.lat ?? null,
+      lng: payload.lng ?? null,
+    })
+  }
+
+  function closeVerifyFailure() {
+    setVerifyFailure(null)
+    setReportMode(false)
+    setReportText('')
+    setReportError(null)
+  }
+
+  async function continueWithoutReport() {
+    if (!verifyFailure) return
     setOverrideSubmitting(true)
     try {
-      try {
-        await overridesApi.create({
-          card_id: radiusWarning.card.id,
-          distance_meters: radiusWarning.distance,
-          reason,
-          gps_lat: radiusWarning.lat,
-          gps_lng: radiusWarning.lng,
-        })
-      } catch (err) {
-        // Don't block collection if the audit log call failed; just warn in console.
-        console.warn('[location-override] save failed', err.message)
+      // Only log an override when we actually have GPS coordinates. With no
+      // coordinates the row would carry no useful audit signal.
+      if (verifyFailure.lat != null && verifyFailure.lng != null) {
+        try {
+          await overridesApi.create({
+            card_id: verifyFailure.card.id,
+            distance_meters: verifyFailure.distance,
+            reason: CONTINUE_WITHOUT_REPORT_REASON,
+            gps_lat: verifyFailure.lat,
+            gps_lng: verifyFailure.lng,
+          })
+        } catch (err) {
+          // Don't block collection if the audit log call failed; just warn in console.
+          console.warn('[location-override] save failed', err.message)
+        }
       }
-      const id = radiusWarning.card.id
-      setRadiusWarning(null)
+      const id = verifyFailure.card.id
+      closeVerifyFailure()
       navigate(`/scan/${id}`)
     } finally {
       setOverrideSubmitting(false)
+    }
+  }
+
+  async function submitInlineReport() {
+    if (!verifyFailure) return
+    const trimmed = reportText.trim()
+    if (trimmed.length <= REPORT_PREFIX.trim().length) {
+      setReportError('יש להוסיף פרטים אחרי הקידומת')
+      return
+    }
+    setReportError(null)
+    setReportSubmitting(true)
+    try {
+      await reportsApi.create({
+        card_id: verifyFailure.card.id,
+        report_type_id: null,
+        description: trimmed,
+        image_path: null,
+      })
+      const id = verifyFailure.card.id
+      closeVerifyFailure()
+      navigate(`/scan/${id}`)
+    } catch (err) {
+      setReportError(err?.message || 'שגיאה ביצירת הדיווח')
+    } finally {
+      setReportSubmitting(false)
     }
   }
 
@@ -197,7 +240,7 @@ export default function CollectionPage() {
     try {
       const found = await cardsApi.lookupByIron(num)
       const full = await cardsApi.get(found.id).catch(() => found)
-      await runVerification(full || found, 'lookup')
+      await runVerification(full || found)
     } catch (err) {
       const code = err?.data?.error
       if (code === 'box_not_found')      setLookupError('מספר קופה שגוי')
@@ -209,102 +252,135 @@ export default function CollectionPage() {
     }
   }
 
-  // Shared sub-modals (rendered alongside both view branches below).
+  // Unified GPS-verification failure modal. Two visual states:
+  //   reportMode=false → 3 buttons (continue / report / cancel)
+  //   reportMode=true  → inline textarea + (create-and-scan / cancel)
+  // The body is closed only on explicit cancel; clicking outside is disabled
+  // while a network call is in flight.
   function renderVerificationModals() {
+    const busy = overrideSubmitting || reportSubmitting
+    const title = reportMode
+      ? 'דיווח על מיקום שגוי'
+      : 'לא הצלחנו לאמת את המיקום'
     return (
-      <>
-        <Modal
-          open={!!geoUnavailable}
-          title="לא ניתן לאמת מיקום"
-          onClose={() => setGeoUnavailable(null)}
-        >
-          {geoUnavailable && (
-            <div className="collection-info">
-              <div className="alert info" style={{ marginBottom: 10 }}>
-                לא הצלחנו לקבל את המיקום שלך מהמכשיר.<br/>
-                מומלץ לאפשר הרשאת מיקום באפליקציה. ניתן להמשיך גם בלי אימות.
-              </div>
-              <div className="collection-actions">
-                <button
-                  type="button"
-                  className="btn-block"
-                  onClick={() => {
-                    const id = geoUnavailable.card.id
-                    setGeoUnavailable(null)
-                    navigate(`/scan/${id}`)
-                  }}
-                >
-                  המשך בכל זאת
-                </button>
-                <button
-                  type="button"
-                  className="btn-block secondary"
-                  onClick={() => setGeoUnavailable(null)}
-                >
-                  ביטול
-                </button>
-              </div>
-            </div>
-          )}
-        </Modal>
-
-        <Modal
-          open={!!radiusWarning}
-          title="אתה רחוק מהכתובת הרשומה"
-          onClose={overrideSubmitting ? undefined : () => setRadiusWarning(null)}
-        >
-          {radiusWarning && (
-            <div className="collection-info">
+      <Modal
+        open={!!verifyFailure}
+        title={title}
+        onClose={busy ? undefined : closeVerifyFailure}
+      >
+        {verifyFailure && !reportMode && (
+          <div className="collection-info">
+            {verifyFailure.kind === 'out_of_radius' ? (
               <div className="alert red" style={{ marginBottom: 10 }}>
-                המיקום שלך רחוק כ-<b>{radiusWarning.distance ?? '—'}</b> מ' מהכתובת
+                המיקום שלך רחוק כ-<b>{verifyFailure.distance ?? '—'}</b> מ' מהכתובת
                 הרשומה של הקופה.
               </div>
-              <div className="kv">
-                <span className="k">כתובת רשומה</span>
-                <span className="v">{formatAddress(radiusWarning.card)}</span>
+            ) : (
+              <div className="alert info" style={{ marginBottom: 10 }}>
+                לא הצלחנו לקבל את המיקום מהמכשיר.<br/>
+                מומלץ לאפשר הרשאת מיקום באפליקציה. ניתן להמשיך גם בלי אימות.
               </div>
-              <div className="field" style={{ marginTop: 10 }}>
-                <label>סיבה להמשך גביה (חובה)</label>
-                <textarea
-                  rows={3}
-                  value={overrideReason}
-                  onChange={(e) => setOverrideReason(e.target.value)}
-                  placeholder="לדוגמה: ניסיון איתור הקופה, הגעה מוקדמת, GPS לא מדויק..."
-                  disabled={overrideSubmitting}
-                />
-              </div>
-              <div className="collection-actions" style={{ marginTop: 12 }}>
-                <button
-                  type="button"
-                  className="btn-block"
-                  disabled={overrideReason.trim().length < 5 || overrideSubmitting}
-                  onClick={submitOverride}
-                >
-                  {overrideSubmitting ? 'שומר...' : 'המשך לגביה בכל זאת'}
-                </button>
-                <button
-                  type="button"
-                  className="btn-block secondary"
-                  disabled={overrideSubmitting}
-                  onClick={() => setRadiusWarning(null)}
-                >
-                  ביטול
-                </button>
-              </div>
+            )}
+            <div className="kv">
+              <span className="k">מספר קופה</span>
+              <span className="v">{verifyFailure.card.iron_number ?? '—'}</span>
             </div>
-          )}
-        </Modal>
-      </>
+            <div className="kv">
+              <span className="k">כתובת רשומה</span>
+              <span className="v">{formatAddress(verifyFailure.card)}</span>
+            </div>
+            {verifyFailure.card.location_notes && (
+              <div className="kv">
+                <span className="k">הערות מיקום</span>
+                <span className="v">{verifyFailure.card.location_notes}</span>
+              </div>
+            )}
+            <div className="collection-actions" style={{ marginTop: 14 }}>
+              <button
+                type="button"
+                className="btn-block"
+                disabled={busy}
+                onClick={continueWithoutReport}
+              >
+                {overrideSubmitting ? 'ממשיך...' : '✓ אישור והמשך'}
+              </button>
+              <button
+                type="button"
+                className="btn-block secondary"
+                disabled={busy}
+                onClick={() => {
+                  setReportError(null)
+                  setReportMode(true)
+                }}
+              >
+                📝 דווח על מיקום שגוי
+              </button>
+              <button
+                type="button"
+                className="btn-block secondary"
+                disabled={busy}
+                onClick={() => {
+                  closeVerifyFailure()
+                  navigate(-1)
+                }}
+              >
+                ביטול
+              </button>
+            </div>
+          </div>
+        )}
+
+        {verifyFailure && reportMode && (
+          <div className="collection-info">
+            <div className="alert info" style={{ marginBottom: 10 }}>
+              הדיווח יישמר על הכרטסת ויירשם על שמך.
+            </div>
+            <div className="kv">
+              <span className="k">כתובת רשומה</span>
+              <span className="v">{formatAddress(verifyFailure.card)}</span>
+            </div>
+            {reportError && (
+              <div className="alert red" style={{ marginTop: 10 }}>{reportError}</div>
+            )}
+            <div className="field" style={{ marginTop: 10 }}>
+              <label>פרטי הדיווח (חובה)</label>
+              <textarea
+                rows={4}
+                value={reportText}
+                onChange={(e) => setReportText(e.target.value)}
+                placeholder='לדוגמה: כתובת שגויה: הקופה ברחוב X ולא Y'
+                disabled={reportSubmitting}
+              />
+            </div>
+            <div className="collection-actions" style={{ marginTop: 12 }}>
+              <button
+                type="button"
+                className="btn-block"
+                disabled={reportSubmitting || reportText.trim().length <= REPORT_PREFIX.trim().length}
+                onClick={submitInlineReport}
+              >
+                {reportSubmitting ? 'שולח...' : '✓ צור דיווח והמשך לסריקה'}
+              </button>
+              <button
+                type="button"
+                className="btn-block secondary"
+                disabled={reportSubmitting}
+                onClick={() => {
+                  setReportMode(false)
+                  setReportError(null)
+                }}
+              >
+                ביטול
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     )
   }
 
   if (!cardId) {
     const disabled = lookupLoading || !boxNumberInput.trim()
-    const confirmAddress = confirmCard ? formatAddress(confirmCard) : ''
-    const confirmLabels = confirmCard ? computeCardLabels([confirmCard]) : null
-    const confirmLabel = confirmCard
-      ? (confirmLabels?.get(confirmCard.id) || String(confirmCard.iron_number ?? ''))
-      : ''
     const busy = lookupLoading || verifying
     const lookupButtonLabel = lookupLoading
       ? 'מחפש...'
@@ -360,63 +436,6 @@ export default function CollectionPage() {
             </div>
           </form>
         </div>
-
-        <Modal
-          open={!!confirmCard}
-          title="אישור כתובת הקופה"
-          onClose={() => setConfirmCard(null)}
-        >
-          {confirmCard && (
-            <div className="collection-info">
-              <div className="alert info" style={{ marginBottom: 10 }}>
-                לא הצלחנו לאמת את המיקום שלך מול הכתובת.<br/>
-                בדוק שהפרטים נכונים לפני המשך הגביה.
-              </div>
-              <div className="kv">
-                <span className="k">מספר קופה</span>
-                <span className="v">{confirmCard.iron_number ?? confirmLabel}</span>
-              </div>
-              <div className="kv">
-                <span className="k">שם</span>
-                <span className="v">{confirmCard.custom_name || '—'}</span>
-              </div>
-              <div className="kv">
-                <span className="k">כתובת</span>
-                <span className="v">{confirmAddress}</span>
-              </div>
-              {confirmCard.location_notes && (
-                <div className="kv">
-                  <span className="k">הערות מיקום</span>
-                  <span className="v">{confirmCard.location_notes}</span>
-                </div>
-              )}
-              <div className="collection-actions" style={{ marginTop: 14 }}>
-                <button
-                  type="button"
-                  className="btn-block"
-                  onClick={() => {
-                    const id = confirmCard.id
-                    setConfirmCard(null)
-                    navigate(`/scan/${id}`)
-                  }}
-                >
-                  ✓ אשר והמשך לגביה
-                </button>
-                <button
-                  type="button"
-                  className="btn-block secondary"
-                  onClick={() => {
-                    const id = confirmCard.id
-                    setConfirmCard(null)
-                    navigate(`/report/${id}?reason=address`)
-                  }}
-                >
-                  📝 דיווח כתובת לא נכונה
-                </button>
-              </div>
-            </div>
-          )}
-        </Modal>
 
         {renderVerificationModals()}
       </div>
@@ -489,7 +508,7 @@ export default function CollectionPage() {
             type="button"
             className="btn-block"
             disabled={verifying}
-            onClick={() => runVerification(card, 'in-card')}
+            onClick={() => runVerification(card)}
           >
             {verifying ? 'מאמת מיקום...' : '💰 בצע גביה'}
           </button>
