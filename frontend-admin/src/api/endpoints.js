@@ -136,6 +136,9 @@ export const envelopes = {
   // Task 41: total + count of envelopes entered today (single source of truth).
   todayTotal: ()         => api.get('/envelopes/today-total'),
   byNumber: (number)     => api.get(`/envelopes/by-number/${encodeURIComponent(number)}`),
+  // Cashroom live-typing: returns { unique:true, envelope } only when the
+  // typed value is the full, unambiguous envelope number.
+  prefixUnique: (value)  => api.get(`/envelopes/prefix-unique/${encodeURIComponent(value)}`),
 };
 
 // ---- EVENTS ----

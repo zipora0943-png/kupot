@@ -101,6 +101,31 @@ export default function CashroomAdminPage() {
     if (!openEnv) scanRef.current?.focus()
   }, [openEnv])
 
+  // Auto-open the envelope as soon as the typed value is unambiguously a full
+  // envelope number — i.e. no longer number shares it as a prefix. While the
+  // value could still be extended (e.g. "19604" when "196049" exists) we wait.
+  // The latest-request guard discards stale responses if the user keeps typing
+  // after a request was already in flight.
+  const lookupSeqRef = useRef(0)
+  useEffect(() => {
+    const value = scanValue.trim()
+    if (!value || scanning || openEnv) return
+    const mySeq = ++lookupSeqRef.current
+    const timer = setTimeout(async () => {
+      try {
+        const res = await envelopesApi.prefixUnique(value)
+        if (mySeq !== lookupSeqRef.current) return // user kept typing
+        if (res?.unique && res.envelope) {
+          setOpenEnv(res.envelope)
+          setScanValue('')
+        }
+      } catch {
+        // Silent: the user can still press Enter / החיפוש button.
+      }
+    }, 200)
+    return () => clearTimeout(timer)
+  }, [scanValue, scanning, openEnv])
+
   function handleEnvSaved(updated) {
     if (!updated) return
     // remove from pending list (no-op if it wasn't pending)
@@ -168,7 +193,7 @@ export default function CashroomAdminPage() {
             <input
               ref={scanRef}
               autoFocus
-              placeholder="סרוק או הקלד מספר מעטפה ולחץ Enter"
+              placeholder="סרוק או הקלד מספר מעטפה"
               value={scanValue}
               onChange={(e) => { setScanValue(e.target.value); setScanErr(null) }}
               disabled={scanning}

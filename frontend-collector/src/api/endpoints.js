@@ -104,6 +104,9 @@ export const envelopes = {
   // Task 37: most-recent entered envelopes (for cashroom recent-envelopes panel)
   getRecentEntered: (limit) => api.get('/envelopes/entered-recent', limit ? { limit } : undefined),
   byNumber: (number)     => api.get(`/envelopes/by-number/${encodeURIComponent(number)}`),
+  // Cashroom live-typing: returns { unique:true, envelope } only when the
+  // typed value is the full, unambiguous envelope number.
+  prefixUnique: (value)  => api.get(`/envelopes/prefix-unique/${encodeURIComponent(value)}`),
 };
 
 // ---- EVENTS ----

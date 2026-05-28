@@ -145,6 +145,45 @@ router.get('/today-total', requireRole('admin', 'cashroom'), async (req, res, ne
   } catch (err) { next(err); }
 });
 
+// GET /api/envelopes/prefix-unique/:value  — cashroom live-lookup while typing.
+// Returns the envelope ONLY if the typed value is already the full, unambiguous
+// envelope number — i.e. exactly one envelope_number starts with the value AND
+// that envelope_number equals the value (no longer number shares the prefix, so
+// the user couldn't be mid-typing). Used to auto-open the modal without Enter.
+router.get('/prefix-unique/:value', requireRole('admin', 'cashroom'), async (req, res, next) => {
+  const value = String(req.params.value || '').trim();
+  if (!value) return res.status(400).json({ error: 'value required' });
+  try {
+    // LIMIT 2 is enough to distinguish "unique" from "ambiguous".
+    // The LIKE pattern needs % escaping so a literal % / _ in the typed value
+    // doesn't act as a wildcard (envelope_number is VARCHAR(50), real-world
+    // values are digits but we stay defensive).
+    const escaped = value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+    const { rows } = await pool.query(
+      `SELECT envelope_number FROM envelopes
+        WHERE envelope_number LIKE $1 ESCAPE '\\'
+        LIMIT 2`,
+      [escaped + '%']
+    );
+    if (rows.length !== 1 || rows[0].envelope_number !== value) {
+      return res.json({ unique: false });
+    }
+    // Unique exact match — fetch the same shape `by-number` returns.
+    const { rows: full } = await pool.query(
+      `SELECT e.*, b.iron_number, c.city, c.neighborhood, c.street, c.building,
+              c.custom_name, uc.name AS collector_name
+         FROM envelopes e
+         JOIN cards c ON c.id = e.card_id
+         JOIN boxes b ON b.id = c.box_id
+         LEFT JOIN users uc ON uc.id = e.collected_by
+        WHERE e.envelope_number = $1`,
+      [value]
+    );
+    if (!full[0]) return res.json({ unique: false });
+    res.json({ unique: true, envelope: full[0] });
+  } catch (err) { next(err); }
+});
+
 // GET /api/envelopes/by-number/:number  — cashroom barcode scan flow
 router.get('/by-number/:number', requireRole('admin', 'cashroom'), async (req, res, next) => {
   const number = String(req.params.number || '').trim();
