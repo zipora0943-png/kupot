@@ -64,7 +64,7 @@ export default function SettingsPage() {
 
   // Geocoding (task 61)
   const [geocodingRunning, setGeocodingRunning] = useState(false)
-  const [geocodingResult, setGeocodingResult]   = useState(null) // { attempted, ok, not_found, error } or { error }
+  const [geocodingResult, setGeocodingResult]   = useState(null) // { attempted, ok, neighborhood_center, not_found, error } or { error }
   const [geocodeCity, setGeocodeCity]           = useState('')   // '' = all cities; otherwise scope to this city
   const [geocodeProgress, setGeocodeProgress]   = useState(null) // { done, total } while running, null otherwise
   const [geocodeRetryNotFound, setGeocodeRetryNotFound] = useState(false) // include sticky 'not_found' on retry
@@ -114,6 +114,19 @@ export default function SettingsPage() {
   }
   function removeById(setter, id) {
     setter(prev => (Array.isArray(prev) ? prev.filter(t => t.id !== id) : prev))
+  }
+
+  // Direct row-level delete for a lookup type (task / report). The backend
+  // blocks (409) a type still referenced by existing tasks/reports and returns
+  // an explanatory message that we surface as-is.
+  async function handleTypeDelete(api, setter, item) {
+    if (!window.confirm(`למחוק את "${item.name}"?`)) return
+    try {
+      await api.remove(item.id)
+      removeById(setter, item.id)
+    } catch (err) {
+      alert(err.message || 'שגיאה במחיקה')
+    }
   }
 
   // Initial load
@@ -208,17 +221,18 @@ export default function SettingsPage() {
         includeNotFound: geocodeRetryNotFound,
       })
       const list = Array.isArray(pending) ? pending : []
-      const stats = { attempted: 0, ok: 0, not_found: 0, error: 0, disabled: 0 }
+      const stats = { attempted: 0, ok: 0, neighborhood_center: 0, not_found: 0, error: 0, disabled: 0 }
       for (let i = 0; i < list.length; i++) {
         const card = list[i]
         setGeocodeProgress({ done: i, total: list.length })
         try {
           const r = await cardsApi.geocode(card.id, { autoApprove: true })
           stats.attempted += 1
-          if (r?.status === 'ok')             stats.ok += 1
-          else if (r?.status === 'not_found') stats.not_found += 1
-          else if (r?.status === 'disabled')  stats.disabled += 1
-          else                                stats.error += 1
+          if      (r?.status === 'ok')                  stats.ok += 1
+          else if (r?.status === 'neighborhood_center') stats.neighborhood_center += 1
+          else if (r?.status === 'not_found')           stats.not_found += 1
+          else if (r?.status === 'disabled')            stats.disabled += 1
+          else                                          stats.error += 1
         } catch {
           stats.attempted += 1
           stats.error += 1
@@ -383,10 +397,17 @@ export default function SettingsPage() {
                   </div>
                   <div style={{ marginTop: 4 }}>{describeTaskLogic(t)}</div>
                 </div>
-                <button
-                  className="btn sm"
-                  onClick={() => openModal('task', t)}
-                >עריכה</button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    className="btn sm"
+                    onClick={() => openModal('task', t)}
+                  >עריכה</button>
+                  <button
+                    className="btn sm"
+                    style={{ color: 'var(--red)' }}
+                    onClick={() => handleTypeDelete(taskTypesApi, setTaskList, t)}
+                  >מחיקה</button>
+                </div>
               </div>
             ))
           )}
@@ -410,10 +431,17 @@ export default function SettingsPage() {
                 <div style={{ fontWeight: 600 }}>
                   {t.icon ? `${t.icon} ` : ''}{t.name}
                 </div>
-                <button
-                  className="btn sm"
-                  onClick={() => openModal('report', t)}
-                >עריכה</button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    className="btn sm"
+                    onClick={() => openModal('report', t)}
+                  >עריכה</button>
+                  <button
+                    className="btn sm"
+                    style={{ color: 'var(--red)' }}
+                    onClick={() => handleTypeDelete(reportTypesApi, setReportList, t)}
+                  >מחיקה</button>
+                </div>
               </div>
             ))
           )}
@@ -529,6 +557,7 @@ export default function SettingsPage() {
           {geocodingResult && !geocodingResult.error && (
             <div className="alert green" style={{ marginBottom: 10 }}>
               הסתיים. נסיונות: {geocodingResult.attempted} | הצליחו ואושרו אוטומטית: {geocodingResult.ok} |
+              מרכז שכונה (דורש אישור ידני): {geocodingResult.neighborhood_center || 0} |
               לא נמצאו: {geocodingResult.not_found} | שגיאות: {geocodingResult.error}
               {geocodingResult.disabled ? ` | מושבת: ${geocodingResult.disabled}` : ''}
             </div>
@@ -774,6 +803,7 @@ export default function SettingsPage() {
                           <div style={{ fontWeight: 600 }}>{c.name}</div>
                           <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
                             {c.district ? `מחוז: ${c.district}` : 'ללא מחוז'}
+                            {c.alert_days != null && ` · התראה: ${c.alert_days} ימים`}
                           </div>
                         </div>
                         <button
@@ -809,7 +839,7 @@ export default function SettingsPage() {
               style={{ width: 120 }}
             />
             <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
-              ערך זה משמש כברירת מחדל. ניתן להגדיר סף אישי ברמת כרטסת.
+              ערך זה משמש כברירת מחדל. ניתן לדרוס אותו ברמת עיר (במילון הערים) או ברמת כרטסת. היררכיה: גלובלי → עיר → קופה.
             </div>
           </div>
 

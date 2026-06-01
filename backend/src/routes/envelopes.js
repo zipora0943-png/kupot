@@ -378,4 +378,18 @@ router.patch('/:id/amount', requireRole('admin', 'cashroom'), async (req, res, n
   }
 });
 
+// DELETE /api/envelopes/:id  — admin only, permanent removal.
+// Envelopes hold the financial `amount`; deletion is irreversible. Nothing
+// references envelopes (no FK points to them), so a plain DELETE is safe.
+// The DB notify-trigger emits a change event so the admin store refreshes.
+router.delete('/:id', requireRole('admin'), async (req, res, next) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    const { rowCount } = await pool.query(`DELETE FROM envelopes WHERE id = $1`, [id]);
+    if (!rowCount) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

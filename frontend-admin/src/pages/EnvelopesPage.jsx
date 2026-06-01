@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useData } from '@shared/context/DataStoreContext'
+import { useAuth } from '@shared/context/AuthContext'
 import { computeCardLabels } from '@shared/utils/cardLabel'
 import CashroomModal from '../components/CashroomModal'
+import { envelopes as envelopesApi } from '../api/endpoints'
 import { exportEnvelopes } from '../utils/exportToCsv'
 import PaginatedTable from '../utils/PaginatedTable.jsx'
 
@@ -35,6 +37,8 @@ function isThisMonth(iso) {
 
 export default function EnvelopesPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
 
   // Envelopes + cards come from the central DataStore.
   const { data: envsData,  loading } = useData('envelopes')
@@ -56,6 +60,18 @@ export default function EnvelopesPage() {
 
   // Store refresh via socket after a save — no local patch needed.
   function handleEnvSaved() { /* store refreshes via socket */ }
+
+  // Admin-only permanent delete. The list refreshes via the socket NOTIFY
+  // trigger once the row is gone — no local patch needed.
+  async function handleDelete(env) {
+    const label = env.envelope_number || `#${env.id}`
+    if (!window.confirm(`למחוק לצמיתות את מעטפה ${label}?\nפעולה זו אינה הפיכה.`)) return
+    try {
+      await envelopesApi.remove(env.id)
+    } catch (err) {
+      alert(err.message || 'שגיאה במחיקה')
+    }
+  }
 
   // Map<cardId, label> across all cards (so letters reflect true chronological order)
   const labels = useMemo(() => computeCardLabels(allCards), [allCards])
@@ -267,6 +283,13 @@ export default function EnvelopesPage() {
                       className="btn sm"
                       onClick={() => navigate(`/cards/${e.card_id}`)}
                     >כרטסת</button>
+                    {isAdmin && (
+                      <button
+                        className="btn sm danger"
+                        onClick={() => handleDelete(e)}
+                        title="מחיקה לצמיתות"
+                      >🗑 מחק</button>
+                    )}
                   </td>
                 </>
               )

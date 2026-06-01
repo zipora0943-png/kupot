@@ -8,6 +8,7 @@ import TaskModal from '../components/TaskModal'
 import CancelTaskModal from '../components/CancelTaskModal'
 import TaskNotExecutedModal from '../components/TaskNotExecutedModal'
 import { useAuth } from '@shared/context/AuthContext'
+import { tasks as tasksApi } from '../api/endpoints'
 import { exportCsv, csvFilename } from '../utils/exportCsv'
 import { useSortable, SortableTh } from '../utils/sortable.jsx'
 import PaginatedTable from '../utils/PaginatedTable.jsx'
@@ -75,6 +76,18 @@ export default function TasksPage() {
   function handleCancelled()   { /* store refreshes via socket */ }
   function handleNotExecuted() { /* store refreshes via socket */ }
   function handleTaskSaved()   { /* store refreshes via socket */ }
+
+  // Admin-only permanent delete. The store refreshes via the socket NOTIFY
+  // trigger once the row is gone. Backend blocks (409) a task linked to a report.
+  async function handleDelete(t) {
+    const label = t.type_name || `#${t.id}`
+    if (!window.confirm(`למחוק לצמיתות את המשימה "${label}"?\nפעולה זו אינה הפיכה.`)) return
+    try {
+      await tasksApi.remove(t.id)
+    } catch (err) {
+      alert(err.message || 'שגיאה במחיקה')
+    }
+  }
 
   function openCreate() {
     setEditTask(null)
@@ -417,6 +430,13 @@ export default function TasksPage() {
                           >🚫 בטל</button>
                         )}
                       </>
+                    )}
+                    {isAdmin && (
+                      <button
+                        className="btn sm danger"
+                        onClick={() => handleDelete(t)}
+                        title="מחיקה לצמיתות"
+                      >🗑 מחק</button>
                     )}
                   </td>
                 </>

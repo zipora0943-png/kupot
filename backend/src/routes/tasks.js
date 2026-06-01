@@ -464,4 +464,24 @@ router.post('/:id/not-executed', requireRole('admin', 'collector'), async (req, 
   }
 });
 
+// DELETE /api/tasks/:id  — admin only, permanent removal.
+// A task may be referenced by a report (reports.task_id, ON DELETE RESTRICT) —
+// e.g. a report that was converted into this task. In that case the delete is
+// blocked with 409 so the report's link isn't silently broken.
+// The DB notify-trigger emits a change event so the admin store refreshes.
+router.delete('/:id', requireRole('admin'), async (req, res, next) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    const { rowCount } = await pool.query(`DELETE FROM tasks WHERE id = $1`, [id]);
+    if (!rowCount) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true });
+  } catch (err) {
+    if (err.code === '23503') {
+      return res.status(409).json({ error: 'לא ניתן למחוק: המשימה מקושרת לדיווח' });
+    }
+    next(err);
+  }
+});
+
 module.exports = router;

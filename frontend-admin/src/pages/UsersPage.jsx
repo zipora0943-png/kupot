@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { useData } from '@shared/context/DataStoreContext'
+import { useAuth } from '@shared/context/AuthContext'
+import { users as usersApi } from '../api/endpoints'
 import UserModal from '../components/UserModal'
 
 const ROLE_LABELS = {
@@ -50,6 +52,8 @@ function AreaTags({ rules }) {
 }
 
 export default function UsersPage() {
+  const { user: currentUser } = useAuth()
+
   // Users come from the central DataStore.
   const { data: usersData, loading } = useData('users')
   const allUsers = useMemo(() => (Array.isArray(usersData) ? usersData : []), [usersData])
@@ -71,6 +75,18 @@ export default function UsersPage() {
   // Store refresh via socket after a save / deactivate — no local patch needed.
   function handleSaved()       { /* store refreshes via socket */ }
   function handleDeactivated() { /* store refreshes via socket */ }
+
+  // Row-level deactivate. A real user can't be hard-deleted — their history
+  // (collections, tasks, events) references them — so "delete" = deactivate.
+  // The store refreshes via the socket NOTIFY trigger.
+  async function handleDeactivate(u) {
+    if (!window.confirm(`להפוך את "${u.name}" ללא פעיל?`)) return
+    try {
+      await usersApi.remove(u.id)
+    } catch (err) {
+      alert(err.message || 'שגיאה בהשבתה')
+    }
+  }
 
   // counts
   const stats = useMemo(() => {
@@ -203,11 +219,18 @@ export default function UsersPage() {
                           ? <span className="pill green">פעיל</span>
                           : <span className="pill gray">לא פעיל</span>}
                       </td>
-                      <td>
+                      <td className="actions" style={{ whiteSpace: 'nowrap' }}>
                         <button
                           className="btn sm"
                           onClick={() => openEdit(u)}
                         >עריכה</button>
+                        {u.active && currentUser?.id !== u.id && (
+                          <button
+                            className="btn sm danger"
+                            onClick={() => handleDeactivate(u)}
+                            title="הפיכה ללא פעיל"
+                          >השבתה</button>
+                        )}
                       </td>
                     </tr>
                   )

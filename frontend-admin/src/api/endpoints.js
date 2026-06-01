@@ -139,6 +139,8 @@ export const envelopes = {
   // Cashroom live-typing: returns { unique:true, envelope } only when the
   // typed value is the full, unambiguous envelope number.
   prefixUnique: (value)  => api.get(`/envelopes/prefix-unique/${encodeURIComponent(value)}`),
+  // Admin-only: permanently delete an envelope (irreversible).
+  remove: (id)           => api.delete(`/envelopes/${id}`),
 };
 
 // ---- EVENTS ----
