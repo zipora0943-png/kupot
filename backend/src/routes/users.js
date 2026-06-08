@@ -6,7 +6,7 @@ const { requireRole }  = require('../middleware/roles');
 
 router.use(authenticate, requireRole('admin'));
 
-const VALID_ROLES = ['admin', 'collector', 'cashroom'];
+const VALID_ROLES = ['admin', 'collector', 'cashroom', 'maintenance'];
 const MIN_PASSWORD_LEN = 6;
 
 const PUBLIC_COLUMNS = `
@@ -90,7 +90,7 @@ router.post('/', async (req, res, next) => {
   if (typeof password !== 'string' || password.length < MIN_PASSWORD_LEN) {
     return res.status(400).json({ error: `password must be at least ${MIN_PASSWORD_LEN} chars` });
   }
-  if (!validateRole(role))            return res.status(400).json({ error: 'role must be admin / collector / cashroom' });
+  if (!validateRole(role))            return res.status(400).json({ error: 'role must be admin / collector / cashroom / maintenance' });
   if (!validateRules(area_assignments)) return res.status(400).json({ error: 'area_assignments must be an array' });
   if (!validateRules(area_exclusions))  return res.status(400).json({ error: 'area_exclusions must be an array' });
   const permCheck = validatePermissions(permissions);
@@ -141,7 +141,7 @@ router.put('/:id', async (req, res, next) => {
       (typeof password !== 'string' || password.length < MIN_PASSWORD_LEN))
     return res.status(400).json({ error: `password must be at least ${MIN_PASSWORD_LEN} chars` });
   if (role !== undefined && !validateRole(role))
-    return res.status(400).json({ error: 'role must be admin / collector / cashroom' });
+    return res.status(400).json({ error: 'role must be admin / collector / cashroom / maintenance' });
   if (area_assignments !== undefined && !validateRules(area_assignments))
     return res.status(400).json({ error: 'area_assignments must be an array' });
   if (area_exclusions !== undefined && !validateRules(area_exclusions))

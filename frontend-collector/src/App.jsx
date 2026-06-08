@@ -4,6 +4,7 @@ import LoginPage from './pages/LoginPage'
 import ProtectedRoute from '@shared/components/ProtectedRoute'
 import MobileLayout from './components/MobileLayout'
 import BoxesPage from './pages/BoxesPage'
+import BoxDetailPage from './pages/BoxDetailPage'
 import CollectionPage from './pages/CollectionPage'
 import ScanPage from './pages/ScanPage'
 import ReportFormPage from './pages/ReportFormPage'
@@ -22,13 +23,20 @@ function RoleGuard({ children }) {
   const { user } = useAuth()
   const location = useLocation()
   const role = user?.role
-  const onCashroomScreen = location.pathname === '/cashroom-admin'
+  const path = location.pathname
+  const onCashroomScreen = path === '/cashroom-admin'
 
   if (role === 'cashroom' && !onCashroomScreen) {
     return <Navigate to="/cashroom-admin" replace />
   }
   if (role && role !== 'cashroom' && onCashroomScreen) {
     return <Navigate to={defaultPathForRole(role)} replace />
+  }
+  // Maintenance (תחזוקה) has no collection flow — the collection / scan screens
+  // don't exist for them. Bounce any deep-link/URL-typing back to the box list.
+  if (role === 'maintenance' &&
+      (path === '/collection' || path.startsWith('/collection/') || path.startsWith('/scan/'))) {
+    return <Navigate to="/boxes" replace />
   }
   return children
 }
@@ -63,6 +71,7 @@ function App() {
       >
         <Route index element={<Navigate to="/boxes" replace />} />
         <Route path="boxes" element={<BoxesPage />} />
+        <Route path="box/:cardId" element={<BoxDetailPage />} />
         <Route path="collection" element={<CollectionPage />} />
         <Route path="collection/:cardId" element={<CollectionPage />} />
         <Route path="report/:cardId" element={<ReportFormPage />} />

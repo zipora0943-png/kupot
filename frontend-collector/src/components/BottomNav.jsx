@@ -1,6 +1,7 @@
 import React from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useData } from '@shared/context/DataStoreContext'
+import { useAuth } from '@shared/context/AuthContext'
 
 const ITEMS = [
   { icon: '📦', label: 'קופות', path: '/boxes', match: '/boxes' },
@@ -11,7 +12,13 @@ const ITEMS = [
 export default function BottomNav() {
   const location = useLocation()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const { data: alertsData } = useData('alertsNoCollection')
+
+  // Maintenance (תחזוקה) has no collection flow — drop the גביה tab.
+  const items = user?.role === 'maintenance'
+    ? ITEMS.filter((it) => it.path !== '/collection')
+    : ITEMS
 
   // Backend returns { count, items, global_threshold }. Count drives the badge.
   const alertCount = (() => {
@@ -26,7 +33,7 @@ export default function BottomNav() {
 
   return (
     <nav className="bottom-nav" role="navigation" aria-label="ניווט ראשי">
-      {ITEMS.map((item) => {
+      {items.map((item) => {
         const active = isActive(item)
         const showBadge = item.path === '/tasks-alerts' && alertCount > 0
         return (

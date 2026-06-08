@@ -5,7 +5,9 @@ const { requireRole }  = require('../middleware/roles');
 
 router.use(authenticate);
 // Task 36: cashroom users have no access to settings — only the cashroom workflow.
-router.use(requireRole('admin', 'collector'));
+// Maintenance (תחזוקה) needs read access to lookup types + maps key (mutations
+// stay admin-only via per-route requireRole below).
+router.use(requireRole('admin', 'collector', 'maintenance'));
 
 // ─── Whitelist of allowed setting keys + their type validators.
 // Adding a new setting requires updating this map.

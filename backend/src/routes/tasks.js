@@ -6,7 +6,8 @@ const { completeTask, markTaskDoneNoLifecycle, reportTaskNotExecuted, EVENT } = 
 
 router.use(authenticate);
 // Task 36: cashroom users have no access to tasks — only the cashroom workflow.
-router.use(requireRole('admin', 'collector'));
+// Maintenance (תחזוקה): like a collector for tasks — sees/reports only its own.
+router.use(requireRole('admin', 'collector', 'maintenance'));
 
 const VALID_STATUSES = ['open', 'in_progress', 'done', 'cancelled', 'not_executed'];
 
@@ -46,8 +47,8 @@ router.get('/', async (req, res, next) => {
             WHERE 1=1`;
   const p = [];
 
-  // ── Collector: only their own tasks
-  if (req.user.role === 'collector') {
+  // ── Collector / maintenance: only their own tasks
+  if (req.user.role !== 'admin') {
     p.push(req.user.id); q += ` AND t.assigned_to = $${p.length}`;
   }
 
@@ -58,8 +59,8 @@ router.get('/', async (req, res, next) => {
   if (assigned_to !== undefined) {
     const aid = Number(assigned_to);
     if (!Number.isInteger(aid)) return res.status(400).json({ error: 'Invalid assigned_to' });
-    // collector can't query other collectors' tasks
-    if (req.user.role === 'collector' && aid !== req.user.id) {
+    // collector / maintenance can't query other users' tasks
+    if (req.user.role !== 'admin' && aid !== req.user.id) {
       return res.status(403).json({ error: 'Cannot view tasks of another collector' });
     }
     p.push(aid); q += ` AND t.assigned_to = $${p.length}`;
@@ -89,7 +90,7 @@ router.get('/:id', async (req, res, next) => {
   try {
     const task = await fetchTaskWithType(id);
     if (!task) return res.status(404).json({ error: 'Not found' });
-    if (req.user.role === 'collector' && task.assigned_to !== req.user.id) {
+    if (req.user.role !== 'admin' && task.assigned_to !== req.user.id) {
       return res.status(403).json({ error: 'Task not assigned to this collector' });
     }
     res.json(task);
@@ -116,6 +117,10 @@ router.post('/', async (req, res, next) => {
   let selfReporter = false;
   if (req.user.role === 'admin') {
     // ok
+  } else if (req.user.role === 'maintenance') {
+    // Maintenance (תחזוקה) reports tasks it performed in the field on any box.
+    // Self-report is intrinsic to the role — no extra permission flag needed.
+    selfReporter = true;
   } else if (req.user.role === 'collector') {
     const { rows: u } = await pool.query(
       `SELECT permissions FROM users WHERE id = $1 AND active = TRUE`,
@@ -312,7 +317,7 @@ router.put('/:id', requireRole('admin'), async (req, res, next) => {
 // Allowed for: admin, OR the collector assigned to the task.
 // Task 48: when task.box_id is NULL (deferred installation), body MUST include
 // iron_number (and optionally box_type_id) so the box can be created.
-router.post('/:id/complete', requireRole('admin', 'collector'), async (req, res, next) => {
+router.post('/:id/complete', requireRole('admin', 'collector', 'maintenance'), async (req, res, next) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
 
@@ -320,7 +325,7 @@ router.post('/:id/complete', requireRole('admin', 'collector'), async (req, res,
     const task = await fetchTaskWithType(id);
     if (!task) return res.status(404).json({ error: 'Not found' });
 
-    if (req.user.role === 'collector' && task.assigned_to !== req.user.id) {
+    if (req.user.role !== 'admin' && task.assigned_to !== req.user.id) {
       return res.status(403).json({ error: 'Task not assigned to this collector' });
     }
 
@@ -437,7 +442,7 @@ router.post('/:id/cancel', requireRole('admin'), async (req, res, next) => {
 // Allowed for: admin, OR the collector assigned to the task.
 // Sets status='not_executed' + reason; logs an event on the task's card
 // (or the box's active card) without touching card lifecycle.
-router.post('/:id/not-executed', requireRole('admin', 'collector'), async (req, res, next) => {
+router.post('/:id/not-executed', requireRole('admin', 'collector', 'maintenance'), async (req, res, next) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
 
@@ -449,7 +454,7 @@ router.post('/:id/not-executed', requireRole('admin', 'collector'), async (req, 
   try {
     const task = await fetchTaskWithType(id);
     if (!task) return res.status(404).json({ error: 'Not found' });
-    if (req.user.role === 'collector' && task.assigned_to !== req.user.id) {
+    if (req.user.role !== 'admin' && task.assigned_to !== req.user.id) {
       return res.status(403).json({ error: 'Task not assigned to this collector' });
     }
 

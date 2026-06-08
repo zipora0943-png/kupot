@@ -7,7 +7,8 @@ const { isCardAssignedToCollector, isBoxAssignedToCollector, buildLocationClause
 
 router.use(authenticate);
 // Task 36: cashroom users have no access to reports — only the cashroom workflow.
-router.use(requireRole('admin', 'collector'));
+// Maintenance (תחזוקה) reads all reports country-wide (no area filter applies below).
+router.use(requireRole('admin', 'collector', 'maintenance'));
 
 const VALID_STATUSES = ['open', 'converted', 'closed'];
 
@@ -97,8 +98,8 @@ router.get('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /api/reports  — admin/collector
-router.post('/', requireRole('admin', 'collector'), async (req, res, next) => {
+// POST /api/reports  — admin / collector / maintenance
+router.post('/', requireRole('admin', 'collector', 'maintenance'), async (req, res, next) => {
   const { box_id, card_id, report_type_id, description, image_path } = req.body || {};
 
   if (typeof description !== 'string' || !description.trim()) {

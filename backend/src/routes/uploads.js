@@ -6,7 +6,8 @@ const { uploadSingle } = require('../middleware/upload');
 
 router.use(authenticate);
 // Task 36: cashroom users have no access to image uploads — only the cashroom workflow.
-router.use(requireRole('admin', 'collector'));
+// Maintenance (תחזוקה) uploads images for reports + self-reported tasks.
+router.use(requireRole('admin', 'collector', 'maintenance'));
 
 // POST /api/uploads/image  — multipart form, field name "image"
 // Returns: { path: '/uploads/<filename>' }

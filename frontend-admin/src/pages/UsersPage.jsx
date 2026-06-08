@@ -5,9 +5,10 @@ import { users as usersApi } from '../api/endpoints'
 import UserModal from '../components/UserModal'
 
 const ROLE_LABELS = {
-  admin:     { label: 'מנהל', pill: 'red'    },
-  collector: { label: 'גובה', pill: 'blue'   },
-  cashroom:  { label: 'מזין', pill: 'yellow' },
+  admin:       { label: 'מנהל',   pill: 'red'    },
+  collector:   { label: 'גובה',   pill: 'blue'   },
+  cashroom:    { label: 'מזין',   pill: 'yellow' },
+  maintenance: { label: 'תחזוקה', pill: 'purple' },
 }
 
 const TAG_STYLE = {
@@ -165,6 +166,7 @@ export default function UsersPage() {
               <option value="admin">מנהל</option>
               <option value="collector">גובה</option>
               <option value="cashroom">מזין</option>
+              <option value="maintenance">תחזוקה</option>
             </select>
           </div>
           <button className="btn sm" onClick={resetFilters}>↺ איפוס</button>

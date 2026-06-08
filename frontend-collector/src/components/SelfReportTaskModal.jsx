@@ -24,11 +24,13 @@ import {
  *   - grants_temporary_access ("גביה") → blocked server-side; not shown here
  *
  * Props:
- *   open     — boolean
- *   onClose  — () => void
- *   onSaved  — (savedTask) => void
+ *   open        — boolean
+ *   presetBoxId — optional: pre-select this box (used by the maintenance
+ *                 box-detail screen so "report a task" lands on that box)
+ *   onClose     — () => void
+ *   onSaved     — (savedTask) => void
  */
-export default function SelfReportTaskModal({ open, onClose, onSaved }) {
+export default function SelfReportTaskModal({ open, presetBoxId, onClose, onSaved }) {
   const [types, setTypes] = useState([])
   const [boxTypesList, setBoxTypesList] = useState([])
   const [allBoxes, setAllBoxes] = useState([])
@@ -75,13 +77,13 @@ export default function SelfReportTaskModal({ open, onClose, onSaved }) {
 
   useEffect(() => {
     if (!open) return
-    setTaskTypeId(''); setBoxId(''); setNotes('')
+    setTaskTypeId(''); setBoxId(presetBoxId ? String(presetBoxId) : ''); setNotes('')
     setIronNumber(''); setBoxTypeId('')
     setNewCity(''); setNewNeighborhood(''); setNewStreet(''); setNewBuilding(''); setNewLocationNotes('')
     setExecutionNotes('')
     setImageFile(null); setImagePreview(null)
     setErrMsg(null); setSubmitting(false)
-  }, [open])
+  }, [open, presetBoxId])
 
   useEffect(() => {
     if (!imagePreview) return
