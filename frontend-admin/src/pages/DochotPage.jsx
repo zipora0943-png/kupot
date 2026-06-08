@@ -8,9 +8,14 @@ import {
   boxTypes as boxTypesApi,
 } from '../api/endpoints'
 import { computeCardLabels } from '@shared/utils/cardLabel'
+import { useBootstrap } from '@shared/context/DataStoreContext'
 import { exportCsv, csvFilename } from '../utils/exportCsv'
 import MonthYearPicker from '../components/MonthYearPicker'
 import CardChoiceModal from '../components/CardChoiceModal'
+import DistrictCityPicker from '../components/DistrictCityPicker'
+import {
+  buildCityDistrictMap, matchesCitySelection, selectionLabel, ALL_SELECTION,
+} from '../utils/districts'
 import { useSortable, SortableTh } from '../utils/sortable.jsx'
 import PaginatedTable from '../utils/PaginatedTable.jsx'
 
@@ -66,7 +71,7 @@ function SummaryTab() {
   const [yearVal,   setYearVal]   = useState(String(today.getFullYear()))
   const [fromVal,   setFromVal]   = useState('')
   const [toVal,     setToVal]     = useState('')
-  const [city,      setCity]      = useState('')
+  const [citySel,   setCitySel]   = useState(ALL_SELECTION) // { type:'all'|'district'|'city', value? }
   // selected collector id (string, '' for all). Named *Name historically — now an id.
   const [collectorName, setCollectorName] = useState('')
   const [customName,    setCustomName]    = useState('')
@@ -76,6 +81,10 @@ function SummaryTab() {
   const [loaded, setLoaded] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errMsg, setErrMsg]   = useState(null)
+
+  // city → district map (from bootstrap.cities) for the grouped filter + export
+  const bootstrap = useBootstrap()
+  const cityDistrictMap = useMemo(() => buildCityDistrictMap(bootstrap?.cities), [bootstrap])
 
   // load distinct cities once (from /cards)
   const [cities, setCities] = useState([])
@@ -112,7 +121,8 @@ function SummaryTab() {
     try {
       const data = await reportsExportApi.perBox({
         from, to,
-        city: city || undefined,
+        // server filters by a single city name; district filtering is done client-side below.
+        city: citySel.type === 'city' ? citySel.value : undefined,
         custom_name: customName.trim() || undefined,
         receipt_required:
           receiptFilter === 'yes' ? 'true'
@@ -120,6 +130,9 @@ function SummaryTab() {
           : undefined,
       })
       let list = Array.isArray(data) ? data : []
+      // district filter — applied here (server only knows single-city filtering).
+      if (citySel.type === 'district')
+        list = list.filter(r => matchesCitySelection(citySel, cityDistrictMap, r.city))
       // collector filter — server doesn't filter by collector, so do it client-side.
       // Multi-collector ("כפילויות"): match if the chosen collector id is among
       // the row's resolved collectors.
@@ -171,6 +184,8 @@ function SummaryTab() {
       { key: 'card_id',       label: 'כרטסת',
         format: (v) => v ? (cardLabels.get(v) || `#${v}`) : '' },
       { key: 'custom_name',   label: 'שם מותאם' },
+      { key: 'city',          label: 'מחוז',
+        format: (city) => cityDistrictMap.get(city) || '' },
       { key: 'city',          label: 'עיר' },
       { key: 'neighborhood',  label: 'שכונה' },
       { key: 'street',        label: 'רחוב' },
@@ -218,11 +233,13 @@ function SummaryTab() {
           </>
         )}
         <div className="field">
-          <label>עיר</label>
-          <select value={city} onChange={(e) => setCity(e.target.value)}>
-            <option value="">כל הערים</option>
-            {cities.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <label>עיר / מחוז</label>
+          <DistrictCityPicker
+            cities={cities}
+            cityDistrictMap={cityDistrictMap}
+            value={citySel}
+            onChange={setCitySel}
+          />
         </div>
         <div className="field">
           <label>גובה</label>
@@ -614,7 +631,7 @@ function CompareTab({ exportRef }) {
       yearVal: String(today.getFullYear() - (num - 1)),
       fromVal: '',
       toVal: '',
-      city: '',
+      citySel: ALL_SELECTION,   // { type:'all'|'district'|'city', value? }
       neighborhood: '',
       collectorName: '',
       boxTypeId: '',
@@ -654,8 +671,8 @@ function CompareTab({ exportRef }) {
       prev.map(c => {
         if (c.id !== id) return c
         const next = { ...c, [key]: value }
-        // reset neighborhood when city changes (it's city-dependent)
-        if (key === 'city') next.neighborhood = ''
+        // reset neighborhood when city/district selection changes (it's city-dependent)
+        if (key === 'citySel') next.neighborhood = ''
         // reset card choice if iron number changes
         if (key === 'ironNumber') {
           next.cardId = null
@@ -723,7 +740,8 @@ function CompareTab({ exportRef }) {
       const data = await reportsExportApi.perBox({
         from: range.from,
         to: range.to,
-        city: col.city || undefined,
+        // server filters by a single city; district filtering is client-side below.
+        city: col.citySel?.type === 'city' ? col.citySel.value : undefined,
         custom_name: col.customName.trim() || undefined,
         receipt_required:
           col.receiptFilter === 'yes' ? 'true'
@@ -731,7 +749,9 @@ function CompareTab({ exportRef }) {
           : undefined,
       })
       let arr = Array.isArray(data) ? data : []
-      // client-side filters (server only filters by city)
+      // client-side filters (server only filters by single city)
+      if (col.citySel?.type === 'district')
+        arr = arr.filter(r => matchesCitySelection(col.citySel, cityDistrictMap, r.city))
       if (col.neighborhood)  arr = arr.filter(r => r.neighborhood === col.neighborhood)
       if (col.collectorName) {
         const target = Number(col.collectorName)
@@ -774,6 +794,8 @@ function CompareTab({ exportRef }) {
     return { total, envelopes, avg }
   }
 
+  const bootstrap = useBootstrap()
+  const cityDistrictMap = useMemo(() => buildCityDistrictMap(bootstrap?.cities), [bootstrap])
   const [cities, setCities] = useState([])
   const [neighborhoodsByCity, setNeighborhoodsByCity] = useState({})
   const [collectors, setCollectors] = useState([])
@@ -825,7 +847,7 @@ function CompareTab({ exportRef }) {
       const range = periodToRange(col.period, col.monthVal, col.yearVal, col.fromVal, col.toVal)
       const periodLabel = range.from && range.to ? `${range.from} → ${range.to}` : ''
       const parts = []
-      if (col.city)          parts.push(col.city)
+      if (col.citySel && col.citySel.type !== 'all') parts.push(selectionLabel(col.citySel))
       if (col.neighborhood)  parts.push(col.neighborhood)
       if (col.collectorName) {
         const c = collectors.find(x => String(x.id) === String(col.collectorName))
@@ -968,17 +990,15 @@ function CompareTab({ exportRef }) {
               )}
 
               <div className="field" style={{ marginBottom: 6 }}>
-                <label>עיר</label>
-                <select
-                  value={col.city}
-                  onChange={(e) => updateColumn(col.id, 'city', e.target.value)}
-                  style={{ fontSize: 13 }}
-                >
-                  <option value="">כל הערים</option>
-                  {cities.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+                <label>עיר / מחוז</label>
+                <DistrictCityPicker
+                  cities={cities}
+                  cityDistrictMap={cityDistrictMap}
+                  value={col.citySel}
+                  onChange={(sel) => updateColumn(col.id, 'citySel', sel)}
+                  minWidth={140}
+                  fontSize={13}
+                />
               </div>
 
               <div className="field" style={{ marginBottom: 6 }}>
@@ -987,10 +1007,10 @@ function CompareTab({ exportRef }) {
                   value={col.neighborhood}
                   onChange={(e) => updateColumn(col.id, 'neighborhood', e.target.value)}
                   style={{ fontSize: 13 }}
-                  disabled={!col.city}
+                  disabled={col.citySel?.type !== 'city'}
                 >
                   <option value="">כל השכונות</option>
-                  {(neighborhoodsByCity[col.city] || []).map(n => (
+                  {(neighborhoodsByCity[col.citySel?.type === 'city' ? col.citySel.value : ''] || []).map(n => (
                     <option key={n} value={n}>{n}</option>
                   ))}
                 </select>

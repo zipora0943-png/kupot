@@ -5,6 +5,8 @@ import { computeCardLabels } from '@shared/utils/cardLabel'
 import { exportCards } from '../utils/exportToCsv'
 import { useSortable, SortableTh } from '../utils/sortable.jsx'
 import PaginatedTable from '../utils/PaginatedTable.jsx'
+import DistrictCityPicker from '../components/DistrictCityPicker'
+import { buildCityDistrictMap, matchesCitySelection, ALL_SELECTION } from '../utils/districts'
 
 const STATUS_LABELS = {
   active: { label: 'פעילה',     pill: 'green' },
@@ -161,10 +163,16 @@ export default function CardsPage() {
   // filters
   const [search,    setSearch]    = useState('')
   const [status,    setStatus]    = useState('')
-  const [city,      setCity]      = useState('')
+  const [citySel,   setCitySel]   = useState(ALL_SELECTION) // { type:'all'|'district'|'city', value? }
   const [collector, setCollector] = useState('')
   const [typeIds,   setTypeIds]   = useState([])     // array of selected box_type_id (numbers)
   const [statusTab, setStatusTab] = useState('active') // 'active' | 'all'
+
+  // city → district map (from bootstrap.cities), drives the grouped filter + export
+  const cityDistrictMap = useMemo(
+    () => buildCityDistrictMap(bootstrap?.cities),
+    [bootstrap],
+  )
 
   // distinct values for filter dropdowns
   const cities = useMemo(() => {
@@ -196,7 +204,8 @@ export default function CardsPage() {
     let list = allCards
     if (statusTab === 'active') list = list.filter(c => c.status === 'active')
     if (status)    list = list.filter(c => c.status === status)
-    if (city)      list = list.filter(c => c.city === city)
+    if (citySel.type !== 'all')
+      list = list.filter(c => matchesCitySelection(citySel, cityDistrictMap, c.city))
     if (collector) {
       const target = Number(collector)
       list = list.filter(c => Array.isArray(c.collector_ids)
@@ -216,7 +225,7 @@ export default function CardsPage() {
       })
     }
     return list
-  }, [allCards, statusTab, status, city, collector, typeIds, search, labels])
+  }, [allCards, statusTab, status, citySel, cityDistrictMap, collector, typeIds, search, labels])
 
   const activeCount = useMemo(
     () => allCards.filter(c => c.status === 'active').length,
@@ -224,7 +233,7 @@ export default function CardsPage() {
   )
 
   function resetFilters() {
-    setSearch(''); setStatus(''); setCity(''); setCollector(''); setTypeIds([])
+    setSearch(''); setStatus(''); setCitySel(ALL_SELECTION); setCollector(''); setTypeIds([])
   }
 
   const sortAccessors = useMemo(() => ({
@@ -350,11 +359,13 @@ export default function CardsPage() {
             </select>
           </div>
           <div className="field">
-            <label>עיר</label>
-            <select value={city} onChange={(e) => setCity(e.target.value)}>
-              <option value="">כל הערים</option>
-              {cities.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <label>עיר / מחוז</label>
+            <DistrictCityPicker
+              cities={cities}
+              cityDistrictMap={cityDistrictMap}
+              value={citySel}
+              onChange={setCitySel}
+            />
           </div>
           <div className="field">
             <label>גובה</label>
@@ -393,7 +404,7 @@ export default function CardsPage() {
           >כל הכרטסות</button>
           <button
             className="btn sm"
-            onClick={() => exportCards(filtered, `כרטסות_${new Date().toLocaleDateString('he-IL')}`)}
+            onClick={() => exportCards(filtered, `כרטסות_${new Date().toLocaleDateString('he-IL')}`, cityDistrictMap)}
             disabled={filtered.length === 0}
           >📥 יצוא לאקסל</button>
           <div style={{ marginRight: 'auto', fontSize: 13, color: 'var(--text2)' }}>

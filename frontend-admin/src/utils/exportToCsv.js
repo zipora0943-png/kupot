@@ -37,12 +37,14 @@ export function exportToCsv(filename, rows, headers) {
   document.body.removeChild(link)
 }
 
-// Export cards to CSV
-export function exportCards(cards, filename = 'כרטסות') {
+// Export cards to CSV.
+// cityDistrictMap (optional) is Map<cityName, district> — adds a מחוז column.
+export function exportCards(cards, filename = 'כרטסות', cityDistrictMap = null) {
   const rows = cards.map(c => ({
     'מספר קופה': c.iron_number || '',
     'קוד כרטסת': c.id,
     'שם': c.custom_name || '',
+    'מחוז': cityDistrictMap ? (cityDistrictMap.get(c.city) || '') : '',
     'עיר': c.city || '',
     'שכונה': c.neighborhood || '',
     'רחוב': c.street || '',
@@ -58,6 +60,7 @@ export function exportCards(cards, filename = 'כרטסות') {
     'מספר קופה',
     'קוד כרטסת',
     'שם',
+    'מחוז',
     'עיר',
     'שכונה',
     'רחוב',
