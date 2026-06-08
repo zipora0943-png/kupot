@@ -31,6 +31,10 @@ export default function UpdateGate() {
   }, [])
 
   useEffect(() => {
+    // Version banners/modals only make sense inside the installable APK — in the
+    // browser the user gets the latest code on every page load, so an update
+    // prompt (and especially a mandatory one) is wrong there.
+    if (!isNativeAndroid()) return undefined
     runCheck()
     const t = setInterval(runCheck, CHECK_INTERVAL_MS)
     return () => clearInterval(t)
