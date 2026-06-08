@@ -49,12 +49,17 @@ function MultiSelect({ options, value, onChange, placeholder = 'בחר…', allL
         type="button"
         onClick={() => setOpen(o => !o)}
         style={{
+          // match the native .field select exactly (height + look)
           background: 'var(--surface)',
           color: 'var(--text)',
-          border: '1px solid var(--border)',
-          borderRadius: 6,
-          padding: '8px 12px',
+          border: '1px solid var(--border2)',
+          borderRadius: 'var(--radius-sm)',
+          padding: '10px 14px',
+          fontFamily: "'Heebo', sans-serif",
           fontSize: 14,
+          outline: 'none',
+          transition: 'all .2s',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.02) inset',
           cursor: 'pointer',
           minWidth: 160,
           textAlign: 'right',
