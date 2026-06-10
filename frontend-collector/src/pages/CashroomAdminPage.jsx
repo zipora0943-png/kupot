@@ -92,6 +92,7 @@ export default function CashroomAdminPage() {
     if (!value) return
     setScanErr(null)
     setScanning(true)
+    let opened = false
     try {
       const env = await envelopesApi.byNumber(value)
       if (!env) {
@@ -100,6 +101,7 @@ export default function CashroomAdminPage() {
         return
       }
       setOpenEnv(env)
+      opened = true
       setScanValue('')
     } catch (err) {
       // A real "not found" arrives as a 404 — show a Hebrew message and clear
@@ -113,6 +115,10 @@ export default function CashroomAdminPage() {
       }
     } finally {
       setScanning(false)
+      // Unless the modal opened, return focus to the scan field so the next
+      // scan starts immediately without a click. Deferred so it runs after the
+      // input is re-enabled (it's disabled while scanning).
+      if (!opened) setTimeout(() => scanRef.current?.focus(), 0)
     }
   }
 
