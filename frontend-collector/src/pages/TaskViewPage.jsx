@@ -122,6 +122,42 @@ export default function TaskViewPage() {
             <span className="k">קופה</span>
             <span className="v">{task.iron_number ? `#${task.iron_number}` : (task.box_id ? `#${task.box_id}` : '—')}</span>
           </div>
+          {task.box_type_name && (
+            <div className="kv">
+              <span className="k">סוג קופה</span>
+              <span className="v">{task.box_type_name}</span>
+            </div>
+          )}
+          {task.card_installation_type && (
+            <div className="kv">
+              <span className="k">סוג התקנה</span>
+              <span className="v">{task.card_installation_type}</span>
+            </div>
+          )}
+          {task.card_city && (
+            <div className="kv">
+              <span className="k">עיר</span>
+              <span className="v">{task.card_city}</span>
+            </div>
+          )}
+          {task.card_neighborhood && (
+            <div className="kv">
+              <span className="k">שכונה</span>
+              <span className="v">{task.card_neighborhood}</span>
+            </div>
+          )}
+          {(task.card_street || task.card_building) && (
+            <div className="kv">
+              <span className="k">רחוב + בניין</span>
+              <span className="v">{[task.card_street, task.card_building].filter(Boolean).join(' ')}</span>
+            </div>
+          )}
+          {task.card_location_notes && (
+            <div className="kv">
+              <span className="k">הערות מיקום</span>
+              <span className="v" style={{ whiteSpace: 'pre-wrap' }}>{task.card_location_notes}</span>
+            </div>
+          )}
           <div className="kv">
             <span className="k">תאריך יצירה</span>
             <span className="v">{formatDate(task.created_at)}</span>

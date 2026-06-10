@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Modal from '@shared/components/Modal'
 import BoxNumberAutocomplete from './BoxNumberAutocomplete'
+import KupaDetails from './KupaDetails'
 import {
   tasks as tasksApi,
   boxes as boxesApi,
@@ -251,6 +252,8 @@ export default function TaskModal({ open, task, defaults, onClose, onSaved }) {
         </>
       }
     >
+      {isEdit && <KupaDetails task={task} />}
+
       <div className="modal-row">
         <div className="field">
           <label>סוג משימה *</label>
@@ -296,7 +299,7 @@ export default function TaskModal({ open, task, defaults, onClose, onSaved }) {
             <option value="">{grantsTempAccess && !isEdit ? '— בחר —' : 'לא משויך'}</option>
             {collectors.map(c => (
               <option key={c.id} value={c.id}>
-                {c.name}{c.role === 'maintenance' ? ' · תחזוקה' : ''}
+                {c.name} · {c.role === 'maintenance' ? 'תחזוקה' : 'גובה'}
               </option>
             ))}
           </select>

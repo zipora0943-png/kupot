@@ -17,12 +17,30 @@ async function fetchTaskWithType(taskId) {
   // a box (iron_number entered at execute time). Use LEFT JOIN on boxes.
   const { rows } = await pool.query(
     `SELECT t.*, tt.opens_card, tt.closes_card, tt.name AS type_name, tt.icon,
-            b.iron_number, u.name AS assigned_name, cb.name AS created_by_name
+            b.iron_number, bt.name AS box_type_name,
+            u.name AS assigned_name, cb.name AS created_by_name,
+            kc.city               AS card_city,
+            kc.neighborhood       AS card_neighborhood,
+            kc.street             AS card_street,
+            kc.building           AS card_building,
+            kc.installation_type  AS card_installation_type,
+            kc.location_notes     AS card_location_notes
        FROM tasks t
        JOIN task_types tt ON tt.id = t.task_type_id
        LEFT JOIN boxes b  ON b.id  = t.box_id
+       LEFT JOIN box_types bt ON bt.id = b.box_type_id
        LEFT JOIN users u  ON u.id  = t.assigned_to
        LEFT JOIN users cb ON cb.id = t.created_by
+       LEFT JOIN LATERAL (
+         -- The kupa's details live on its card (כרטסת). Prefer the task's own
+         -- card, then the box's active card, then its most recent one.
+         SELECT cc.city, cc.neighborhood, cc.street, cc.building,
+                cc.installation_type, cc.location_notes
+           FROM cards cc
+          WHERE cc.box_id = t.box_id
+          ORDER BY (cc.id = t.card_id) DESC, (cc.status = 'active') DESC, cc.opened_at DESC
+          LIMIT 1
+       ) kc ON TRUE
       WHERE t.id = $1`,
     [taskId]
   );
@@ -38,12 +56,30 @@ router.get('/', async (req, res, next) => {
   // Task 48: tasks.box_id can be NULL when an installation was created without
   // a box (iron_number entered at execute time). Use LEFT JOIN on boxes.
   let q = `SELECT t.*, tt.name AS type_name, tt.icon, tt.opens_card, tt.closes_card,
-                  b.iron_number, u.name AS assigned_name, cb.name AS created_by_name
+                  b.iron_number, bt.name AS box_type_name,
+                  u.name AS assigned_name, cb.name AS created_by_name,
+                  kc.city               AS card_city,
+                  kc.neighborhood       AS card_neighborhood,
+                  kc.street             AS card_street,
+                  kc.building           AS card_building,
+                  kc.installation_type  AS card_installation_type,
+                  kc.location_notes     AS card_location_notes
              FROM tasks t
              JOIN task_types tt ON tt.id = t.task_type_id
              LEFT JOIN boxes b  ON b.id  = t.box_id
+             LEFT JOIN box_types bt ON bt.id = b.box_type_id
              LEFT JOIN users u  ON u.id  = t.assigned_to
              LEFT JOIN users cb ON cb.id = t.created_by
+             LEFT JOIN LATERAL (
+               -- The kupa's details live on its card (כרטסת). Prefer the task's
+               -- own card, then the box's active card, then its most recent one.
+               SELECT cc.city, cc.neighborhood, cc.street, cc.building,
+                      cc.installation_type, cc.location_notes
+                 FROM cards cc
+                WHERE cc.box_id = t.box_id
+                ORDER BY (cc.id = t.card_id) DESC, (cc.status = 'active') DESC, cc.opened_at DESC
+                LIMIT 1
+             ) kc ON TRUE
             WHERE 1=1`;
   const p = [];
 

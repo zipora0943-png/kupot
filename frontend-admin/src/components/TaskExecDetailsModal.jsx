@@ -1,5 +1,6 @@
 import React from 'react'
 import Modal from '@shared/components/Modal'
+import KupaDetails from './KupaDetails'
 import { assetUrl } from '../utils/assetUrl'
 
 function formatDateTime(iso) {
@@ -63,6 +64,8 @@ export default function TaskExecDetailsModal({ open, task, onClose }) {
               {task.assigned_name ? <> · ע"י <strong style={{ color: 'var(--text)' }}>{task.assigned_name}</strong></> : null}
             </div>
           </div>
+
+          <KupaDetails task={task} />
 
           {isCancelled && (
             <div className="field" style={{ marginBottom: 12 }}>
