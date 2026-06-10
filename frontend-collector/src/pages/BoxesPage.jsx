@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useData } from '@shared/context/DataStoreContext'
-import { useAuth } from '@shared/context/AuthContext'
 import { daysSince } from '../utils/daysSince'
 
 const STORAGE_KEY = 'collector:boxes:filters'
@@ -19,11 +18,9 @@ function readStoredFilters() {
 
 export default function BoxesPage() {
   const navigate = useNavigate()
-  const { user } = useAuth()
-  // Maintenance (תחזוקה) opens a read-only box detail screen (no collection flow);
-  // collectors go to the collection screen.
-  const openBox = (cardId) =>
-    navigate(user?.role === 'maintenance' ? `/box/${cardId}` : `/collection/${cardId}`)
+  // Collectors and maintenance (תחזוקה) both open the collection screen —
+  // the per-role actions (collect / report task / create task) live there.
+  const openBox = (cardId) => navigate(`/collection/${cardId}`)
   // Read from the central store — populated at login and kept fresh by
   // Socket.IO. Filter to active cards in-memory (the store holds all statuses).
   const { data: allCards, loading } = useData('cards')
