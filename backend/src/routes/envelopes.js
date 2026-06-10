@@ -90,7 +90,7 @@ router.get('/', async (req, res, next) => {
 router.get('/pending', requireRole('admin', 'cashroom'), async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `SELECT e.*, b.iron_number, c.city, c.neighborhood, c.street, uc.name AS collector_name
+      `SELECT e.*, b.iron_number, c.city, c.neighborhood, c.street, c.building, uc.name AS collector_name
          FROM envelopes e
          JOIN cards c ON c.id = e.card_id
          JOIN boxes b ON b.id = c.box_id
@@ -110,7 +110,7 @@ router.get('/entered-recent', requireRole('admin', 'cashroom'), async (req, res,
   if (limit > 100) limit = 100;
   try {
     const { rows } = await pool.query(
-      `SELECT e.*, b.iron_number, c.city, c.neighborhood, c.street, c.custom_name,
+      `SELECT e.*, b.iron_number, c.city, c.neighborhood, c.street, c.building, c.custom_name,
               uc.name AS collector_name, ue.name AS entered_by_name
          FROM envelopes e
          JOIN cards c ON c.id = e.card_id

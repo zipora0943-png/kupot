@@ -148,12 +148,21 @@ export default function CashroomAdminPage() {
       const env = await envelopesApi.byNumber(num)
       if (!env) {
         setScanErr(`מעטפה ${num} לא נמצאה`)
+        setScanValue('')
         return
       }
       setOpenEnv(env)
       setScanValue('')
     } catch (err) {
-      setScanErr(err.message || `מעטפה ${num} לא נמצאה`)
+      // A real "not found" arrives as a 404 — show a Hebrew message and clear
+      // the field so the next scan starts clean. Network / other errors keep
+      // the typed value so the user can retry without re-typing.
+      if (err.status === 404) {
+        setScanErr(`מעטפה ${num} לא נמצאה`)
+        setScanValue('')
+      } else {
+        setScanErr(err.message || `מעטפה ${num} לא נמצאה`)
+      }
     } finally {
       setScanning(false)
     }
