@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Modal from '@shared/components/Modal'
 import LocationCombobox from './LocationCombobox'
-import { tasks as tasksApi, uploads as uploadsApi, boxTypes as boxTypesApi } from '../api/endpoints'
+import { tasks as tasksApi, uploads as uploadsApi } from '../api/endpoints'
+import { useData } from '@shared/context/DataStoreContext'
 
 /**
  * Confirm-execution modal for a task. Mirrors the admin TaskExecModal:
@@ -21,12 +22,18 @@ export default function TaskExecModal({ open, task, onClose, onSuccess, onReport
   // and box_type now (the backend creates the box in the same transaction).
   const [ironNumber,  setIronNumber]  = useState('')
   const [boxTypeId,   setBoxTypeId]   = useState('')
-  const [boxTypesList, setBoxTypesList] = useState([])
+  const { data: boxTypesFromStore, refetch: refetchBoxTypes } = useData('boxTypes')
+  const boxTypesList = useMemo(
+    () => (Array.isArray(boxTypesFromStore) ? boxTypesFromStore : []),
+    [boxTypesFromStore],
+  )
   const [submitting, setSubmitting] = useState(false)
   const [errMsg, setErrMsg] = useState(null)
 
   const [imageFile,    setImageFile]    = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
+  // System-camera intent: the in-app getUserMedia camera crashed the WebView,
+  // so we stay on the file-input path even though it adds the OS confirm step.
   const fileInputRef   = useRef(null)
   const cameraInputRef = useRef(null)
 
@@ -50,12 +57,10 @@ export default function TaskExecModal({ open, task, onClose, onSuccess, onReport
 
   useEffect(() => {
     if (!open || !needsBox) return
-    let cancelled = false
-    boxTypesApi.getAll()
-      .then(d => { if (!cancelled) setBoxTypesList(Array.isArray(d) ? d : []) })
-      .catch(() => { if (!cancelled) setBoxTypesList([]) })
-    return () => { cancelled = true }
-  }, [open, needsBox])
+    // Pull fresh from the store on open in case the admin added a new box
+    // type while this modal wasn't mounted.
+    refetchBoxTypes()
+  }, [open, needsBox, refetchBoxTypes])
 
   useEffect(() => {
     if (!imagePreview) return

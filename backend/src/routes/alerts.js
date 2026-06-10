@@ -60,7 +60,8 @@ router.get('/no-collection', async (req, res, next) => {
         rc.names_arr AS collector_names,
         rc.names     AS collector_name,
         c.alert_days_personal,
-        COALESCE(c.alert_days_personal, $1) AS threshold_days,
+        ci.alert_days AS alert_days_city,
+        COALESCE(c.alert_days_personal, ci.alert_days, $1) AS threshold_days,
         c.opened_at,
         lc.last_collection,
         FLOOR(EXTRACT(EPOCH FROM (NOW() - COALESCE(lc.last_collection, c.opened_at))) / 86400)::INTEGER
@@ -68,17 +69,18 @@ router.get('/no-collection', async (req, res, next) => {
       FROM cards c
       JOIN boxes b ON b.id = c.box_id
       ${RESOLVED_COLLECTORS_LATERAL}
+      LEFT JOIN cities ci ON ci.name = c.city
       LEFT JOIN last_collections lc ON lc.card_id = c.id
       WHERE c.status = 'active'
         ${collectorClause}
         AND (
           (lc.last_collection IS NOT NULL
               AND NOW() - lc.last_collection
-                  > make_interval(days => COALESCE(c.alert_days_personal, $1)))
+                  > make_interval(days => COALESCE(c.alert_days_personal, ci.alert_days, $1)))
           OR
           (lc.last_collection IS NULL
               AND NOW() - c.opened_at
-                  > make_interval(days => COALESCE(c.alert_days_personal, $1)))
+                  > make_interval(days => COALESCE(c.alert_days_personal, ci.alert_days, $1)))
         )
       ORDER BY days_since DESC NULLS LAST`;
 

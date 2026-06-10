@@ -1,6 +1,6 @@
 import React from 'react'
 import Modal from '@shared/components/Modal'
-import { assetUrl } from '../utils/assetUrl'
+import TaskImage from './TaskImage'
 
 function formatDateTime(iso) {
   if (!iso) return '—'
@@ -107,42 +107,14 @@ export default function TaskExecDetailsModal({ open, task, onClose }) {
           <div className="field" style={{ marginBottom: 12 }}>
             <label>תמונת המשימה</label>
             {task.image_path
-              ? (
-                <a href={assetUrl(task.image_path)} target="_blank" rel="noopener noreferrer">
-                  <img
-                    src={assetUrl(task.image_path)}
-                    alt="תמונת המשימה"
-                    style={{
-                      maxWidth: '100%',
-                      maxHeight: 300,
-                      borderRadius: 8,
-                      border: '1px solid var(--border, #e5e7eb)',
-                      display: 'block',
-                    }}
-                  />
-                </a>
-              )
+              ? <TaskImage path={task.image_path} label="תמונת המשימה" />
               : <div style={{ color: 'var(--text3)', fontStyle: 'italic' }}>לא צורפה תמונה למשימה</div>}
           </div>
 
           <div className="field">
             <label>{isCancelled ? 'תמונת ביצוע' : 'תמונת אישור ביצוע'}</label>
             {task.execution_image
-              ? (
-                <a href={assetUrl(task.execution_image)} target="_blank" rel="noopener noreferrer">
-                  <img
-                    src={assetUrl(task.execution_image)}
-                    alt="תמונת ביצוע"
-                    style={{
-                      maxWidth: '100%',
-                      maxHeight: 300,
-                      borderRadius: 8,
-                      border: '1px solid var(--border, #e5e7eb)',
-                      display: 'block',
-                    }}
-                  />
-                </a>
-              )
+              ? <TaskImage path={task.execution_image} label="תמונת ביצוע" />
               : <div style={{ color: 'var(--text3)', fontStyle: 'italic' }}>לא צורפה תמונה בעת אישור הביצוע</div>}
           </div>
         </>

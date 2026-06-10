@@ -65,6 +65,24 @@ router.get('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/boxes/lookup
+// Minimal id/iron_number/box_type list of all active boxes for autocomplete
+// (self-report flow): collectors must be able to report a task they performed
+// on any box they encountered in the field, not only boxes in their area.
+// Only iron_number + box type are exposed — no address details.
+router.get('/lookup', async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT b.id, b.iron_number, bt.name AS box_type_name
+         FROM boxes b
+         LEFT JOIN box_types bt ON bt.id = b.box_type_id
+        WHERE b.status = 'active'
+        ORDER BY b.iron_number`
+    );
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
 // GET /api/boxes/:id
 router.get('/:id', async (req, res, next) => {
   const id = Number(req.params.id);

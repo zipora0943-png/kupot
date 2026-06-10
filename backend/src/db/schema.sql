@@ -337,6 +337,13 @@ CREATE TABLE IF NOT EXISTS cities (
 );
 CREATE INDEX IF NOT EXISTS idx_cities_district ON cities(district);
 
+-- Per-city alert threshold (days without collection before a card alerts).
+-- Sits between the global default and the per-card override in the hierarchy:
+--   card.alert_days_personal  >  cities.alert_days  >  settings.alert_days_global
+-- NULL = inherit the global default. Matched to cards by city NAME
+-- (cards.city = cities.name), same as the district expansion.
+ALTER TABLE cities ADD COLUMN IF NOT EXISTS alert_days INTEGER;
+
 -- ─────────────────────────────────────────
 --  CARD LETTER  (אות סידורית: A, B, C, …, Z, AA, AB, …)
 --

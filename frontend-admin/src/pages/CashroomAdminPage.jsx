@@ -144,18 +144,33 @@ export default function CashroomAdminPage() {
     if (!num) return
     setScanErr(null)
     setScanning(true)
+    let opened = false
     try {
       const env = await envelopesApi.byNumber(num)
       if (!env) {
         setScanErr(`מעטפה ${num} לא נמצאה`)
+        setScanValue('')
         return
       }
       setOpenEnv(env)
+      opened = true
       setScanValue('')
     } catch (err) {
-      setScanErr(err.message || `מעטפה ${num} לא נמצאה`)
+      // A real "not found" arrives as a 404 — show a Hebrew message and clear
+      // the field so the next scan starts clean. Network / other errors keep
+      // the typed value so the user can retry without re-typing.
+      if (err.status === 404) {
+        setScanErr(`מעטפה ${num} לא נמצאה`)
+        setScanValue('')
+      } else {
+        setScanErr(err.message || `מעטפה ${num} לא נמצאה`)
+      }
     } finally {
       setScanning(false)
+      // Unless the modal opened, return focus to the scan field so the next
+      // scan starts immediately without a click. Deferred so it runs after the
+      // input is re-enabled (it's disabled while scanning).
+      if (!opened) setTimeout(() => scanRef.current?.focus(), 0)
     }
   }
 

@@ -5,10 +5,10 @@ import {
   tasks as tasksApi,
   boxes as boxesApi,
   users as usersApi,
-  taskTypes as taskTypesApi,
   cards as cardsApi,
   uploads as uploadsApi,
 } from '../api/endpoints'
+import { useData } from '@shared/context/DataStoreContext'
 import { assetUrl } from '../utils/assetUrl'
 
 /**
@@ -25,7 +25,14 @@ import { assetUrl } from '../utils/assetUrl'
 export default function TaskModal({ open, task, defaults, onClose, onSaved }) {
   const isEdit = !!task
 
-  const [types, setTypes] = useState([])
+  // Task types come from the central store — that way when an admin adds a
+  // new type in the settings UI, the dropdown here refreshes automatically
+  // via the entity.changed socket event (no need to close+reopen the modal).
+  const { data: typesFromStore, refetch: refetchTaskTypes } = useData('taskTypes')
+  const types = useMemo(
+    () => (Array.isArray(typesFromStore) ? typesFromStore : []),
+    [typesFromStore],
+  )
   const [allBoxes, setAllBoxes] = useState([])
   const [collectors, setCollectors] = useState([])
 
@@ -42,6 +49,8 @@ export default function TaskModal({ open, task, defaults, onClose, onSaved }) {
   const [submitting, setSubmitting] = useState(false)
   const [errMsg, setErrMsg] = useState(null)
 
+  // System-camera intent (file input with capture). The in-app getUserMedia
+  // camera crashed the WebView, so we stay on this reliable path.
   const fileInputRef = useRef(null)
   const cameraInputRef = useRef(null)
 
@@ -50,19 +59,21 @@ export default function TaskModal({ open, task, defaults, onClose, onSaved }) {
 
   useEffect(() => {
     if (!open) return
+    // Belt-and-suspenders: socket events normally keep `types` fresh, but if
+    // the admin added a type while disconnected, an explicit refetch on open
+    // guarantees the dropdown is current the moment the user sees it.
+    refetchTaskTypes()
     let cancelled = false
     Promise.all([
-      taskTypesApi.getAll().catch(() => []),
       boxesApi.getAll().catch(() => []),
       usersApi.getAll({ role: 'collector', active: true }).catch(() => []),
-    ]).then(([t, b, u]) => {
+    ]).then(([b, u]) => {
       if (cancelled) return
-      setTypes(Array.isArray(t) ? t : [])
       setAllBoxes(Array.isArray(b) ? b : [])
       setCollectors(Array.isArray(u) ? u : [])
     })
     return () => { cancelled = true }
-  }, [open])
+  }, [open, refetchTaskTypes])
 
   useEffect(() => {
     if (!open) return

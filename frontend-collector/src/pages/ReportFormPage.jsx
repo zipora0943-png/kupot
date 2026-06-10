@@ -4,7 +4,7 @@ import {
   reports as reportsApi,
   uploads as uploadsApi,
 } from '../api/endpoints'
-import { useBootstrap } from '@shared/context/DataStoreContext'
+import { useData } from '@shared/context/DataStoreContext'
 
 export default function ReportFormPage() {
   const { cardId } = useParams()
@@ -12,13 +12,19 @@ export default function ReportFormPage() {
   const [searchParams] = useSearchParams()
   const reason = searchParams.get('reason')
 
-  // Report types come from /api/initial-load (loaded once at login).
-  const bootstrap = useBootstrap()
+  // Report types come from the central store (auto-refreshes via socket when
+  // admin adds a new type — used to come from /api/initial-load which only
+  // ran once at login and got stale).
+  const { data: typesFromStore, refetch: refetchReportTypes } = useData('reportTypes')
   const types = useMemo(
-    () => (Array.isArray(bootstrap?.report_types) ? bootstrap.report_types : []),
-    [bootstrap],
+    () => (Array.isArray(typesFromStore) ? typesFromStore : []),
+    [typesFromStore],
   )
-  const typesLoading = bootstrap == null
+  const typesLoading = typesFromStore == null
+
+  useEffect(() => {
+    refetchReportTypes()
+  }, [refetchReportTypes])
 
   const [reportTypeId, setReportTypeId] = useState('')
   const [description, setDescription] = useState(
@@ -27,6 +33,9 @@ export default function ReportFormPage() {
 
   const [imageFile, setImageFile] = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
+  // Camera is the Android system camera (via <input capture>). The custom
+  // in-app getUserMedia camera was crashing the WebView on this build, so
+  // we stay on the system-intent path that the user reported as reliable.
   const cameraInputRef = useRef(null)
   const fileInputRef = useRef(null)
 

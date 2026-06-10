@@ -4,11 +4,10 @@ import LocationCombobox from './LocationCombobox'
 import BoxNumberAutocomplete from './BoxNumberAutocomplete'
 import {
   tasks as tasksApi,
-  taskTypes as taskTypesApi,
-  boxTypes as boxTypesApi,
   boxes as boxesApi,
   uploads as uploadsApi,
 } from '../api/endpoints'
+import { useData } from '@shared/context/DataStoreContext'
 
 /**
  * Task 50: collector self-report modal.
@@ -29,8 +28,18 @@ import {
  *   onSaved  — (savedTask) => void
  */
 export default function SelfReportTaskModal({ open, onClose, onSaved }) {
-  const [types, setTypes] = useState([])
-  const [boxTypesList, setBoxTypesList] = useState([])
+  // Lookup tables come from the central store so adding a new task/box type
+  // in admin shows up immediately (socket entity.changed → store refetch).
+  const { data: typesFromStore, refetch: refetchTaskTypes }   = useData('taskTypes')
+  const { data: boxTypesFromStore, refetch: refetchBoxTypes } = useData('boxTypes')
+  const types = useMemo(
+    () => (Array.isArray(typesFromStore) ? typesFromStore : []),
+    [typesFromStore],
+  )
+  const boxTypesList = useMemo(
+    () => (Array.isArray(boxTypesFromStore) ? boxTypesFromStore : []),
+    [boxTypesFromStore],
+  )
   const [allBoxes, setAllBoxes] = useState([])
 
   const [taskTypeId, setTaskTypeId] = useState('')
@@ -48,7 +57,7 @@ export default function SelfReportTaskModal({ open, onClose, onSaved }) {
 
   const [executionNotes, setExecutionNotes] = useState('')
 
-  // image attachment
+  // image attachment (system-camera intent, the in-app camera crashed the WebView)
   const [imageFile,    setImageFile]    = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
   const fileInputRef   = useRef(null)
@@ -59,19 +68,17 @@ export default function SelfReportTaskModal({ open, onClose, onSaved }) {
 
   useEffect(() => {
     if (!open) return
+    refetchTaskTypes()
+    refetchBoxTypes()
     let cancelled = false
-    Promise.all([
-      taskTypesApi.getAll().catch(() => []),
-      boxTypesApi.getAll().catch(() => []),
-      boxesApi.getAll().catch(() => []),
-    ]).then(([t, bt, b]) => {
-      if (cancelled) return
-      setTypes(Array.isArray(t) ? t : [])
-      setBoxTypesList(Array.isArray(bt) ? bt : [])
-      setAllBoxes(Array.isArray(b) ? b : [])
-    })
+    // Use the dedicated lookup endpoint — boxes.getAll() filters to the
+    // collector's assigned boxes, but a self-reported task may be on any
+    // active box in the system (the collector did the work in the field).
+    boxesApi.lookup()
+      .then((b) => { if (!cancelled) setAllBoxes(Array.isArray(b) ? b : []) })
+      .catch(() => { if (!cancelled) setAllBoxes([]) })
     return () => { cancelled = true }
-  }, [open])
+  }, [open, refetchTaskTypes, refetchBoxTypes])
 
   useEffect(() => {
     if (!open) return

@@ -2,15 +2,21 @@
 // Grouped by resource. Each function returns a promise.
 
 import { api, API_BASE } from '@shared/api/client';
+import { compressImage } from '../utils/compressImage';
 
 // ---- UPLOADS ----
 // The shared `api` wrapper forces JSON; multipart uploads need a raw fetch
 // with the auth token. Returns { path, filename, size, mimetype }.
+//
+// WhatsApp-style compression is applied here so every caller benefits without
+// touching the preview flow in each modal — previews still show the original
+// file the user picked, but the bytes that hit the wire are the resized JPEG.
 export const uploads = {
   image: async (file) => {
     if (!file) throw new Error('יש לבחור קובץ');
+    const payload = await compressImage(file);
     const fd = new FormData();
-    fd.append('image', file);
+    fd.append('image', payload);
     const token = localStorage.getItem('kupot_token');
     const res = await fetch(`${API_BASE}/uploads/image`, {
       method: 'POST',
@@ -52,6 +58,10 @@ export const users = {
 // ---- BOXES ----
 export const boxes = {
   getAll: (filters)      => api.get('/boxes', filters),
+  // Minimal list of every active box (id + iron_number + box_type_name) for
+  // the self-report autocomplete: a collector may perform a task in the field
+  // on any box, not just ones in their assigned area.
+  lookup: ()             => api.get('/boxes/lookup'),
   get: (id)              => api.get(`/boxes/${id}`),
   create: (data)         => api.post('/boxes', data),
   update: (id, data)     => api.put(`/boxes/${id}`, data),

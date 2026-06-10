@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import LoginPage from './pages/LoginPage'
 import ProtectedRoute from '@shared/components/ProtectedRoute'
@@ -10,9 +10,25 @@ import ReportFormPage from './pages/ReportFormPage'
 import TasksAlertsPage from './pages/TasksAlertsPage'
 import TaskViewPage from './pages/TaskViewPage'
 import CashroomAdminPage from './pages/CashroomAdminPage'
+import LogsPage from './pages/LogsPage'
 import UpdateGate from './components/UpdateGate'
+import AppNotifications from './components/AppNotifications'
 import { useAuth } from '@shared/context/AuthContext'
 import { defaultPathForRole } from './utils/defaultPath'
+import { logger } from './utils/logger'
+
+// Tap every navigation so the log shows the exact route just before any
+// crash — invaluable for reproducing crashes from the field.
+function NavLogger() {
+  const location = useLocation()
+  const prev = useRef(null)
+  useEffect(() => {
+    const cur = location.pathname + location.search
+    logger.log('nav', (prev.current ? `${prev.current} → ` : '') + cur)
+    prev.current = cur
+  }, [location])
+  return null
+}
 
 // Cashroom users are locked to /cashroom-admin (their only screen). Non-cashroom
 // users hitting /cashroom-admin are bounced back to their default landing — the
@@ -37,8 +53,22 @@ function App() {
   return (
     <>
       <UpdateGate />
+      <AppNotifications />
+      <NavLogger />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+
+      {/* Admin debug log viewer — accessible without the MobileLayout chrome so
+          it works from any auth state and any device size. The page itself
+          gates by user.role. */}
+      <Route
+        path="/logs"
+        element={
+          <ProtectedRoute>
+            <LogsPage />
+          </ProtectedRoute>
+        }
+      />
 
       <Route
         path="/scan/:cardId"

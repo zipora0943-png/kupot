@@ -31,6 +31,10 @@ export default function UpdateGate() {
   }, [])
 
   useEffect(() => {
+    // Version banners only make sense inside the installable APK — in the
+    // browser the user gets the latest code on every page load, and the
+    // "download APK" CTA is misleading there.
+    if (!isNativeAndroid()) return undefined
     runCheck()
     const t = setInterval(runCheck, CHECK_INTERVAL_MS)
     return () => clearInterval(t)

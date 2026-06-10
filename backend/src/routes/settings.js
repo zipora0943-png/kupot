@@ -330,11 +330,23 @@ router.delete('/box-types/:id', requireRole('admin'), async (req, res, next) => 
 // fragment in userAssignment.js joins back to this table to expand a
 // district rule into "all cities mapped to that district".
 
+// Per-city alert threshold: optional integer 1..3650, or null to inherit the
+// global default. Returns { value } (number|null) on success, { error } on
+// invalid input. Accepts '' / null / undefined as "clear" (=> null).
+function parseAlertDays(raw) {
+  if (raw === undefined || raw === null || raw === '') return { value: null };
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isInteger(n)) return { error: 'alert_days must be an integer' };
+  if (n < 1)    return { error: 'alert_days must be >= 1' };
+  if (n > 3650) return { error: 'alert_days must be <= 3650' };
+  return { value: n };
+}
+
 // GET /api/settings/cities — full list with their districts
 router.get('/cities', async (_req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, name, district FROM cities ORDER BY name`
+      `SELECT id, name, district, alert_days FROM cities ORDER BY name`
     );
     res.json(rows);
   } catch (err) { next(err); }
@@ -370,16 +382,18 @@ router.get('/unassigned-cities', async (_req, res, next) => {
 });
 
 router.post('/cities', requireRole('admin'), async (req, res, next) => {
-  const { name, district } = req.body || {};
+  const { name, district, alert_days } = req.body || {};
   const e = validateString(name, 'name');
   if (e) return badRequest(res, e);
   if (district !== undefined && district !== null && typeof district !== 'string')
     return badRequest(res, 'district must be string or null');
+  const ad = parseAlertDays(alert_days);
+  if (ad.error) return badRequest(res, ad.error);
   try {
     const { rows } = await pool.query(
-      `INSERT INTO cities (name, district) VALUES ($1, $2)
-       RETURNING id, name, district`,
-      [name.trim(), district ? district.trim() : null]
+      `INSERT INTO cities (name, district, alert_days) VALUES ($1, $2, $3)
+       RETURNING id, name, district, alert_days`,
+      [name.trim(), district ? district.trim() : null, ad.value]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -392,7 +406,7 @@ router.put('/cities/:id', requireRole('admin'), async (req, res, next) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return badRequest(res, 'Invalid id');
 
-  const { name, district } = req.body || {};
+  const { name, district, alert_days } = req.body || {};
   const sets = [], params = [];
   if (name !== undefined) {
     const e = validateString(name, 'name');
@@ -404,13 +418,18 @@ router.put('/cities/:id', requireRole('admin'), async (req, res, next) => {
       return badRequest(res, 'district must be string or null');
     params.push(district ? district.trim() : null); sets.push(`district = $${params.length}`);
   }
+  if (alert_days !== undefined) {
+    const ad = parseAlertDays(alert_days);
+    if (ad.error) return badRequest(res, ad.error);
+    params.push(ad.value); sets.push(`alert_days = $${params.length}`);
+  }
   if (sets.length === 0) return badRequest(res, 'No fields to update');
   params.push(id);
 
   try {
     const { rows } = await pool.query(
       `UPDATE cities SET ${sets.join(', ')} WHERE id = $${params.length}
-       RETURNING id, name, district`,
+       RETURNING id, name, district, alert_days`,
       params
     );
     if (!rows[0]) return res.status(404).json({ error: 'Not found' });

@@ -4,6 +4,7 @@ import TopBar from './TopBar'
 import Sidebar from './Sidebar'
 import KeepAliveScreens, { isKeepAlivePath } from './KeepAliveScreens'
 import { useAuth } from '@shared/context/AuthContext'
+import { useRefetchAll } from '@shared/context/DataStoreContext'
 import { defaultPathForRole } from '../utils/defaultPath'
 
 /**
@@ -26,10 +27,16 @@ export default function Layout({ badges = {} }) {
   const { user } = useAuth()
   const isCashroom = user?.role === 'cashroom'
 
-  // Bumping refreshNonce remounts <KeepAliveScreens/>, dropping every kept-alive
-  // page so they re-fetch on next visit. Triggered from the TopBar refresh button.
+  // The TopBar refresh button does two things:
+  //   1. refetchAll() — pull fresh data from the server into the central store.
+  //   2. bump refreshNonce — remount <KeepAliveScreens/> so any local page state
+  //      (filters, scroll, generated reports) is dropped along with stale data.
+  const refetchAll = useRefetchAll()
   const [refreshNonce, setRefreshNonce] = useState(0)
-  const handleRefresh = () => setRefreshNonce((n) => n + 1)
+  const handleRefresh = () => {
+    refetchAll()
+    setRefreshNonce((n) => n + 1)
+  }
 
   const onKeepAlive  = isKeepAlivePath(location.pathname)
   const onCardDetail = !!matchPath({ path: '/cards/:id', end: true }, location.pathname)

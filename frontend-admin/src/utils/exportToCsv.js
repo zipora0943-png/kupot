@@ -42,6 +42,7 @@ export function exportToCsv(filename, rows, headers) {
 export function exportCards(cards, filename = 'כרטסות', cityDistrictMap = null) {
   const rows = cards.map(c => ({
     'מספר קופה': c.iron_number || '',
+    'סוג קופה': c.box_type_name || '',
     'קוד כרטסת': c.id,
     'שם': c.custom_name || '',
     'מחוז': cityDistrictMap ? (cityDistrictMap.get(c.city) || '') : '',
@@ -58,6 +59,7 @@ export function exportCards(cards, filename = 'כרטסות', cityDistrictMap = 
 
   exportToCsv(filename, rows, [
     'מספר קופה',
+    'סוג קופה',
     'קוד כרטסת',
     'שם',
     'מחוז',

@@ -267,7 +267,7 @@ export default function BoxModal({ open, box, onClose, onSaved }) {
                   min="1"
                   value={alertDays}
                   onChange={(e) => setAlertDays(e.target.value)}
-                  placeholder="ברירת מחדל — גלובלי"
+                  placeholder="ברירת מחדל — עיר/גלובלי"
                 />
               </div>
               <div className="field">

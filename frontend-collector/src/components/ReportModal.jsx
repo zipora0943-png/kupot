@@ -2,10 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react'
 import Modal from '@shared/components/Modal'
 import {
   reports as reportsApi,
-  taskTypes as taskTypesApi,
   users as usersApi,
 } from '../api/endpoints'
-import { assetUrl } from '../utils/assetUrl'
+import { useData } from '@shared/context/DataStoreContext'
+import TaskImage from './TaskImage'
 
 const STATUS_OPTIONS = [
   { value: 'open',      label: 'פתוח'  },
@@ -25,7 +25,13 @@ export default function ReportModal({ open, report, onClose, onSaved }) {
   const [description, setDescription] = useState('')
 
   const [showConvert, setShowConvert] = useState(false)
-  const [types, setTypes]             = useState([])
+  // Task types come from the central store (auto-refreshing on socket events
+  // when admin adds a type — no stale dropdowns even if the modal stays open).
+  const { data: typesFromStore, refetch: refetchTaskTypes } = useData('taskTypes')
+  const types = useMemo(
+    () => (Array.isArray(typesFromStore) ? typesFromStore : []),
+    [typesFromStore],
+  )
   const [collectors, setCollectors]   = useState([])
   const [taskTypeId, setTaskTypeId]   = useState('')
   const [assignedTo, setAssignedTo]   = useState('')
@@ -41,17 +47,13 @@ export default function ReportModal({ open, report, onClose, onSaved }) {
 
   useEffect(() => {
     if (!open) return
+    refetchTaskTypes()
     let cancelled = false
-    Promise.all([
-      taskTypesApi.getAll().catch(() => []),
-      usersApi.getAll({ role: 'collector', active: true }).catch(() => []),
-    ]).then(([t, u]) => {
-      if (cancelled) return
-      setTypes(Array.isArray(t) ? t : [])
-      setCollectors(Array.isArray(u) ? u : [])
-    })
+    usersApi.getAll({ role: 'collector', active: true })
+      .then((u) => { if (!cancelled) setCollectors(Array.isArray(u) ? u : []) })
+      .catch(() => { if (!cancelled) setCollectors([]) })
     return () => { cancelled = true }
-  }, [open])
+  }, [open, refetchTaskTypes])
 
   useEffect(() => {
     if (!open || !report) return
@@ -255,16 +257,7 @@ export default function ReportModal({ open, report, onClose, onSaved }) {
           {report.image_path && (
             <div className="field" style={{ marginBottom: 14 }}>
               <label>תמונה מצורפת</label>
-              <a href={assetUrl(report.image_path)} target="_blank" rel="noopener noreferrer">
-                <img
-                  src={assetUrl(report.image_path)}
-                  alt="תמונת דיווח"
-                  style={{
-                    maxWidth: '100%', maxHeight: 200, borderRadius: 8,
-                    border: '1px solid var(--border, #e5e7eb)', display: 'block',
-                  }}
-                />
-              </a>
+              <TaskImage path={report.image_path} label="תמונת דיווח" />
             </div>
           )}
 

@@ -16,6 +16,15 @@ function formatMoney(n) {
   return '₪' + num.toLocaleString('he-IL', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 
+// Full address: city, neighborhood, street + house number.
+function formatAddress(env) {
+  if (!env) return ''
+  const streetLine = env.street
+    ? `${env.street}${env.building ? ' ' + env.building : ''}`
+    : null
+  return [env.city, env.neighborhood, streetLine].filter(Boolean).join(', ')
+}
+
 /**
  * Cashroom modal — two modes:
  *   1) `pending` envelope → cashroom enters amount for the first time.
@@ -157,8 +166,10 @@ export default function CashroomModal({ open, envelope, onClose, onSaved }) {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, color: 'var(--text2)' }}>
               <div>קופה: <strong style={{ color: 'var(--text)' }}>{envelope.iron_number || '—'}</strong></div>
               <div>תאריך גביה: <strong style={{ color: 'var(--text)' }}>{formatDate(envelope.collected_at)}</strong></div>
-              {envelope.city && <div>עיר: <strong style={{ color: 'var(--text)' }}>{envelope.city}</strong></div>}
               {envelope.collector_name && <div>גובה: <strong style={{ color: 'var(--text)' }}>{envelope.collector_name}</strong></div>}
+              {formatAddress(envelope) && (
+                <div style={{ gridColumn: '1 / -1' }}>כתובת: <strong style={{ color: 'var(--text)' }}>{formatAddress(envelope)}</strong></div>
+              )}
             </div>
           </div>
 

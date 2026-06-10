@@ -20,11 +20,22 @@ async function getApiKey() {
 // Build the free-text `address` portion. The CITY is intentionally omitted
 // here — it is enforced through the `components` filter so Google never spills
 // over to a same-named street in a neighbouring city.
+//
+// Strategy (per product requirement):
+//   - If a street is present, query `[building, street]` and OMIT the
+//     neighborhood. A precise street+number resolves to the building; mixing
+//     in the neighborhood would just bias Google toward the neighborhood
+//     centroid whenever the exact number isn't on its index.
+//   - If no street is present, fall back to `[neighborhood]` alone. Google
+//     returns the neighborhood centroid — callers must flag that result so
+//     it's not confused with a precise hit (see `geocodeAddress`).
 function buildAddressQuery({ neighborhood, street, building }) {
-  const parts = [building, street, neighborhood]
-    .map((p) => (typeof p === 'string' ? p.trim() : ''))
-    .filter(Boolean);
-  return parts.join(', ');
+  const s = (v) => (typeof v === 'string' ? v.trim() : '');
+  const st = s(street);
+  if (st) {
+    return [s(building), st].filter(Boolean).join(', ');
+  }
+  return s(neighborhood);
 }
 
 // Loose comparison for Hebrew city names: ignore whitespace, hyphens, quotes
@@ -66,6 +77,21 @@ async function geocodeAddress(address) {
     // geocode rather than risk picking the wrong city.
     return { status: 'not_found', lat: null, lng: null };
   }
+
+  const street       = (typeof address.street === 'string')       ? address.street.trim()       : '';
+  const neighborhood = (typeof address.neighborhood === 'string') ? address.neighborhood.trim() : '';
+
+  // No street AND no neighborhood — there's nothing to anchor on inside the
+  // city. Refuse rather than fall back to the city centroid, which would
+  // produce a "located" pin that's effectively useless.
+  if (!street && !neighborhood) {
+    return { status: 'not_found', lat: null, lng: null };
+  }
+
+  // When street is missing we query the neighborhood only; Google returns the
+  // neighborhood centroid. Surface this through a distinct status so the
+  // result is never auto-approved and the admin can spot approximate pins.
+  const successStatus = street ? 'ok' : 'neighborhood_center';
 
   const addr = buildAddressQuery(address);
   // `components` is a HARD filter on Google's side — country:IL + locality:CITY
@@ -109,7 +135,7 @@ async function geocodeAddress(address) {
       const loc = first.geometry?.location;
       if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number') {
         return {
-          status: 'ok',
+          status: successStatus,
           lat: loc.lat,
           lng: loc.lng,
           returned_address: first.formatted_address || null,
@@ -206,7 +232,8 @@ async function geocodeMissingCards(opts = {}) {
   const selectParams = [];
   let selectSql = `SELECT id FROM cards
                      WHERE status = 'active'
-                       AND (geocode_status IS NULL OR geocode_status <> 'ok')`;
+                       AND (geocode_status IS NULL
+                            OR geocode_status NOT IN ('ok', 'neighborhood_center'))`;
   if (cityFilter) {
     selectParams.push(cityFilter);
     selectSql += ` AND lower(btrim(city)) = lower(btrim($${selectParams.length}))`;
@@ -214,15 +241,16 @@ async function geocodeMissingCards(opts = {}) {
   selectSql += ` ORDER BY id`;
   const { rows } = await pool.query(selectSql, selectParams);
 
-  const stats = { attempted: 0, ok: 0, not_found: 0, error: 0, disabled: 0 };
+  const stats = { attempted: 0, ok: 0, neighborhood_center: 0, not_found: 0, error: 0, disabled: 0 };
   for (const { id } of rows) {
     const result = await geocodeCard(id, { autoApprove, userId });
     stats.attempted += 1;
     if (result) {
-      if (result.status === 'ok')             stats.ok += 1;
-      else if (result.status === 'not_found') stats.not_found += 1;
-      else if (result.status === 'disabled')  stats.disabled += 1;
-      else                                    stats.error += 1;
+      if      (result.status === 'ok')                  stats.ok += 1;
+      else if (result.status === 'neighborhood_center') stats.neighborhood_center += 1;
+      else if (result.status === 'not_found')           stats.not_found += 1;
+      else if (result.status === 'disabled')            stats.disabled += 1;
+      else                                              stats.error += 1;
     } else {
       stats.error += 1;
     }
@@ -301,11 +329,57 @@ async function retryCardWithStreet(cardId, newStreet, opts = {}) {
   };
 }
 
+// Loose geocode of just a city (or neighborhood within a city) so the UI
+// has an approximate centre to display when the precise address failed to
+// resolve. Used ONLY to seed the manual-pin map — the admin then drags the
+// pin and approves. We deliberately:
+//   - send NO `components: locality:…` filter (it's the same restriction that
+//     blocks the addresses we already gave up on; here we just need *a* point)
+//   - skip the localityMatches post-check (admin will visually correct)
+//
+// Returns { status: 'ok'|'not_found'|'error'|'disabled', lat, lng }.
+async function geocodeLocalityCenter({ city, neighborhood }) {
+  const apiKey = await getApiKey();
+  if (!apiKey) return { status: 'disabled', lat: null, lng: null };
+
+  const c = (typeof city === 'string')         ? city.trim()         : '';
+  const n = (typeof neighborhood === 'string') ? neighborhood.trim() : '';
+  if (!c) return { status: 'not_found', lat: null, lng: null };
+
+  // Try `neighborhood, city` first (more specific), then just `city`.
+  const queries = [];
+  if (n) queries.push(`${n}, ${c}`);
+  queries.push(c);
+
+  for (const q of queries) {
+    const params = new URLSearchParams({
+      address: q,
+      components: 'country:IL',
+      region: 'il',
+      language: 'he',
+      key: apiKey,
+    });
+    try {
+      const res = await fetch(`${GOOGLE_GEOCODE_URL}?${params.toString()}`);
+      if (!res.ok) continue;
+      const data = await res.json();
+      const loc = data?.status === 'OK' ? data.results?.[0]?.geometry?.location : null;
+      if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number') {
+        return { status: 'ok', lat: loc.lat, lng: loc.lng };
+      }
+    } catch (err) {
+      console.warn('[geocodeLocalityCenter] request failed', err.message);
+    }
+  }
+  return { status: 'not_found', lat: null, lng: null };
+}
+
 module.exports = {
   geocodeAddress,
   geocodeCard,
   geocodeMissingCards,
   retryCardWithStreet,
+  geocodeLocalityCenter,
   buildAddressQuery,
   getApiKey,
   localityMatches, // exported for testing

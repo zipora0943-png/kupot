@@ -73,6 +73,7 @@ app.use('/api/version',        require('./routes/version'));
 app.use('/api/location-overrides', require('./routes/locationOverrides'));
 app.use('/api/imports',        require('./routes/imports'));
 app.use('/api/initial-load',   require('./routes/initialLoad'));
+app.use('/api/client-logs',    require('./routes/clientLogs'));
 
 // ── Health check
 app.get('/health', async (_req, res) => {
@@ -109,6 +110,11 @@ process.on('uncaughtException', (err) => {
 });
 
 const PORT = Number.parseInt(process.env.PORT, 10) || 3000;
+// Default to all-interfaces so dev / single-process setups still work, but
+// production should set BIND_HOST=127.0.0.1 — nginx is on the same box and
+// proxies via localhost, so there's no reason for :3000 to be reachable from
+// the public internet.
+const BIND_HOST = process.env.BIND_HOST || '0.0.0.0';
 
 // Only listen when this file is the entry point (so tests can import `app`
 // without spawning a real server).
@@ -123,7 +129,7 @@ if (require.main === module) {
     console.error('[dbListener] failed to start:', err.message),
   );
 
-  server.listen(PORT, () => console.log(`Kupot backend listening on port ${PORT}`));
+  server.listen(PORT, BIND_HOST, () => console.log(`Kupot backend listening on ${BIND_HOST}:${PORT}`));
 }
 
 module.exports = app;

@@ -11,12 +11,17 @@ function getToken() {
   return localStorage.getItem('kupot_token');
 }
 
-// 401 handler — clear auth and force back to login page
+// 401 handler — clear auth and force back to login page.
+// BASE_URL is the vite `base` (e.g. '/' for collector, '/admin/' for admin),
+// so the login path is always rooted under the app's own mount point — admin
+// stays on /admin/login instead of bouncing into the collector.
 function handleUnauthorized() {
   localStorage.removeItem('kupot_token');
   localStorage.removeItem('kupot_user');
-  if (window.location.pathname !== '/login') {
-    window.location.href = '/login';
+  const baseUrl = (import.meta.env?.BASE_URL || '/').replace(/\/$/, '');
+  const loginPath = `${baseUrl}/login`;
+  if (window.location.pathname !== loginPath) {
+    window.location.href = loginPath;
   }
 }
 
@@ -49,6 +54,15 @@ export async function apiRequest(path, opts = {}) {
   };
   if (token) finalHeaders['Authorization'] = `Bearer ${token}`;
 
+  // Optional logging hook — set by the app via globalThis.__kupotLog.
+  // Lets us trace every API call without coupling shared code to a specific
+  // logger implementation.
+  const tlog = (msg) => {
+    try { globalThis.__kupotLog?.('api', msg); } catch { /* ignore */ }
+  };
+  const reqStart = Date.now();
+  tlog(`${method} ${path}${body ? ' (body)' : ''}`);
+
   let res;
   try {
     res = await fetch(url, {
@@ -56,8 +70,9 @@ export async function apiRequest(path, opts = {}) {
       headers: finalHeaders,
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
+    tlog(`${method} ${path} → ${res.status} (${Date.now() - reqStart}ms)`);
   } catch (err) {
-    // Network error
+    tlog(`${method} ${path} → NETWORK ERROR ${err?.message} (${Date.now() - reqStart}ms)`);
     throw new Error('שגיאת רשת — לא הצלחנו להתחבר לשרת');
   }
 

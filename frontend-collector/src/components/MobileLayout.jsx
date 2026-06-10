@@ -9,6 +9,7 @@ export default function MobileLayout() {
   // Cashroom users have a single locked screen; the bottom nav (boxes / גביה /
   // משימות) doesn't apply to them and would expose other parts of the app.
   const isCashroom = user?.role === 'cashroom'
+  const isAdmin    = user?.role === 'admin'
 
   function handleLogout() {
     logout()
@@ -27,7 +28,19 @@ export default function MobileLayout() {
           <span className="topbar-user-icon" aria-hidden="true">👤</span>
         </button>
         <div className="topbar-username">{user?.name || ''}</div>
-        <div className="topbar-spacer" aria-hidden="true" />
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => navigate('/logs')}
+            aria-label="צפה בלוג"
+            title="לוג מערכת"
+            style={{
+              marginInlineStart: 'auto', background: 'transparent',
+              border: 'none', fontSize: 18, padding: 6, cursor: 'pointer',
+            }}
+          >📋</button>
+        )}
+        {!isAdmin && <div className="topbar-spacer" aria-hidden="true" />}
       </header>
 
       <main className="mobile-content">

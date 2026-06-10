@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { useAuth } from '@shared/context/AuthContext'
 import { API_BASE } from '@shared/api/client'
 import { defaultPathForRole } from '../utils/defaultPath'
+import { isNativeAndroid } from '../utils/apkInstaller'
 
 // Strip the trailing /api so we can build absolute URLs from server-relative
 // paths the API returns (e.g. apk_url: "/downloads/foo.apk").
@@ -102,7 +103,14 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {appInfo && appInfo.apk_url && (
+        <div style={{ marginTop: 12, textAlign: 'center' }}>
+          <a
+            href="/logs"
+            style={{ fontSize: 12, color: 'var(--text3)', textDecoration: 'underline' }}
+          >📋 צפה בלוג מערכת (מנהל)</a>
+        </div>
+
+        {appInfo && appInfo.apk_url && isNativeAndroid() && (
           <div className="apk-download" style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)', textAlign: 'center' }}>
             <a
               href={`${STATIC_BASE}${appInfo.apk_url}`}

@@ -36,23 +36,39 @@ const BOOTSTRAP_LABEL = 'נתוני בסיס'
 
 export function DataStoreProvider({ resources = {}, children }) {
   const { token, user, isAuthenticated } = useAuth()
+  const role = user?.role
+
+  // Restrict the active resource set to what the current role may actually
+  // fetch. A resource with no `roles` list is available to every authenticated
+  // role; otherwise the role must be listed. Without this the store would fire
+  // requests the backend rejects with 403 — e.g. a cashroom user has no access
+  // to cards/tasks/reports, a collector none to the cashroom-only slices.
+  const resourcesForRole = useMemo(() => {
+    const out = {}
+    for (const [name, def] of Object.entries(resources)) {
+      if (!Array.isArray(def.roles) || (role && def.roles.includes(role))) {
+        out[name] = def
+      }
+    }
+    return out
+  }, [resources, role])
 
   // Snapshot of every resource by name. `null` means "not loaded yet".
-  const [store, setStore]   = useState(() => emptyStoreFor(resources))
+  const [store, setStore]   = useState(() => emptyStoreFor(resourcesForRole))
   // Initial-load payload (lookups, settings, users). One blob from /api/initial-load.
   const [bootstrap, setBootstrap] = useState(null)
   const [ready, setReady]   = useState(false)
   const [error, setError]   = useState(null)
   // Per-key load status: 'pending' | 'loaded' | 'error'. Includes BOOTSTRAP_KEY.
-  const [status, setStatus] = useState(() => initialStatus(resources))
+  const [status, setStatus] = useState(() => initialStatus(resourcesForRole))
 
   // Per-resource debounce timers (kept in a ref so changing them doesn't re-render).
   const timers = useRef({})
 
   // Stable accessor for each resource's fetch fn. We rebuild this whenever the
-  // `resources` reference changes (callers should memoize it).
-  const fetchersRef = useRef(resources)
-  useEffect(() => { fetchersRef.current = resources }, [resources])
+  // role-scoped resource set changes (the raw `resources` should be memoized).
+  const fetchersRef = useRef(resourcesForRole)
+  useEffect(() => { fetchersRef.current = resourcesForRole }, [resourcesForRole])
 
   // ---- single-resource refetch ----
   const refetchOne = useCallback(async (name, { trackStatus = false } = {}) => {
@@ -167,7 +183,7 @@ export function DataStoreProvider({ resources = {}, children }) {
   const progress = useMemo(() => {
     const items = [
       { name: BOOTSTRAP_KEY, label: BOOTSTRAP_LABEL, status: status[BOOTSTRAP_KEY] || 'pending' },
-      ...Object.entries(resources).map(([name, def]) => ({
+      ...Object.entries(resourcesForRole).map(([name, def]) => ({
         name,
         label: def.label || name,
         status: status[name] || 'pending',
@@ -176,7 +192,7 @@ export function DataStoreProvider({ resources = {}, children }) {
     const total  = items.length
     const loaded = items.filter((i) => i.status === 'loaded' || i.status === 'error').length
     return { items, total, loaded }
-  }, [resources, status])
+  }, [resourcesForRole, status])
 
   const value = useMemo(() => ({
     store,
@@ -250,4 +266,14 @@ export function useDataStoreProgress() {
   const ctx = useContext(DataStoreContext)
   if (!ctx) throw new Error('useDataStoreProgress must be used inside <DataStoreProvider>')
   return ctx.progress
+}
+
+/**
+ * Force-refresh every resource from the server. Used by the TopBar refresh
+ * button — sockets normally keep the store current, so calling this is rare.
+ */
+export function useRefetchAll() {
+  const ctx = useContext(DataStoreContext)
+  if (!ctx) throw new Error('useRefetchAll must be used inside <DataStoreProvider>')
+  return ctx.refetchAll
 }

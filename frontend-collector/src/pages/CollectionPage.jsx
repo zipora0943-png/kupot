@@ -1,6 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { Geolocation } from '@capacitor/geolocation'
 import {
   cards as cardsApi,
   locationOverrides as overridesApi,
@@ -10,6 +9,8 @@ import { useData } from '@shared/context/DataStoreContext'
 import { computeCardLabels } from '@shared/utils/cardLabel'
 import Modal from '@shared/components/Modal'
 import MapView from '@shared/components/MapView'
+import { getDevicePosition, haversineMeters, RADIUS_METERS } from '../utils/getDevicePosition'
+import { useCurrentLocation } from '../context/LocationContext'
 
 function formatDate(s) {
   if (!s) return '—'
@@ -23,19 +24,6 @@ function formatAddress(c) {
   const parts = [c.city, c.neighborhood, c.street, c.building]
     .filter((s) => typeof s === 'string' && s.trim())
   return parts.length ? parts.join(', ') : '—'
-}
-
-async function getDevicePosition() {
-  try {
-    const pos = await Geolocation.getCurrentPosition({
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 0,
-    })
-    return { ok: true, lat: pos.coords.latitude, lng: pos.coords.longitude }
-  } catch (err) {
-    return { ok: false, error: err?.message || 'geolocation_failed' }
-  }
 }
 
 export default function CollectionPage() {
@@ -58,17 +46,20 @@ export default function CollectionPage() {
   const [lookupLoading, setLookupLoading] = useState(false)
   const [lookupError, setLookupError] = useState(null)
 
-  // Task 58/52 — unified GPS verification failure modal.
+  // GPS-based location verification before scanning.
   // verifyFailure shape: { card, kind: 'out_of_radius'|'unavailable', distance, lat, lng }
-  // reportMode: when true, the modal switches from the 3-button view to the
-  // inline report-writing view (textarea + create-and-scan / cancel).
-  const [verifying, setVerifying] = useState(false)
+  //   - within_radius=true → navigate straight to scanner (no modal at all)
+  //   - within_radius=false → modal kind='out_of_radius' with distance shown
+  //   - card not geocoded / GPS unavailable → kind='unavailable' (address-only confirm)
+  // reportMode: switches the modal to the inline report-writing view
+  // (textarea + create-and-scan / cancel).
+  const [verifying, setVerifying]         = useState(false)
+  const [verifyProgress, setVerifyProgress] = useState(null)
   const [verifyFailure, setVerifyFailure] = useState(null)
-  const [overrideSubmitting, setOverrideSubmitting] = useState(false)
-  const [reportMode, setReportMode] = useState(false)
-  const [reportText, setReportText] = useState('')
+  const [reportMode, setReportMode]       = useState(false)
+  const [reportText, setReportText]       = useState('')
   const [reportSubmitting, setReportSubmitting] = useState(false)
-  const [reportError, setReportError] = useState(null)
+  const [reportError, setReportError]     = useState(null)
 
   const CONTINUE_WITHOUT_REPORT_REASON = 'המשך ללא דיווח מיקום שגוי'
   const REPORT_PREFIX = 'כתובת שגויה: '
@@ -90,56 +81,95 @@ export default function CollectionPage() {
     return labels.get(card.id) || String(card.iron_number ?? '')
   }, [card])
 
-  // Run the GPS check before navigating to the scanner.
-  // Every failure path (no GPS, API error, no card coords, out of radius) opens
-  // the same unified modal — kind differentiates the message; data is recorded
-  // only when we actually have GPS coordinates.
-  async function runVerification(targetCard) {
-    if (!targetCard) return
+  // Continuous-tracking position from LocationContext (GPS running in the
+  // background while the user is logged in).
+  const liveLocation = useCurrentLocation()
+
+  // Decide the verification outcome the moment we have BOTH the card and a
+  // live position — well before the user clicks "בצע גביה". The result is
+  // stashed in a ref so the click handler can navigate / open the modal
+  // with zero wait. Recomputed whenever the card or the live fix changes.
+  const preVerifyRef = useRef(null)
+
+  function computeVerification(targetCard, pos) {
+    const cardLat = Number(targetCard.latitude)
+    const cardLng = Number(targetCard.longitude)
+    const hasCoords = targetCard.geocode_status === 'ok'
+      && Number.isFinite(cardLat) && Number.isFinite(cardLng)
+    if (!hasCoords) {
+      return { kind: 'unavailable', lat: pos.lat, lng: pos.lng }
+    }
+    const distance = Math.round(haversineMeters(pos.lat, pos.lng, cardLat, cardLng))
+    if (distance <= RADIUS_METERS) {
+      return { kind: 'within_radius' }
+    }
+    return { kind: 'out_of_radius', distance, lat: pos.lat, lng: pos.lng }
+  }
+
+  useEffect(() => {
+    if (!card) { preVerifyRef.current = null; return }
+    if (liveLocation && liveLocation.lat != null) {
+      preVerifyRef.current = computeVerification(card, {
+        lat: liveLocation.lat, lng: liveLocation.lng,
+      })
+    } else {
+      preVerifyRef.current = null // wait for a fix — fall back to runLiveVerification on click
+    }
+  }, [card, liveLocation])
+
+  function applyVerifyResult(targetCard, result) {
+    if (!result) return false
+    if (result.kind === 'within_radius') {
+      navigate(`/scan/${targetCard.id}`)
+    } else {
+      openVerifyFailure({
+        card: targetCard,
+        kind: result.kind,
+        distance: result.distance ?? null,
+        lat: result.lat ?? null,
+        lng: result.lng ?? null,
+      })
+    }
+    return true
+  }
+
+  // Fallback path when we DON'T already have a precomputed result (no GPS
+  // fix yet, no card). Acquires a one-shot fix with progress UI then
+  // routes through the same handler.
+  async function runLiveVerification(targetCard) {
     setVerifying(true)
+    setVerifyProgress(null)
     try {
-      const pos = await getDevicePosition()
+      const pos = await getDevicePosition({
+        onProgress: (accuracy) => setVerifyProgress(Math.round(accuracy)),
+      })
       if (!pos.ok) {
         openVerifyFailure({ card: targetCard, kind: 'unavailable' })
         return
       }
-      let result
-      try {
-        result = await cardsApi.verifyLocation(targetCard.id, pos.lat, pos.lng)
-      } catch {
-        openVerifyFailure({
-          card: targetCard, kind: 'unavailable', lat: pos.lat, lng: pos.lng,
-        })
-        return
-      }
-
-      // Check card_geocoded BEFORE within_radius — the API optimistically
-      // returns within_radius:true when the card has no stored coords (to
-      // avoid blocking the collector), but per product spec the collector
-      // should be shown the unified modal so they consciously acknowledge
-      // the unverified state.
-      if (!result.card_geocoded) {
-        openVerifyFailure({
-          card: targetCard, kind: 'unavailable', lat: pos.lat, lng: pos.lng,
-        })
-        return
-      }
-
-      if (result.within_radius) {
-        navigate(`/scan/${targetCard.id}`)
-        return
-      }
-
-      openVerifyFailure({
-        card: targetCard,
-        kind: 'out_of_radius',
-        distance: result.distance_meters ?? null,
-        lat: pos.lat,
-        lng: pos.lng,
-      })
+      applyVerifyResult(targetCard, computeVerification(targetCard, pos))
     } finally {
       setVerifying(false)
+      setVerifyProgress(null)
     }
+  }
+
+  // Click handler. Uses the precomputed result when available (instant);
+  // otherwise drops into the live acquisition path.
+  function runVerification(targetCard) {
+    if (!targetCard) return
+    // Cached result for this card?
+    if (preVerifyRef.current && applyVerifyResult(targetCard, preVerifyRef.current)) return
+    // Try the live tracker once before doing the slow path.
+    if (liveLocation && liveLocation.lat != null) {
+      const result = computeVerification(targetCard, {
+        lat: liveLocation.lat, lng: liveLocation.lng,
+      })
+      preVerifyRef.current = result
+      applyVerifyResult(targetCard, result)
+      return
+    }
+    runLiveVerification(targetCard)
   }
 
   function openVerifyFailure(payload) {
@@ -162,32 +192,26 @@ export default function CollectionPage() {
     setReportError(null)
   }
 
-  async function continueWithoutReport() {
+  function continueWithoutReport() {
     if (!verifyFailure) return
-    setOverrideSubmitting(true)
-    try {
-      // Only log an override when we actually have GPS coordinates. With no
-      // coordinates the row would carry no useful audit signal.
-      if (verifyFailure.lat != null && verifyFailure.lng != null) {
-        try {
-          await overridesApi.create({
-            card_id: verifyFailure.card.id,
-            distance_meters: verifyFailure.distance,
-            reason: CONTINUE_WITHOUT_REPORT_REASON,
-            gps_lat: verifyFailure.lat,
-            gps_lng: verifyFailure.lng,
-          })
-        } catch (err) {
-          // Don't block collection if the audit log call failed; just warn in console.
-          console.warn('[location-override] save failed', err.message)
-        }
-      }
-      const id = verifyFailure.card.id
-      closeVerifyFailure()
-      navigate(`/scan/${id}`)
-    } finally {
-      setOverrideSubmitting(false)
+    const failure = verifyFailure
+    // Fire-and-forget audit log so the camera can start opening immediately
+    // — don't make the user wait for a network roundtrip just to record
+    // "user overrode the radius check". If it fails we just log a warning;
+    // skipping the audit row is far less bad than holding up the scan.
+    if (failure.lat != null && failure.lng != null) {
+      overridesApi.create({
+        card_id: failure.card.id,
+        distance_meters: failure.distance,
+        reason: CONTINUE_WITHOUT_REPORT_REASON,
+        gps_lat: failure.lat,
+        gps_lng: failure.lng,
+      }).catch((err) => console.warn('[location-override] save failed', err.message))
     }
+    // Navigate first — the scanner mount can race the modal close animation
+    // instead of waiting for it sequentially.
+    navigate(`/scan/${failure.card.id}`)
+    closeVerifyFailure()
   }
 
   async function submitInlineReport() {
@@ -260,10 +284,8 @@ export default function CollectionPage() {
   // Unified GPS-verification failure modal. Two visual states:
   //   reportMode=false → 3 buttons (continue / report / cancel)
   //   reportMode=true  → inline textarea + (create-and-scan / cancel)
-  // The body is closed only on explicit cancel; clicking outside is disabled
-  // while a network call is in flight.
   function renderVerificationModals() {
-    const busy = overrideSubmitting || reportSubmitting
+    const busy = reportSubmitting
     const title = reportMode
       ? 'דיווח על מיקום שגוי'
       : 'לא הצלחנו לאמת את המיקום'
@@ -307,7 +329,7 @@ export default function CollectionPage() {
                 disabled={busy}
                 onClick={continueWithoutReport}
               >
-                {overrideSubmitting ? 'ממשיך...' : '✓ אישור והמשך'}
+                ✓ אישור והמשך
               </button>
               <button
                 type="button"
@@ -324,10 +346,7 @@ export default function CollectionPage() {
                 type="button"
                 className="btn-block secondary"
                 disabled={busy}
-                onClick={() => {
-                  closeVerifyFailure()
-                  navigate(-1)
-                }}
+                onClick={closeVerifyFailure}
               >
                 ביטול
               </button>
@@ -374,9 +393,7 @@ export default function CollectionPage() {
                   setReportMode(false)
                   setReportError(null)
                 }}
-              >
-                ביטול
-              </button>
+              >ביטול</button>
             </div>
           </div>
         )}
@@ -389,7 +406,9 @@ export default function CollectionPage() {
     const busy = lookupLoading || verifying
     const lookupButtonLabel = lookupLoading
       ? 'מחפש...'
-      : verifying ? 'מאמת מיקום...' : '💰 בצע גביה'
+      : verifying
+        ? (verifyProgress != null ? `מאתר מיקום (~${verifyProgress} מ׳)...` : 'מאתר מיקום...')
+        : '💰 בצע גביה'
     return (
       <div>
         <div className="collection-card">
@@ -515,7 +534,9 @@ export default function CollectionPage() {
             disabled={verifying}
             onClick={() => runVerification(card)}
           >
-            {verifying ? 'מאמת מיקום...' : '💰 בצע גביה'}
+            {verifying
+              ? (verifyProgress != null ? `מאתר מיקום (~${verifyProgress} מ׳)...` : 'מאתר מיקום...')
+              : '💰 בצע גביה'}
           </button>
           <button
             type="button"

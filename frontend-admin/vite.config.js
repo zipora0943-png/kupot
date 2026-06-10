@@ -15,6 +15,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 //   @app-api   → src/api               (per-frontend; lets shared modules import endpoints)
 export default defineConfig({
   plugins: [react()],
+  // Admin is served from /admin/ on the public domain (nginx alias).
+  // Vite needs this so asset URLs in the built index.html are /admin/assets/...
+  base: '/admin/',
   resolve: {
     alias: {
       '@shared':  path.resolve(__dirname, '../frontend-shared/src'),

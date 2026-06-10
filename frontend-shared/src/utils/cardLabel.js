@@ -2,11 +2,14 @@
  * Card-label utility.
  *
  * Each box may have multiple cards over its lifetime (open → close → reopen at
- * a new location, etc.). The wireframe shows them as `1019A`, `1019B`, `1019C`…
- * — i.e. the box's iron_number + a letter assigned in chronological order of
- * opening (oldest = A).
+ * a new location, etc.). The label shown in the UI is `${iron_number}${letter}`
+ * (e.g. "1019A", "1019B"), where the letter is assigned per-box in opened_at
+ * order (oldest = A).
  *
- * The backend does NOT store this letter; we compute it on the client.
+ * The letter is stored in the DB on `cards.card_letter` (assigned by
+ * `openCard()` in cardLogic.js). This utility prefers that DB value when
+ * present and falls back to computing the suffix from the ordering — kept so
+ * legacy rows missing card_letter (pre-migration) still render correctly.
  */
 
 /**
@@ -51,7 +54,8 @@ export function computeCardLabels(allCards) {
     })
     cards.forEach((c, idx) => {
       const iron = c.iron_number || c.box_id
-      labels.set(c.id, `${iron}${letterFromIndex(idx)}`)
+      const letter = c.card_letter || letterFromIndex(idx)
+      labels.set(c.id, `${iron}${letter}`)
     })
   }
   return labels

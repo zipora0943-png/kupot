@@ -774,6 +774,30 @@ tr:last-child td { border-bottom: none; }
 .update-notes-title { font-size: 12px; font-weight: 800; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
 .update-notes-text { font-size: 14px; color: var(--text); white-space: pre-wrap; }
 
+/* ===== BARCODE SCANNER (MLKit native overlay) =====
+   When the native camera is running it renders BEHIND the WebView, so we
+   hide every visible app element and let only the scanner overlay show on
+   top. visibility:hidden (not display:none) keeps the layout intact so the
+   WebView itself doesn't collapse to 0px. */
+html.barcode-scanner-active,
+body.barcode-scanner-active,
+body.barcode-scanner-active #root {
+  background: transparent !important;
+}
+body.barcode-scanner-active #root > * {
+  visibility: hidden !important;
+}
+.barcode-scanner-overlay {
+  position: fixed; inset: 0;
+  background: transparent;
+  z-index: 9999;
+  pointer-events: auto;
+}
+body.barcode-scanner-active .barcode-scanner-overlay,
+body.barcode-scanner-active .barcode-scanner-overlay * {
+  visibility: visible !important;
+}
+
 /* ===== SCROLLBAR ===== */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

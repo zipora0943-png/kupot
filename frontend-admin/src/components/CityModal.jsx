@@ -19,6 +19,7 @@ export default function CityModal({ open, item, prefillName, onClose, onSaved, o
 
   const [name, setName] = useState('')
   const [district, setDistrict] = useState('')
+  const [alertDays, setAlertDays] = useState('')
   const [knownDistricts, setKnownDistricts] = useState([])
   const [submitting, setSubmitting] = useState(false)
   const [errMsg, setErrMsg] = useState(null)
@@ -28,6 +29,7 @@ export default function CityModal({ open, item, prefillName, onClose, onSaved, o
     setErrMsg(null); setSubmitting(false)
     setName(isEdit ? (item.name || '') : (prefillName || ''))
     setDistrict(isEdit ? (item.district || '') : '')
+    setAlertDays(isEdit && item.alert_days != null ? String(item.alert_days) : '')
     districtsApi.getAll()
       .then(list => setKnownDistricts(Array.isArray(list) ? list : []))
       .catch(() => setKnownDistricts([]))
@@ -36,9 +38,18 @@ export default function CityModal({ open, item, prefillName, onClose, onSaved, o
   async function handleSave() {
     setErrMsg(null)
     if (!name.trim()) return setErrMsg('יש להזין שם עיר')
+    if (alertDays !== '') {
+      const n = Number.parseInt(alertDays, 10)
+      if (!Number.isInteger(n) || n < 1 || n > 3650)
+        return setErrMsg('טווח התראה חייב להיות מספר שלם בין 1 ל-3650 (או ריק לברירת מחדל)')
+    }
     setSubmitting(true)
     try {
-      const body = { name: name.trim(), district: district.trim() || null }
+      const body = {
+        name: name.trim(),
+        district: district.trim() || null,
+        alert_days: alertDays === '' ? null : Number.parseInt(alertDays, 10),
+      }
       const saved = isEdit
         ? await citiesApi.update(item.id, body)
         : await citiesApi.create(body)
@@ -109,6 +120,22 @@ export default function CityModal({ open, item, prefillName, onClose, onSaved, o
         </datalist>
         <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
           טקסט חופשי. שמות מחוז קיימים מוצעים אוטומטית.
+        </div>
+      </div>
+      <div className="field" style={{ marginBottom: 12 }}>
+        <label>ימים ללא גביה להתראה <span style={{ color: 'var(--text3)', fontWeight: 400 }}>(לעיר זו)</span></label>
+        <input
+          type="number"
+          min="1"
+          max="3650"
+          value={alertDays}
+          onChange={(e) => setAlertDays(e.target.value)}
+          placeholder="ברירת מחדל — גלובלי"
+          style={{ width: 160 }}
+        />
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
+          גובר על ההגדרה הגלובלית. סף אישי בכרטסת גובר על שניהם
+          (היררכיה: גלובלי → עיר → קופה). ריק = ירושה מהגלובלי.
         </div>
       </div>
 

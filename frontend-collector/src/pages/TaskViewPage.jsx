@@ -4,7 +4,7 @@ import { useData } from '@shared/context/DataStoreContext'
 import TaskExecModal from '../components/TaskExecModal'
 import TaskExecDetailsModal from '../components/TaskExecDetailsModal'
 import TaskNotExecutedModal from '../components/TaskNotExecutedModal'
-import { assetUrl } from '../utils/assetUrl'
+import TaskImage from '../components/TaskImage'
 
 function formatDate(s) {
   if (!s) return '—'
@@ -175,19 +175,7 @@ export default function TaskViewPage() {
         {task.image_path && (
           <div className="field" style={{ marginTop: 12 }}>
             <label>תמונת המשימה</label>
-            <a href={assetUrl(task.image_path)} target="_blank" rel="noopener noreferrer">
-              <img
-                src={assetUrl(task.image_path)}
-                alt="תמונת המשימה"
-                style={{
-                  maxWidth: '100%',
-                  maxHeight: 300,
-                  borderRadius: 8,
-                  border: '1px solid var(--border, #e5e7eb)',
-                  display: 'block',
-                }}
-              />
-            </a>
+            <TaskImage path={task.image_path} label="תמונת המשימה" />
           </div>
         )}
 
@@ -207,19 +195,7 @@ export default function TaskViewPage() {
         {isFinal && task.execution_image && (
           <div className="field" style={{ marginTop: 12 }}>
             <label>תמונת אישור ביצוע</label>
-            <a href={assetUrl(task.execution_image)} target="_blank" rel="noopener noreferrer">
-              <img
-                src={assetUrl(task.execution_image)}
-                alt="תמונת ביצוע"
-                style={{
-                  maxWidth: '100%',
-                  maxHeight: 300,
-                  borderRadius: 8,
-                  border: '1px solid var(--border, #e5e7eb)',
-                  display: 'block',
-                }}
-              />
-            </a>
+            <TaskImage path={task.execution_image} label="תמונת ביצוע" />
           </div>
         )}
 
