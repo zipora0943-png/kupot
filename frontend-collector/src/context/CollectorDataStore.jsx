@@ -57,6 +57,14 @@ function buildResources() {
       tables: ['envelopes'],
       roles:  ['admin', 'cashroom'],
     },
+    // Today's entered total + count from the server (single source of truth
+    // for the cashroom stat cards). Refreshes live via the envelopes socket.
+    cashroomTodayTotal: {
+      label: 'סיכום היום',
+      fetch:  () => envelopes.todayTotal(),
+      tables: ['envelopes'],
+      roles:  ['admin', 'cashroom'],
+    },
   }
 }
 

@@ -103,6 +103,9 @@ export const envelopes = {
   getPending: ()         => api.get('/envelopes/pending'),
   // Task 37: most-recent entered envelopes (for cashroom recent-envelopes panel)
   getRecentEntered: (limit) => api.get('/envelopes/entered-recent', limit ? { limit } : undefined),
+  // Task 41: today's entered total + count from the server (single source of
+  // truth for the cashroom stat cards — survives refresh, reflects edits).
+  todayTotal: ()         => api.get('/envelopes/today-total'),
   byNumber: (number)     => api.get(`/envelopes/by-number/${encodeURIComponent(number)}`),
   // Cashroom live-typing: returns { unique:true, envelope } only when the
   // typed value is the full, unambiguous envelope number.

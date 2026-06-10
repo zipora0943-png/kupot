@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import Modal from '@shared/components/Modal'
-import { envelopes as envelopesApi } from '../api/endpoints'
+// `@app-api` resolves to the importing frontend's own src/api, so this shared
+// modal uses each app's local endpoints (both expose the same envelope routes).
+import { envelopes as envelopesApi } from '@app-api/endpoints'
 
 function formatDate(iso) {
   if (!iso) return '—'
@@ -60,6 +62,7 @@ export default function CashroomModal({ open, envelope, onClose, onSaved }) {
 
   const isPending = envelope?.status === 'pending'
   const isEntered = envelope?.status === 'entered'
+  // In edit-mode, the amount field is editable. Always editable for pending.
   const amountEditable = isPending || (isEntered && editMode)
   const originalAmount = envelope?.amount != null ? Number(envelope.amount) : null
 
@@ -85,6 +88,7 @@ export default function CashroomModal({ open, envelope, onClose, onSaved }) {
           notes: notes.trim() || null,
         })
       } else {
+        // edit-after-entered flow
         if (originalAmount != null && Number(originalAmount.toFixed(2)) === Number(n.toFixed(2))) {
           setErrMsg('הסכום החדש זהה לסכום הקיים')
           setSubmitting(false)
@@ -147,6 +151,7 @@ export default function CashroomModal({ open, envelope, onClose, onSaved }) {
     >
       {!envelope ? null : (
         <>
+          {/* Envelope context — read-only header */}
           <div style={{
             background: 'var(--bg2, #f9fafb)',
             border: '1px solid var(--border, #e5e7eb)',

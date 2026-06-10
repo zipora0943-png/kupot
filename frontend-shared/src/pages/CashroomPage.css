@@ -1,0 +1,51 @@
+/* ===== Unified cashroom page =====
+   Shared by the admin panel and the collector app. On wide screens the queues
+   render as admin tables (PaginatedTable); on phone widths they render as the
+   stacked cards styled below. Bundled into both builds via the page import, so
+   the card view looks right in either app. */
+
+/* Stacked-card list (phone view) */
+.cashroom-list {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.cashroom-row {
+  width: 100%;
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px;
+  text-align: right; font-family: inherit;
+  cursor: pointer; box-shadow: var(--shadow);
+  transition: background .15s ease, transform .1s ease;
+}
+.cashroom-row:active { background: var(--surface2); transform: scale(0.998); }
+.cashroom-row.locked { cursor: default; opacity: 0.7; }
+.cashroom-row.locked:active { background: var(--surface); transform: none; }
+.cashroom-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.cashroom-row-title {
+  font-size: 15px; font-weight: 700; color: var(--text);
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.cashroom-row-title strong { color: var(--accent); font-weight: 800; }
+.cashroom-row-amount {
+  font-size: 13px; font-weight: 800; color: var(--green);
+  background: var(--green-soft); padding: 2px 10px; border-radius: 999px;
+}
+.cashroom-row-meta { font-size: 13px; color: var(--text2); }
+.cashroom-row-cta {
+  flex-shrink: 0; font-size: 13px; font-weight: 700;
+  color: var(--accent); white-space: nowrap;
+}
+.cashroom-row.locked .cashroom-row-cta { color: var(--text3); }
+
+/* Phone: let the scan buttons share the wrapped action row for easy tapping. */
+@media (max-width: 640px) {
+  .cashroom-page .filters-row .btn { flex: 1 1 auto; justify-content: center; }
+}
+
+/* Phone: tighten the stat cards (was .cashroom-stats in the collector). */
+@media (max-width: 480px) {
+  .cashroom-page .stats-row { gap: 8px; }
+  .cashroom-page .stat-card { padding: 12px; }
+  .cashroom-page .stat-card .val { font-size: 22px; }
+  .cashroom-page .stat-card .lbl { font-size: 11px; margin-top: 4px; }
+}

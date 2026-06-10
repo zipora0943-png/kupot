@@ -58,6 +58,21 @@ function buildResources() {
       tables: ['envelopes'],
       roles:  ['admin', 'cashroom'],
     },
+    // Cashroom recent-entered list + today's totals. Registered here so the
+    // shared cashroom page reads them via useData and they refresh live over
+    // the socket — the same slices the collector already uses.
+    recentEnteredEnvelopes: {
+      label: 'מעטפות אחרונות',
+      fetch:  () => envelopes.getRecentEntered(20),
+      tables: ['envelopes'],
+      roles:  ['admin', 'cashroom'],
+    },
+    cashroomTodayTotal: {
+      label: 'סיכום היום',
+      fetch:  () => envelopes.todayTotal(),
+      tables: ['envelopes'],
+      roles:  ['admin', 'cashroom'],
+    },
     // Full user list is also part of /api/initial-load.bootstrap.users but
     // we register it here so socket-driven user changes (rename, deactivate)
     // refresh the data immediately without a manual reload.
