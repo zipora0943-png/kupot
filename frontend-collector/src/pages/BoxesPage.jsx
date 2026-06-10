@@ -18,6 +18,9 @@ function readStoredFilters() {
 
 export default function BoxesPage() {
   const navigate = useNavigate()
+  // Collectors and maintenance (תחזוקה) both open the collection screen —
+  // the per-role actions (collect / report task / create task) live there.
+  const openBox = (cardId) => navigate(`/collection/${cardId}`)
   // Read from the central store — populated at login and kept fresh by
   // Socket.IO. Filter to active cards in-memory (the store holds all statuses).
   const { data: allCards, loading } = useData('cards')
@@ -111,11 +114,11 @@ export default function BoxesPage() {
                 className="box-row"
                 role="button"
                 tabIndex={0}
-                onClick={() => navigate(`/collection/${c.id}`)}
+                onClick={() => openBox(c.id)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault()
-                    navigate(`/collection/${c.id}`)
+                    openBox(c.id)
                   }
                 }}
               >

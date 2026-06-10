@@ -4,7 +4,9 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roles');
 
 router.use(authenticate);
-router.use(requireRole('admin', 'collector'));
+// Maintenance (תחזוקה) collects country-wide, so it can also hit the
+// out-of-radius override path during a collection.
+router.use(requireRole('admin', 'collector', 'maintenance'));
 
 const MIN_REASON_LENGTH = 5;
 

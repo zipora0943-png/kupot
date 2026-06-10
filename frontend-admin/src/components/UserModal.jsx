@@ -9,9 +9,10 @@ import {
 import { useAuth } from '@shared/context/AuthContext'
 
 const ROLE_OPTIONS = [
-  { value: 'admin',     label: 'מנהל' },
-  { value: 'collector', label: 'גובה' },
-  { value: 'cashroom',  label: 'מזין' },
+  { value: 'admin',       label: 'מנהל' },
+  { value: 'collector',   label: 'גובה' },
+  { value: 'cashroom',    label: 'מזין' },
+  { value: 'maintenance', label: 'תחזוקה' },
 ]
 
 const TAG_STYLE = {

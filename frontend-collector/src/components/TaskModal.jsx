@@ -66,11 +66,15 @@ export default function TaskModal({ open, task, defaults, onClose, onSaved }) {
     let cancelled = false
     Promise.all([
       boxesApi.getAll().catch(() => []),
-      usersApi.getAll({ role: 'collector', active: true }).catch(() => []),
+      // Tasks can be assigned to field workers — collectors AND maintenance
+      // (תחזוקה), which now runs the same collection / task-execution flow.
+      usersApi.getAll({ active: true }).catch(() => []),
     ]).then(([b, u]) => {
       if (cancelled) return
       setAllBoxes(Array.isArray(b) ? b : [])
-      setCollectors(Array.isArray(u) ? u : [])
+      setCollectors((Array.isArray(u) ? u : []).filter(
+        x => x.role === 'collector' || x.role === 'maintenance'
+      ))
     })
     return () => { cancelled = true }
   }, [open, refetchTaskTypes])
@@ -273,7 +277,9 @@ export default function TaskModal({ open, task, defaults, onClose, onSaved }) {
           >
             <option value="">{grantsTempAccess && !isEdit ? '— בחר —' : 'לא משויך'}</option>
             {collectors.map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+              <option key={c.id} value={c.id}>
+                {c.name}{c.role === 'maintenance' ? ' · תחזוקה' : ''}
+              </option>
             ))}
           </select>
         </div>

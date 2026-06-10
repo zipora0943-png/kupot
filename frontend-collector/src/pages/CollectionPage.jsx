@@ -6,11 +6,14 @@ import {
   reports as reportsApi,
 } from '../api/endpoints'
 import { useData } from '@shared/context/DataStoreContext'
+import { useAuth } from '@shared/context/AuthContext'
 import { computeCardLabels } from '@shared/utils/cardLabel'
 import Modal from '@shared/components/Modal'
 import MapView from '@shared/components/MapView'
 import { getDevicePosition, haversineMeters, RADIUS_METERS } from '../utils/getDevicePosition'
 import { useCurrentLocation } from '../context/LocationContext'
+import TaskModal from '../components/TaskModal'
+import SelfReportTaskModal from '../components/SelfReportTaskModal'
 
 function formatDate(s) {
   if (!s) return '—'
@@ -30,6 +33,18 @@ export default function CollectionPage() {
   const { cardId } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
+  const { user } = useAuth()
+
+  // Role-based actions on the box-detail view (shared by collectors,
+  // maintenance and admins who open the collector app):
+  //   admin                       → "צור משימה" (opens the full task author modal)
+  //   maintenance / permitted גובה → "דווח על משימה שביצעתי" (self-report modal)
+  const role = user?.role
+  const canCreateTask = role === 'admin'
+  const canReportTask = role === 'maintenance'
+    || (role === 'collector' && !!user?.permissions?.can_self_report_tasks)
+  const [createTaskOpen, setCreateTaskOpen] = useState(false)
+  const [reportTaskOpen, setReportTaskOpen] = useState(false)
 
   // Card comes from the central store, filtered by ID. Store stays current via
   // Socket.IO so the address/notes/last-collection date refresh automatically
@@ -545,10 +560,43 @@ export default function CollectionPage() {
           >
             📝 צור דיווח
           </button>
+          {canCreateTask && (
+            <button
+              type="button"
+              className="btn-block secondary"
+              onClick={() => setCreateTaskOpen(true)}
+            >
+              🛠️ צור משימה
+            </button>
+          )}
+          {canReportTask && (
+            <button
+              type="button"
+              className="btn-block secondary"
+              onClick={() => setReportTaskOpen(true)}
+            >
+              📋 דווח על משימה שביצעתי
+            </button>
+          )}
         </div>
       </div>
 
       {renderVerificationModals()}
+
+      {/* Admin: author a new task pre-filled to this box. */}
+      <TaskModal
+        open={createTaskOpen}
+        defaults={{ box_id: card.box_id, lockBox: true }}
+        onClose={() => setCreateTaskOpen(false)}
+        onSaved={() => setCreateTaskOpen(false)}
+      />
+      {/* Maintenance / permitted collector: report a task already performed. */}
+      <SelfReportTaskModal
+        open={reportTaskOpen}
+        presetBoxId={card.box_id}
+        onClose={() => setReportTaskOpen(false)}
+        onSaved={() => setReportTaskOpen(false)}
+      />
 
       {toast && <div className="toast success">{toast}</div>}
     </div>

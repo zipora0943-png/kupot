@@ -38,7 +38,8 @@ function RoleGuard({ children }) {
   const { user } = useAuth()
   const location = useLocation()
   const role = user?.role
-  const onCashroomScreen = location.pathname === '/cashroom-admin'
+  const path = location.pathname
+  const onCashroomScreen = path === '/cashroom-admin'
 
   if (role === 'cashroom' && !onCashroomScreen) {
     return <Navigate to="/cashroom-admin" replace />

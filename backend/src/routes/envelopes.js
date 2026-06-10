@@ -232,7 +232,9 @@ router.get('/:id', async (req, res, next) => {
 // POST /api/envelopes  — collector creates an envelope on collection
 // No event is created here: envelopes and events are independent (envelopes are
 // authoritative for financial reports and alerts).
-router.post('/', requireRole('admin', 'collector'), async (req, res, next) => {
+// Maintenance (תחזוקה) collects country-wide like an admin — the per-box
+// assignment check below stays collector-only, so it never blocks them.
+router.post('/', requireRole('admin', 'collector', 'maintenance'), async (req, res, next) => {
   const { box_id, envelope_number, notes } = req.body || {};
   const bid = Number(box_id);
   if (!Number.isInteger(bid)) return res.status(400).json({ error: 'box_id required' });

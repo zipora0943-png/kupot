@@ -5,7 +5,18 @@ import { useData } from '@shared/context/DataStoreContext'
 import TaskModal from '../components/TaskModal'
 import SelfReportTaskModal from '../components/SelfReportTaskModal'
 import ReportModal from '../components/ReportModal'
+import ReportViewModal from '../components/ReportViewModal'
 import CloseReportModal from '@shared/components/CloseReportModal'
+
+// Hebrew labels for task status — shown in the maintenance "my tasks" history
+// (where most tasks are already 'done', so the bare title isn't enough).
+const TASK_STATUS_LABELS = {
+  open: 'פתוחה',
+  in_progress: 'בביצוע',
+  done: 'בוצעה',
+  cancelled: 'בוטלה',
+  not_executed: 'לא בוצעה',
+}
 
 function formatDate(s) {
   if (!s) return '—'
@@ -26,6 +37,7 @@ export default function TasksAlertsPage() {
   const location = useLocation()
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
+  const isMaintenance = user?.role === 'maintenance'
   // Task 50: collector with this permission gets a "+ דווח על משימה שביצעתי" button.
   const canSelfReport = user?.role === 'collector' && !!user?.permissions?.can_self_report_tasks
   const [selfReportOpen, setSelfReportOpen] = useState(false)
@@ -38,6 +50,9 @@ export default function TasksAlertsPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [openReport, setOpenReport]   = useState(null)
   const [closeReport, setCloseReport] = useState(null)
+  // Maintenance (תחזוקה): two tabs — reports (country-wide) and "my tasks".
+  const [maintTab, setMaintTab] = useState(location.state?.tab === 'tasks' ? 'tasks' : 'reports')
+  const [viewReport, setViewReport] = useState(null)
 
   // All three slices come from the DataStore: populated at login, kept
   // current by Socket.IO entity.changed events. Page-level filtering
@@ -70,6 +85,83 @@ export default function TasksAlertsPage() {
   const reportsCount   = isAdmin ? openReports.length : 0
   const allCount       = tasksList.length + alertsList.length + reportsCount
   const alertsTabCount = alertsList.length + reportsCount
+
+  // ── Maintenance (תחזוקה) gets a dedicated view: country-wide reports +
+  // a history of the tasks they reported. No collection alerts, no admin tools.
+  if (isMaintenance) {
+    const myTasks = Array.isArray(tasksAll) ? tasksAll : []
+    const openReportsAll = Array.isArray(reportsAll)
+      ? reportsAll.filter((r) => r.status === 'open')
+      : []
+    return (
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <button
+            type="button"
+            className="btn primary"
+            onClick={() => setSelfReportOpen(true)}
+          >
+            ➕ דווח על משימה שביצעתי
+          </button>
+        </div>
+
+        <div className="list-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={maintTab === 'reports'}
+            className={`list-tab${maintTab === 'reports' ? ' active' : ''}`}
+            onClick={() => setMaintTab('reports')}
+          >
+            דיווחים
+            {openReportsAll.length > 0 && <span className="count">{openReportsAll.length}</span>}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={maintTab === 'tasks'}
+            className={`list-tab${maintTab === 'tasks' ? ' active' : ''}`}
+            onClick={() => setMaintTab('tasks')}
+          >
+            המשימות שלי
+            {myTasks.length > 0 && <span className="count">{myTasks.length}</span>}
+          </button>
+        </div>
+
+        {maintTab === 'reports' && (
+          <ReportsList
+            list={openReportsAll}
+            loading={reportsLoading}
+            error={reportsError}
+            onClick={(r) => setViewReport(r)}
+          />
+        )}
+
+        {maintTab === 'tasks' && (
+          <TasksList
+            list={myTasks}
+            loading={tasksLoading}
+            error={tasksError}
+            onClick={(id) => navigate(`/task/${id}`)}
+            emptyText="טרם דיווחת על משימות"
+            showStatus
+          />
+        )}
+
+        <SelfReportTaskModal
+          open={selfReportOpen}
+          onClose={() => setSelfReportOpen(false)}
+          onSaved={() => { setSelfReportOpen(false); refetchTasks() }}
+        />
+
+        <ReportViewModal
+          open={!!viewReport}
+          report={viewReport}
+          onClose={() => setViewReport(null)}
+        />
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -234,10 +326,10 @@ export default function TasksAlertsPage() {
   )
 }
 
-function TasksList({ list, loading, error, onClick, hideEmpty, sectionTitle }) {
+function TasksList({ list, loading, error, onClick, hideEmpty, sectionTitle, emptyText, showStatus }) {
   if (loading) return <div className="loading">טוען...</div>
   if (error) return <div className="alert red">{error}</div>
-  if (list.length === 0) return hideEmpty ? null : <div className="empty">אין משימות פתוחות</div>
+  if (list.length === 0) return hideEmpty ? null : <div className="empty">{emptyText || 'אין משימות פתוחות'}</div>
 
   return (
     <div>
@@ -247,7 +339,8 @@ function TasksList({ list, loading, error, onClick, hideEmpty, sectionTitle }) {
         // Task 48: deferred-box installation tasks have no iron_number yet.
         const boxLabel = t.iron_number ? `קופה #${t.iron_number}` : (t.opens_card ? 'קופה חדשה (יוזן בביצוע)' : '')
         const due = t.due_date ? `יעד: ${formatDate(t.due_date)}` : ''
-        const meta = [boxLabel, due].filter(Boolean).join(' · ')
+        const statusLabel = showStatus ? (TASK_STATUS_LABELS[t.status] || null) : null
+        const meta = [boxLabel, due, statusLabel].filter(Boolean).join(' · ')
         return (
           <div
             key={t.id}

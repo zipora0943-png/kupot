@@ -7,7 +7,8 @@ const { isCardAssignedToCollector } = require('../logic/userAssignment');
 
 router.use(authenticate);
 // Task 36: cashroom users have no access to events — only the cashroom workflow.
-router.use(requireRole('admin', 'collector'));
+// Maintenance (תחזוקה) may read card event logs country-wide.
+router.use(requireRole('admin', 'collector', 'maintenance'));
 
 const ALLOWED_TYPES = Object.values(EVENT);  // installation/removal/transfer_*/collection/task_done/other
 

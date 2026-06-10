@@ -13,18 +13,18 @@ const socket = require('./socket');
 // payload only contains {table, op, id} — no sensitive row data — but we still
 // scope by role so each client only refetches what it can actually see.
 const TABLE_AUDIENCES = {
-  boxes:              ['admin', 'collector', 'cashroom'],
-  cards:              ['admin', 'collector', 'cashroom'],
-  envelopes:          ['admin', 'collector', 'cashroom'],
-  tasks:              ['admin', 'collector', 'cashroom'],
-  reports:            ['admin', 'collector', 'cashroom'],
-  events:             ['admin', 'collector', 'cashroom'],
-  users:              ['admin', 'collector', 'cashroom'],
-  settings:           ['admin', 'collector', 'cashroom'],
-  task_types:         ['admin', 'collector', 'cashroom'],
-  report_types:       ['admin', 'collector', 'cashroom'],
-  box_types:          ['admin', 'collector', 'cashroom'],
-  cities:             ['admin', 'collector', 'cashroom'],
+  boxes:              ['admin', 'collector', 'cashroom', 'maintenance'],
+  cards:              ['admin', 'collector', 'cashroom', 'maintenance'],
+  envelopes:          ['admin', 'collector', 'cashroom', 'maintenance'],
+  tasks:              ['admin', 'collector', 'cashroom', 'maintenance'],
+  reports:            ['admin', 'collector', 'cashroom', 'maintenance'],
+  events:             ['admin', 'collector', 'cashroom', 'maintenance'],
+  users:              ['admin', 'collector', 'cashroom', 'maintenance'],
+  settings:           ['admin', 'collector', 'cashroom', 'maintenance'],
+  task_types:         ['admin', 'collector', 'cashroom', 'maintenance'],
+  report_types:       ['admin', 'collector', 'cashroom', 'maintenance'],
+  box_types:          ['admin', 'collector', 'cashroom', 'maintenance'],
+  cities:             ['admin', 'collector', 'cashroom', 'maintenance'],
   location_overrides: ['admin'],
 };
 

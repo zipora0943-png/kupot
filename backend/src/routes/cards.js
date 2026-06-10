@@ -44,7 +44,8 @@ function applyResolvedCollector(row) {
 
 router.use(authenticate);
 // Task 36: cashroom users have no access to card data — only the cashroom workflow.
-router.use(requireRole('admin', 'collector'));
+// Maintenance (תחזוקה) reads all cards country-wide (no area filter applies below).
+router.use(requireRole('admin', 'collector', 'maintenance'));
 
 const VALID_STATUSES = ['active', 'closed'];
 

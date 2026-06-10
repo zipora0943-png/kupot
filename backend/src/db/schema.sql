@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS users (
   name              VARCHAR(150) NOT NULL,
   username          VARCHAR(100) NOT NULL UNIQUE,
   password_hash     TEXT NOT NULL,
-  role              VARCHAR(20)  NOT NULL CHECK (role IN ('admin','collector','cashroom')),
+  role              VARCHAR(20)  NOT NULL CHECK (role IN ('admin','collector','cashroom','maintenance')),
   area_assignments  JSONB NOT NULL DEFAULT '[]',
   area_exclusions   JSONB NOT NULL DEFAULT '[]',
   active            BOOLEAN NOT NULL DEFAULT TRUE,
@@ -268,6 +268,13 @@ ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check;
 ALTER TABLE tasks ADD  CONSTRAINT tasks_status_check
   CHECK (status IN ('open','in_progress','done','cancelled','not_executed'));
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS not_executed_reason TEXT;
+
+-- Maintenance role (תחזוקה): a field role like 'collector' but with no
+-- collection flow and country-wide read access. Refresh the users.role CHECK
+-- constraint so the new value is accepted on existing DBs.
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users ADD  CONSTRAINT users_role_check
+  CHECK (role IN ('admin','collector','cashroom','maintenance'));
 
 -- Task 58: server-side geocoding of card addresses (Google Maps Geocoding API).
 -- Coordinates are computed and stored in the backend on card create/update;

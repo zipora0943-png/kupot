@@ -7,7 +7,8 @@ const { getBoxesForCollector, isBoxAssignedToCollector } = require('../logic/use
 
 router.use(authenticate);
 // Task 36: cashroom users have no access to box data — only the cashroom workflow.
-router.use(requireRole('admin', 'collector'));
+// Maintenance (תחזוקה) reads boxes country-wide (no area filter applies below).
+router.use(requireRole('admin', 'collector', 'maintenance'));
 
 const VALID_STATUSES = ['uninstalled', 'active', 'inactive', 'unusable'];
 
