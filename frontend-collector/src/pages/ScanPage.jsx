@@ -62,10 +62,17 @@ export default function ScanPage() {
     }
   }
 
+  // Envelope numbers are always exactly 6 digits (matches the scanner and the
+  // backend validation). Keep only digits and cap at 6 so the manual path can't
+  // create a record the scanner would reject.
+  function onManualChange(e) {
+    setManualInput(e.target.value.replace(/\D/g, '').slice(0, 6))
+  }
+
   function submitManual(e) {
     e?.preventDefault?.()
     const v = manualInput.trim()
-    if (!v) return
+    if (!/^\d{6}$/.test(v)) return
     setManualOpen(false)
     setManualInput('')
     setPendingValue(v)
@@ -96,9 +103,10 @@ export default function ScanPage() {
               type="text"
               inputMode="numeric"
               autoFocus
+              maxLength={6}
               value={manualInput}
-              onChange={(e) => setManualInput(e.target.value)}
-              placeholder="מספר מעטפה"
+              onChange={onManualChange}
+              placeholder="מספר מעטפה (6 ספרות)"
             />
             <div className="row">
               <button
@@ -111,7 +119,7 @@ export default function ScanPage() {
               <button
                 type="submit"
                 className="btn primary"
-                disabled={!manualInput.trim()}
+                disabled={!/^\d{6}$/.test(manualInput)}
               >
                 אישור
               </button>

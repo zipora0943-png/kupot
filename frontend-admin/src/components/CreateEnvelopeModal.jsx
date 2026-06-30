@@ -7,8 +7,10 @@ export default function CreateEnvelopeModal({ onClose, onConfirm }) {
   const [error, setError] = useState(null)
 
   async function handleSubmit() {
-    if (!envelopeNumber.trim()) {
-      setError('יש להזין מספר מעטפה')
+    // Envelope numbers are always exactly 6 digits (matches the collector
+    // scanner and the backend validation).
+    if (!/^\d{6}$/.test(envelopeNumber.trim())) {
+      setError('מספר מעטפה חייב להיות בדיוק 6 ספרות')
       return
     }
     setError(null)
@@ -39,9 +41,11 @@ export default function CreateEnvelopeModal({ onClose, onConfirm }) {
           <label>מספר מעטפה *</label>
           <input
             value={envelopeNumber}
-            onChange={(e) => setEnvelopeNumber(e.target.value)}
+            onChange={(e) => setEnvelopeNumber(e.target.value.replace(/\D/g, '').slice(0, 6))}
             onKeyDown={handleKeyDown}
-            placeholder="למשל: ENV-001"
+            inputMode="numeric"
+            maxLength={6}
+            placeholder="6 ספרות, למשל: 123456"
             disabled={loading}
             autoFocus
           />
@@ -64,7 +68,7 @@ export default function CreateEnvelopeModal({ onClose, onConfirm }) {
           <button
             className="btn primary"
             onClick={handleSubmit}
-            disabled={loading || !envelopeNumber.trim()}
+            disabled={loading || !/^\d{6}$/.test(envelopeNumber)}
           >
             {loading ? 'יוצר...' : '➕ יצור מעטפה'}
           </button>

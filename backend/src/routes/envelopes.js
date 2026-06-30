@@ -241,6 +241,13 @@ router.post('/', requireRole('admin', 'collector', 'maintenance'), async (req, r
   if (typeof envelope_number !== 'string' || !envelope_number.trim()) {
     return res.status(400).json({ error: 'envelope_number required' });
   }
+  // Envelope numbers are always exactly 6 digits. This is the server-side lock
+  // that backs the scanner / manual-entry validation — it rejects mis-scans
+  // (e.g. a cash-box number) regardless of which client created the request.
+  const envNumber = envelope_number.trim();
+  if (!/^\d{6}$/.test(envNumber)) {
+    return res.status(400).json({ error: 'מספר מעטפה חייב להיות בדיוק 6 ספרות' });
+  }
 
   try {
     // Permission: collector must be assigned to this box
@@ -255,7 +262,7 @@ router.post('/', requireRole('admin', 'collector', 'maintenance'), async (req, r
     const { rows } = await pool.query(
       `INSERT INTO envelopes (card_id, envelope_number, collected_by, notes)
        VALUES ($1, $2, $3, $4) RETURNING *`,
-      [card.id, envelope_number.trim(), req.user.id,
+      [card.id, envNumber, req.user.id,
        typeof notes === 'string' ? notes : null]
     );
     res.status(201).json(rows[0]);

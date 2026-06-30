@@ -23,13 +23,15 @@ import { logger } from '../utils/logger'
 // Both restricted to Code 128 since that's what the collector barcodes use,
 // which makes detection faster and reduces false positives.
 
-// Envelope numbers are at most 6 digits. A scan that yields more than 6
-// digits is not one of our envelopes (e.g. a stray product barcode caught
-// in frame), so we ignore it and keep scanning rather than accepting it.
-const MAX_ENVELOPE_DIGITS = 6
-function isValidEnvelopeCode(value) {
+// Envelope numbers are ALWAYS exactly 6 digits. A scan that yields any other
+// number of digits is not one of our envelopes — e.g. a cash-box (kupa) number
+// or a stray product barcode caught in frame — so we ignore it and keep
+// scanning rather than accepting it. normalizeEnvelopeCode returns the clean
+// 6-digit string when valid, or null otherwise.
+const ENVELOPE_DIGITS = 6
+function normalizeEnvelopeCode(value) {
   const digits = String(value).replace(/\D/g, '')
-  return digits.length > 0 && digits.length <= MAX_ENVELOPE_DIGITS
+  return digits.length === ENVELOPE_DIGITS ? digits : null
 }
 
 async function ensureCameraPermission() {
@@ -135,16 +137,17 @@ export default function BarcodeScanner({ onScan, onClose }) {
             const c = codes[0]
             const value = c.rawValue || c.rawData || ''
             if (value) {
-              if (!isValidEnvelopeCode(value)) {
-                // Too many digits — not an envelope. Skip and keep scanning.
-                logger.log('scanner', `IGNORED [${c.format || 'code_128'}] (>${MAX_ENVELOPE_DIGITS} digits):`, value)
+              const normalized = normalizeEnvelopeCode(value)
+              if (!normalized) {
+                // Not exactly 6 digits — not an envelope. Skip and keep scanning.
+                logger.log('scanner', `IGNORED [${c.format || 'code_128'}] (need ${ENVELOPE_DIGITS} digits):`, value)
                 rafId = requestAnimationFrame(detect)
                 return
               }
               handledRef.current = true
-              logger.log('scanner', `SCAN [${c.format || 'code_128'}]:`, value)
+              logger.log('scanner', `SCAN [${c.format || 'code_128'}]:`, normalized)
               try { streamRef.current?.getTracks().forEach((t) => t.stop()) } catch { /* ignore */ }
-              onScanRef.current?.(value)
+              onScanRef.current?.(normalized)
               return
             }
           }
@@ -231,16 +234,17 @@ export default function BarcodeScanner({ onScan, onClose }) {
           if (handledRef.current) return
           const code = data?.codeResult?.code
           if (!code) return
-          if (!isValidEnvelopeCode(code)) {
-            // Too many digits — not an envelope. Skip and keep scanning.
-            logger.log('scanner', `IGNORED [Code128] (>${MAX_ENVELOPE_DIGITS} digits): ${code}`)
+          const normalized = normalizeEnvelopeCode(code)
+          if (!normalized) {
+            // Not exactly 6 digits — not an envelope. Skip and keep scanning.
+            logger.log('scanner', `IGNORED [Code128] (need ${ENVELOPE_DIGITS} digits): ${code}`)
             return
           }
           handledRef.current = true
-          logger.log('scanner', `SCAN [Code128]: ${code}`)
+          logger.log('scanner', `SCAN [Code128]: ${normalized}`)
           try { Quagga.stop() } catch { /* ignore */ }
           startedRef.current = false
-          onScanRef.current?.(code)
+          onScanRef.current?.(normalized)
         }
         processedHandler = (result) => {
           frameCount++
